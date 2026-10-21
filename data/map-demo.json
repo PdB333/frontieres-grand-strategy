@@ -1,0 +1,147 @@
+{
+  "id": "archipel_des_brises",
+  "name": "Archipel des Brises - carte fictive",
+  "version": 2,
+  "scenario": {
+    "title": "Les iles du large",
+    "description": "Carte originale avec deux provinces insulaires et routes maritimes.",
+    "bookmark": "1936",
+    "historical": false
+  },
+  "map": {
+    "id": "iles_des_brises",
+    "title": "Archipel des Brises",
+    "description": "Ajoute deux iles fictives en Atlantique, loin des terres de base.",
+    "addProvinces": [
+      {
+        "geoKey": "mod_brise_ouest",
+        "name": "Port des Brises",
+        "owner": "BRI",
+        "x": -37.0,
+        "y": 40.0,
+        "polygons": [
+          [
+            [
+              -38.0,
+              39.4
+            ],
+            [
+              -36.7,
+              39.2
+            ],
+            [
+              -36.2,
+              40.4
+            ],
+            [
+              -37.1,
+              40.8
+            ],
+            [
+              -38,
+              39.4
+            ]
+          ]
+        ],
+        "terrain": "plains",
+        "vp": 8,
+        "port": 2,
+        "zone": "ATL_EU",
+        "seaZone": "NATL",
+        "neighbors": [
+          "mod_brise_est"
+        ],
+        "sea": [
+          {
+            "to": "geo-d9127463444868a9a173",
+            "days": 8
+          }
+        ]
+      },
+      {
+        "geoKey": "mod_brise_est",
+        "name": "Hautes-Terres",
+        "owner": "BRI",
+        "x": -34.7,
+        "y": 40.0,
+        "polygons": [
+          [
+            [
+              -36.7,
+              39.2
+            ],
+            [
+              -34.0,
+              39.1
+            ],
+            [
+              -33.8,
+              40.2
+            ],
+            [
+              -36.2,
+              40.4
+            ]
+          ]
+        ],
+        "terrain": "mountains",
+        "vp": 3,
+        "port": 0,
+        "zone": "ATL_EU",
+        "neighbors": [
+          "mod_brise_ouest"
+        ]
+      }
+    ],
+    "regions": [
+      {
+        "id": "archipel_braises",
+        "name": "Archipel des Brises",
+        "provinces": [
+          "mod_brise_ouest",
+          "mod_brise_est"
+        ]
+      }
+    ]
+  },
+  "newCountries": [
+    {
+      "id": "BRI",
+      "from": "POR",
+      "name": "Republique des Brises",
+      "leader": "Elena Vasquez",
+      "ideology": "democratic",
+      "color": "#56a6a3",
+      "capitalKey": "mod_brise_ouest",
+      "civ": 4,
+      "mil": 3,
+      "divisions": 4,
+      "manpower": 85000
+    }
+  ],
+  "events": [
+    {
+      "id": "brise_arrivee",
+      "day": 3,
+      "country": "BRI",
+      "title": "Les cartes du large",
+      "text": "Le Parlement decide de construire une flotte civile.",
+      "choices": [
+        {
+          "text": "Moderniser les convois",
+          "effect": {
+            "pp": 30,
+            "convoys": 20
+          },
+          "actions": [
+            {
+              "type": "flag",
+              "key": "archipel_navigable",
+              "value": true
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
