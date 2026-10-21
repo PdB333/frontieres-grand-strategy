@@ -1,0 +1,1115 @@
+{
+  "release": "1.1.1",
+  "coverage": "Les 74 fiches nationales initiales; sources bibliographiques ouvertes, non biographies rédigées à la main.",
+  "portraitsPolicy": "Seuls les portraits dont une notice de licence a été identifiée sont proposés en photo. Autres : initiales et lien documentaire.",
+  "countries": {
+    "FRA": {
+      "country": "France",
+      "at": "1936-01-01",
+      "leader": "Albert Lebrun",
+      "role": "Président de la République",
+      "biography": "https://en.wikipedia.org/wiki/Albert_Lebrun",
+      "biographySource": "Wikipédia — lien de lecture, non source primaire",
+      "headOfState": null,
+      "cabinet": "Pierre Laval",
+      "commanders": [
+        {
+          "name": "Maurice Gamelin",
+          "reference": "https://en.wikipedia.org/w/index.php?search=Maurice%20Gamelin",
+          "note": "Compétences et affectations abstraites pour le jeu, pas une fiche de service authentifiée."
+        },
+        {
+          "name": "Maxime Weygand",
+          "reference": "https://en.wikipedia.org/w/index.php?search=Maxime%20Weygand",
+          "note": "Compétences et affectations abstraites pour le jeu, pas une fiche de service authentifiée."
+        },
+        {
+          "name": "Alphonse Georges",
+          "reference": "https://en.wikipedia.org/w/index.php?search=Alphonse%20Georges",
+          "note": "Compétences et affectations abstraites pour le jeu, pas une fiche de service authentifiée."
+        },
+        {
+          "name": "Henri Giraud",
+          "reference": "https://en.wikipedia.org/w/index.php?search=Henri%20Giraud",
+          "note": "Compétences et affectations abstraites pour le jeu, pas une fiche de service authentifiée."
+        }
+      ],
+      "historicalAccuracy": "Noms et rôles au scénario initial ; vérification individuelle non exhaustive."
+    },
+    "GER": {
+      "country": "Allemagne",
+      "at": "1936-01-01",
+      "leader": "Adolf Hitler",
+      "role": "Chef du Reich",
+      "biography": "https://en.wikipedia.org/wiki/Adolf_Hitler",
+      "biographySource": "Wikipédia — lien de lecture, non source primaire",
+      "headOfState": null,
+      "cabinet": null,
+      "commanders": [
+        {
+          "name": "Werner von Fritsch",
+          "reference": "https://en.wikipedia.org/w/index.php?search=Werner%20von%20Fritsch",
+          "note": "Compétences et affectations abstraites pour le jeu, pas une fiche de service authentifiée."
+        },
+        {
+          "name": "Gerd von Rundstedt",
+          "reference": "https://en.wikipedia.org/w/index.php?search=Gerd%20von%20Rundstedt",
+          "note": "Compétences et affectations abstraites pour le jeu, pas une fiche de service authentifiée."
+        },
+        {
+          "name": "Fedor von Bock",
+          "reference": "https://en.wikipedia.org/w/index.php?search=Fedor%20von%20Bock",
+          "note": "Compétences et affectations abstraites pour le jeu, pas une fiche de service authentifiée."
+        },
+        {
+          "name": "Heinz Guderian",
+          "reference": "https://en.wikipedia.org/w/index.php?search=Heinz%20Guderian",
+          "note": "Compétences et affectations abstraites pour le jeu, pas une fiche de service authentifiée."
+        }
+      ],
+      "historicalAccuracy": "Noms et rôles au scénario initial ; vérification individuelle non exhaustive."
+    },
+    "GBR": {
+      "country": "Royaume-Uni",
+      "at": "1936-01-01",
+      "leader": "Stanley Baldwin",
+      "role": "Premier ministre",
+      "biography": "https://en.wikipedia.org/wiki/Stanley_Baldwin",
+      "biographySource": "Wikipédia — lien de lecture, non source primaire",
+      "headOfState": "George V",
+      "cabinet": null,
+      "commanders": [
+        {
+          "name": "John Gort",
+          "reference": "https://en.wikipedia.org/w/index.php?search=John%20Gort",
+          "note": "Compétences et affectations abstraites pour le jeu, pas une fiche de service authentifiée."
+        },
+        {
+          "name": "Archibald Wavell",
+          "reference": "https://en.wikipedia.org/w/index.php?search=Archibald%20Wavell",
+          "note": "Compétences et affectations abstraites pour le jeu, pas une fiche de service authentifiée."
+        },
+        {
+          "name": "Alan Brooke",
+          "reference": "https://en.wikipedia.org/w/index.php?search=Alan%20Brooke",
+          "note": "Compétences et affectations abstraites pour le jeu, pas une fiche de service authentifiée."
+        },
+        {
+          "name": "Bernard Montgomery",
+          "reference": "https://en.wikipedia.org/w/index.php?search=Bernard%20Montgomery",
+          "note": "Compétences et affectations abstraites pour le jeu, pas une fiche de service authentifiée."
+        }
+      ],
+      "historicalAccuracy": "Noms et rôles au scénario initial ; vérification individuelle non exhaustive."
+    },
+    "SOV": {
+      "country": "Union soviétique",
+      "at": "1936-01-01",
+      "leader": "Joseph Staline",
+      "role": "Secrétaire général",
+      "biography": "https://en.wikipedia.org/wiki/Joseph_Stalin",
+      "biographySource": "Wikipédia — lien de lecture, non source primaire",
+      "headOfState": null,
+      "cabinet": null,
+      "commanders": [
+        {
+          "name": "Mikhaïl Toukhatchevski",
+          "reference": "https://en.wikipedia.org/w/index.php?search=Mikha%C3%AFl%20Toukhatchevski",
+          "note": "Compétences et affectations abstraites pour le jeu, pas une fiche de service authentifiée."
+        },
+        {
+          "name": "Kliment Vorochilov",
+          "reference": "https://en.wikipedia.org/w/index.php?search=Kliment%20Vorochilov",
+          "note": "Compétences et affectations abstraites pour le jeu, pas une fiche de service authentifiée."
+        },
+        {
+          "name": "Semion Boudienny",
+          "reference": "https://en.wikipedia.org/w/index.php?search=Semion%20Boudienny",
+          "note": "Compétences et affectations abstraites pour le jeu, pas une fiche de service authentifiée."
+        },
+        {
+          "name": "Gueorgui Joukov",
+          "reference": "https://en.wikipedia.org/w/index.php?search=Gueorgui%20Joukov",
+          "note": "Compétences et affectations abstraites pour le jeu, pas une fiche de service authentifiée."
+        }
+      ],
+      "historicalAccuracy": "Noms et rôles au scénario initial ; vérification individuelle non exhaustive."
+    },
+    "USA": {
+      "country": "États-Unis",
+      "at": "1936-01-01",
+      "leader": "Franklin D. Roosevelt",
+      "role": "Président",
+      "biography": "https://en.wikipedia.org/wiki/Franklin_D._Roosevelt",
+      "biographySource": "Wikipédia — lien de lecture, non source primaire",
+      "headOfState": null,
+      "cabinet": null,
+      "commanders": [
+        {
+          "name": "Malin Craig",
+          "reference": "https://en.wikipedia.org/w/index.php?search=Malin%20Craig",
+          "note": "Compétences et affectations abstraites pour le jeu, pas une fiche de service authentifiée."
+        },
+        {
+          "name": "Douglas MacArthur",
+          "reference": "https://en.wikipedia.org/w/index.php?search=Douglas%20MacArthur",
+          "note": "Compétences et affectations abstraites pour le jeu, pas une fiche de service authentifiée."
+        },
+        {
+          "name": "George Marshall",
+          "reference": "https://en.wikipedia.org/w/index.php?search=George%20Marshall",
+          "note": "Compétences et affectations abstraites pour le jeu, pas une fiche de service authentifiée."
+        },
+        {
+          "name": "Dwight D. Eisenhower",
+          "reference": "https://en.wikipedia.org/w/index.php?search=Dwight%20D.%20Eisenhower",
+          "note": "Compétences et affectations abstraites pour le jeu, pas une fiche de service authentifiée."
+        }
+      ],
+      "historicalAccuracy": "Noms et rôles au scénario initial ; vérification individuelle non exhaustive."
+    },
+    "ITA": {
+      "country": "Italie",
+      "at": "1936-01-01",
+      "leader": "Benito Mussolini",
+      "role": "Chef du gouvernement",
+      "biography": "https://en.wikipedia.org/wiki/Benito_Mussolini",
+      "biographySource": "Wikipédia — lien de lecture, non source primaire",
+      "headOfState": null,
+      "cabinet": null,
+      "commanders": [
+        {
+          "name": "Pietro Badoglio",
+          "reference": "https://en.wikipedia.org/w/index.php?search=Pietro%20Badoglio",
+          "note": "Compétences et affectations abstraites pour le jeu, pas une fiche de service authentifiée."
+        },
+        {
+          "name": "Rodolfo Graziani",
+          "reference": "https://en.wikipedia.org/w/index.php?search=Rodolfo%20Graziani",
+          "note": "Compétences et affectations abstraites pour le jeu, pas une fiche de service authentifiée."
+        },
+        {
+          "name": "Ugo Cavallero",
+          "reference": "https://en.wikipedia.org/w/index.php?search=Ugo%20Cavallero",
+          "note": "Compétences et affectations abstraites pour le jeu, pas une fiche de service authentifiée."
+        },
+        {
+          "name": "Giovanni Messe",
+          "reference": "https://en.wikipedia.org/w/index.php?search=Giovanni%20Messe",
+          "note": "Compétences et affectations abstraites pour le jeu, pas une fiche de service authentifiée."
+        }
+      ],
+      "historicalAccuracy": "Noms et rôles au scénario initial ; vérification individuelle non exhaustive."
+    },
+    "JPN": {
+      "country": "Japon",
+      "at": "1936-01-01",
+      "leader": "Hirohito",
+      "role": "Empereur",
+      "biography": "https://en.wikipedia.org/wiki/Hirohito",
+      "biographySource": "Wikipédia — lien de lecture, non source primaire",
+      "headOfState": null,
+      "cabinet": "Keisuke Okada",
+      "commanders": [
+        {
+          "name": "Hajime Sugiyama",
+          "reference": "https://en.wikipedia.org/w/index.php?search=Hajime%20Sugiyama",
+          "note": "Compétences et affectations abstraites pour le jeu, pas une fiche de service authentifiée."
+        },
+        {
+          "name": "Hisaichi Terauchi",
+          "reference": "https://en.wikipedia.org/w/index.php?search=Hisaichi%20Terauchi",
+          "note": "Compétences et affectations abstraites pour le jeu, pas une fiche de service authentifiée."
+        },
+        {
+          "name": "Tomoyuki Yamashita",
+          "reference": "https://en.wikipedia.org/w/index.php?search=Tomoyuki%20Yamashita",
+          "note": "Compétences et affectations abstraites pour le jeu, pas une fiche de service authentifiée."
+        },
+        {
+          "name": "Shunroku Hata",
+          "reference": "https://en.wikipedia.org/w/index.php?search=Shunroku%20Hata",
+          "note": "Compétences et affectations abstraites pour le jeu, pas une fiche de service authentifiée."
+        }
+      ],
+      "historicalAccuracy": "Noms et rôles au scénario initial ; vérification individuelle non exhaustive."
+    },
+    "CHI": {
+      "country": "Chine",
+      "at": "1936-01-01",
+      "leader": "Tchang Kaï-chek",
+      "role": "Président du Yuan exécutif",
+      "biography": "https://en.wikipedia.org/wiki/Chiang_Kai-shek",
+      "biographySource": "Wikipédia — lien de lecture, non source primaire",
+      "headOfState": "Lin Sen",
+      "cabinet": null,
+      "commanders": [
+        {
+          "name": "Tchang Kaï-chek",
+          "reference": "https://en.wikipedia.org/w/index.php?search=Tchang%20Ka%C3%AF-chek",
+          "note": "Compétences et affectations abstraites pour le jeu, pas une fiche de service authentifiée."
+        },
+        {
+          "name": "Bai Chongxi",
+          "reference": "https://en.wikipedia.org/w/index.php?search=Bai%20Chongxi",
+          "note": "Compétences et affectations abstraites pour le jeu, pas une fiche de service authentifiée."
+        },
+        {
+          "name": "Li Zongren",
+          "reference": "https://en.wikipedia.org/w/index.php?search=Li%20Zongren",
+          "note": "Compétences et affectations abstraites pour le jeu, pas une fiche de service authentifiée."
+        },
+        {
+          "name": "Chen Cheng",
+          "reference": "https://en.wikipedia.org/w/index.php?search=Chen%20Cheng",
+          "note": "Compétences et affectations abstraites pour le jeu, pas une fiche de service authentifiée."
+        }
+      ],
+      "historicalAccuracy": "Noms et rôles au scénario initial ; vérification individuelle non exhaustive."
+    },
+    "CAN": {
+      "country": "Canada",
+      "at": "1936-01-01",
+      "leader": "William Lyon Mackenzie King",
+      "role": "Premier ministre",
+      "biography": "https://en.wikipedia.org/wiki/William_Lyon_Mackenzie_King",
+      "biographySource": "Wikipédia — lien de lecture, non source primaire",
+      "headOfState": null,
+      "cabinet": null,
+      "commanders": [
+        {
+          "name": "Andrew McNaughton",
+          "reference": "https://en.wikipedia.org/w/index.php?search=Andrew%20McNaughton",
+          "note": "Compétences et affectations abstraites pour le jeu, pas une fiche de service authentifiée."
+        }
+      ],
+      "historicalAccuracy": "Noms et rôles au scénario initial ; vérification individuelle non exhaustive."
+    },
+    "AST": {
+      "country": "Australie",
+      "at": "1936-01-01",
+      "leader": "Joseph Lyons",
+      "role": "Premier ministre",
+      "biography": "https://en.wikipedia.org/wiki/Joseph_Lyons",
+      "biographySource": "Wikipédia — lien de lecture, non source primaire",
+      "headOfState": null,
+      "cabinet": null,
+      "commanders": [
+        {
+          "name": "Thomas Blamey",
+          "reference": "https://en.wikipedia.org/w/index.php?search=Thomas%20Blamey",
+          "note": "Compétences et affectations abstraites pour le jeu, pas une fiche de service authentifiée."
+        }
+      ],
+      "historicalAccuracy": "Noms et rôles au scénario initial ; vérification individuelle non exhaustive."
+    },
+    "NZL": {
+      "country": "Nouvelle-Zélande",
+      "at": "1936-01-01",
+      "leader": "Michael Joseph Savage",
+      "role": "Premier ministre",
+      "biography": "https://en.wikipedia.org/wiki/Michael_Joseph_Savage",
+      "biographySource": "Wikipédia — lien de lecture, non source primaire",
+      "headOfState": null,
+      "cabinet": null,
+      "commanders": [],
+      "historicalAccuracy": "Noms et rôles au scénario initial ; vérification individuelle non exhaustive."
+    },
+    "SAF": {
+      "country": "Afrique du Sud",
+      "at": "1936-01-01",
+      "leader": "J. B. M. Hertzog",
+      "role": "Premier ministre",
+      "biography": "https://en.wikipedia.org/wiki/J._B._M._Hertzog",
+      "biographySource": "Wikipédia — lien de lecture, non source primaire",
+      "headOfState": null,
+      "cabinet": null,
+      "commanders": [],
+      "historicalAccuracy": "Noms et rôles au scénario initial ; vérification individuelle non exhaustive."
+    },
+    "RAJ": {
+      "country": "Inde britannique",
+      "at": "1936-01-01",
+      "leader": "Freeman Freeman-Thomas",
+      "role": "Vice-roi",
+      "biography": "https://en.wikipedia.org/wiki/Freeman_Freeman-Thomas,_1st_Marquess_of_Willingdon",
+      "biographySource": "Wikipédia — lien de lecture, non source primaire",
+      "headOfState": null,
+      "cabinet": null,
+      "commanders": [],
+      "historicalAccuracy": "Noms et rôles au scénario initial ; vérification individuelle non exhaustive."
+    },
+    "ETH": {
+      "country": "Éthiopie",
+      "at": "1936-01-01",
+      "leader": "Haïlé Sélassié",
+      "role": "Empereur",
+      "biography": "https://en.wikipedia.org/wiki/Haile_Selassie",
+      "biographySource": "Wikipédia — lien de lecture, non source primaire",
+      "headOfState": null,
+      "cabinet": null,
+      "commanders": [
+        {
+          "name": "Ras Imru Haile Selassie",
+          "reference": "https://en.wikipedia.org/w/index.php?search=Ras%20Imru%20Haile%20Selassie",
+          "note": "Compétences et affectations abstraites pour le jeu, pas une fiche de service authentifiée."
+        }
+      ],
+      "historicalAccuracy": "Noms et rôles au scénario initial ; vérification individuelle non exhaustive."
+    },
+    "SPA": {
+      "country": "Espagne",
+      "at": "1936-01-01",
+      "leader": "Niceto Alcalá-Zamora",
+      "role": "Président de la République",
+      "biography": "https://en.wikipedia.org/wiki/Niceto_Alcal%C3%A1-Zamora",
+      "biographySource": "Wikipédia — lien de lecture, non source primaire",
+      "headOfState": null,
+      "cabinet": null,
+      "commanders": [
+        {
+          "name": "José Miaja",
+          "reference": "https://en.wikipedia.org/w/index.php?search=Jos%C3%A9%20Miaja",
+          "note": "Compétences et affectations abstraites pour le jeu, pas une fiche de service authentifiée."
+        },
+        {
+          "name": "Vicente Rojo Lluch",
+          "reference": "https://en.wikipedia.org/w/index.php?search=Vicente%20Rojo%20Lluch",
+          "note": "Compétences et affectations abstraites pour le jeu, pas une fiche de service authentifiée."
+        }
+      ],
+      "historicalAccuracy": "Noms et rôles au scénario initial ; vérification individuelle non exhaustive."
+    },
+    "POR": {
+      "country": "Portugal",
+      "at": "1936-01-01",
+      "leader": "António de Oliveira Salazar",
+      "role": "Président du Conseil",
+      "biography": "https://en.wikipedia.org/wiki/Ant%C3%B3nio_de_Oliveira_Salazar",
+      "biographySource": "Wikipédia — lien de lecture, non source primaire",
+      "headOfState": null,
+      "cabinet": null,
+      "commanders": [],
+      "historicalAccuracy": "Noms et rôles au scénario initial ; vérification individuelle non exhaustive."
+    },
+    "BEL": {
+      "country": "Belgique",
+      "at": "1936-01-01",
+      "leader": "Léopold III",
+      "role": "Roi",
+      "biography": "https://en.wikipedia.org/wiki/Leopold_III_of_Belgium",
+      "biographySource": "Wikipédia — lien de lecture, non source primaire",
+      "headOfState": null,
+      "cabinet": null,
+      "commanders": [],
+      "historicalAccuracy": "Noms et rôles au scénario initial ; vérification individuelle non exhaustive."
+    },
+    "HOL": {
+      "country": "Pays-Bas",
+      "at": "1936-01-01",
+      "leader": "Hendrikus Colijn",
+      "role": "Président du Conseil",
+      "biography": "https://en.wikipedia.org/wiki/Hendrikus_Colijn",
+      "biographySource": "Wikipédia — lien de lecture, non source primaire",
+      "headOfState": null,
+      "cabinet": null,
+      "commanders": [],
+      "historicalAccuracy": "Noms et rôles au scénario initial ; vérification individuelle non exhaustive."
+    },
+    "LUX": {
+      "country": "Luxembourg",
+      "at": "1936-01-01",
+      "leader": "Charlotte",
+      "role": "Grande-duchesse",
+      "biography": "https://en.wikipedia.org/wiki/Charlotte,_Grand_Duchess_of_Luxembourg",
+      "biographySource": "Wikipédia — lien de lecture, non source primaire",
+      "headOfState": null,
+      "cabinet": null,
+      "commanders": [],
+      "historicalAccuracy": "Noms et rôles au scénario initial ; vérification individuelle non exhaustive."
+    },
+    "SWI": {
+      "country": "Suisse",
+      "at": "1936-01-01",
+      "leader": "Albert Meyer",
+      "role": "Président de la Confédération",
+      "biography": "https://en.wikipedia.org/wiki/Albert_Meyer_(politician)",
+      "biographySource": "Wikipédia — lien de lecture, non source primaire",
+      "headOfState": null,
+      "cabinet": null,
+      "commanders": [],
+      "historicalAccuracy": "Noms et rôles au scénario initial ; vérification individuelle non exhaustive."
+    },
+    "IRE": {
+      "country": "Irlande",
+      "at": "1936-01-01",
+      "leader": "Éamon de Valera",
+      "role": "Président du Conseil exécutif",
+      "biography": "https://en.wikipedia.org/wiki/%C3%89amon_de_Valera",
+      "biographySource": "Wikipédia — lien de lecture, non source primaire",
+      "headOfState": null,
+      "cabinet": null,
+      "commanders": [],
+      "historicalAccuracy": "Noms et rôles au scénario initial ; vérification individuelle non exhaustive."
+    },
+    "DEN": {
+      "country": "Danemark",
+      "at": "1936-01-01",
+      "leader": "Thorvald Stauning",
+      "role": "Premier ministre",
+      "biography": "https://en.wikipedia.org/wiki/Thorvald_Stauning",
+      "biographySource": "Wikipédia — lien de lecture, non source primaire",
+      "headOfState": null,
+      "cabinet": null,
+      "commanders": [],
+      "historicalAccuracy": "Noms et rôles au scénario initial ; vérification individuelle non exhaustive."
+    },
+    "NOR": {
+      "country": "Norvège",
+      "at": "1936-01-01",
+      "leader": "Johan Nygaardsvold",
+      "role": "Premier ministre",
+      "biography": "https://en.wikipedia.org/wiki/Johan_Nygaardsvold",
+      "biographySource": "Wikipédia — lien de lecture, non source primaire",
+      "headOfState": null,
+      "cabinet": null,
+      "commanders": [],
+      "historicalAccuracy": "Noms et rôles au scénario initial ; vérification individuelle non exhaustive."
+    },
+    "SWE": {
+      "country": "Suède",
+      "at": "1936-01-01",
+      "leader": "Per Albin Hansson",
+      "role": "Premier ministre",
+      "biography": "https://en.wikipedia.org/wiki/Per_Albin_Hansson",
+      "biographySource": "Wikipédia — lien de lecture, non source primaire",
+      "headOfState": null,
+      "cabinet": null,
+      "commanders": [],
+      "historicalAccuracy": "Noms et rôles au scénario initial ; vérification individuelle non exhaustive."
+    },
+    "FIN": {
+      "country": "Finlande",
+      "at": "1936-01-01",
+      "leader": "Pehr Evind Svinhufvud",
+      "role": "Président",
+      "biography": "https://en.wikipedia.org/wiki/Pehr_Evind_Svinhufvud",
+      "biographySource": "Wikipédia — lien de lecture, non source primaire",
+      "headOfState": null,
+      "cabinet": null,
+      "commanders": [
+        {
+          "name": "Carl Gustaf Emil Mannerheim",
+          "reference": "https://en.wikipedia.org/w/index.php?search=Carl%20Gustaf%20Emil%20Mannerheim",
+          "note": "Compétences et affectations abstraites pour le jeu, pas une fiche de service authentifiée."
+        }
+      ],
+      "historicalAccuracy": "Noms et rôles au scénario initial ; vérification individuelle non exhaustive."
+    },
+    "EST": {
+      "country": "Estonie",
+      "at": "1936-01-01",
+      "leader": "Konstantin Päts",
+      "role": "Doyen de l'État",
+      "biography": "https://en.wikipedia.org/wiki/Konstantin_P%C3%A4ts",
+      "biographySource": "Wikipédia — lien de lecture, non source primaire",
+      "headOfState": null,
+      "cabinet": null,
+      "commanders": [],
+      "historicalAccuracy": "Noms et rôles au scénario initial ; vérification individuelle non exhaustive."
+    },
+    "LAT": {
+      "country": "Lettonie",
+      "at": "1936-01-01",
+      "leader": "Kārlis Ulmanis",
+      "role": "Premier ministre",
+      "biography": "https://en.wikipedia.org/wiki/K%C4%81rlis_Ulmanis",
+      "biographySource": "Wikipédia — lien de lecture, non source primaire",
+      "headOfState": null,
+      "cabinet": null,
+      "commanders": [],
+      "historicalAccuracy": "Noms et rôles au scénario initial ; vérification individuelle non exhaustive."
+    },
+    "LIT": {
+      "country": "Lituanie",
+      "at": "1936-01-01",
+      "leader": "Antanas Smetona",
+      "role": "Président",
+      "biography": "https://en.wikipedia.org/wiki/Antanas_Smetona",
+      "biographySource": "Wikipédia — lien de lecture, non source primaire",
+      "headOfState": null,
+      "cabinet": null,
+      "commanders": [],
+      "historicalAccuracy": "Noms et rôles au scénario initial ; vérification individuelle non exhaustive."
+    },
+    "POL": {
+      "country": "Pologne",
+      "at": "1936-01-01",
+      "leader": "Ignacy Mościcki",
+      "role": "Président",
+      "biography": "https://en.wikipedia.org/wiki/Ignacy_Mo%C5%9Bcicki",
+      "biographySource": "Wikipédia — lien de lecture, non source primaire",
+      "headOfState": null,
+      "cabinet": null,
+      "commanders": [
+        {
+          "name": "Edward Rydz-Śmigły",
+          "reference": "https://en.wikipedia.org/w/index.php?search=Edward%20Rydz-%C5%9Amig%C5%82y",
+          "note": "Compétences et affectations abstraites pour le jeu, pas une fiche de service authentifiée."
+        },
+        {
+          "name": "Władysław Sikorski",
+          "reference": "https://en.wikipedia.org/w/index.php?search=W%C5%82adys%C5%82aw%20Sikorski",
+          "note": "Compétences et affectations abstraites pour le jeu, pas une fiche de service authentifiée."
+        }
+      ],
+      "historicalAccuracy": "Noms et rôles au scénario initial ; vérification individuelle non exhaustive."
+    },
+    "CZE": {
+      "country": "Tchécoslovaquie",
+      "at": "1936-01-01",
+      "leader": "Edvard Beneš",
+      "role": "Président",
+      "biography": "https://en.wikipedia.org/wiki/Edvard_Bene%C5%A1",
+      "biographySource": "Wikipédia — lien de lecture, non source primaire",
+      "headOfState": null,
+      "cabinet": null,
+      "commanders": [],
+      "historicalAccuracy": "Noms et rôles au scénario initial ; vérification individuelle non exhaustive."
+    },
+    "AUS": {
+      "country": "Autriche",
+      "at": "1936-01-01",
+      "leader": "Kurt Schuschnigg",
+      "role": "Chancelier",
+      "biography": "https://en.wikipedia.org/wiki/Kurt_Schuschnigg",
+      "biographySource": "Wikipédia — lien de lecture, non source primaire",
+      "headOfState": null,
+      "cabinet": null,
+      "commanders": [],
+      "historicalAccuracy": "Noms et rôles au scénario initial ; vérification individuelle non exhaustive."
+    },
+    "HUN": {
+      "country": "Hongrie",
+      "at": "1936-01-01",
+      "leader": "Miklós Horthy",
+      "role": "Régent",
+      "biography": "https://en.wikipedia.org/wiki/Mikl%C3%B3s_Horthy",
+      "biographySource": "Wikipédia — lien de lecture, non source primaire",
+      "headOfState": null,
+      "cabinet": null,
+      "commanders": [],
+      "historicalAccuracy": "Noms et rôles au scénario initial ; vérification individuelle non exhaustive."
+    },
+    "ROM": {
+      "country": "Roumanie",
+      "at": "1936-01-01",
+      "leader": "Carol II",
+      "role": "Roi",
+      "biography": "https://en.wikipedia.org/wiki/Carol_II_of_Romania",
+      "biographySource": "Wikipédia — lien de lecture, non source primaire",
+      "headOfState": null,
+      "cabinet": null,
+      "commanders": [],
+      "historicalAccuracy": "Noms et rôles au scénario initial ; vérification individuelle non exhaustive."
+    },
+    "BUL": {
+      "country": "Bulgarie",
+      "at": "1936-01-01",
+      "leader": "Boris III",
+      "role": "Tsar",
+      "biography": "https://en.wikipedia.org/wiki/Boris_III_of_Bulgaria",
+      "biographySource": "Wikipédia — lien de lecture, non source primaire",
+      "headOfState": null,
+      "cabinet": null,
+      "commanders": [],
+      "historicalAccuracy": "Noms et rôles au scénario initial ; vérification individuelle non exhaustive."
+    },
+    "YUG": {
+      "country": "Yougoslavie",
+      "at": "1936-01-01",
+      "leader": "Paul de Yougoslavie",
+      "role": "Prince régent",
+      "biography": "https://en.wikipedia.org/wiki/Prince_Paul_of_Yugoslavia",
+      "biographySource": "Wikipédia — lien de lecture, non source primaire",
+      "headOfState": null,
+      "cabinet": null,
+      "commanders": [],
+      "historicalAccuracy": "Noms et rôles au scénario initial ; vérification individuelle non exhaustive."
+    },
+    "GRE": {
+      "country": "Grèce",
+      "at": "1936-01-01",
+      "leader": "Konstantinos Demertzis",
+      "role": "Premier ministre",
+      "biography": "https://en.wikipedia.org/wiki/Konstantinos_Demertzis",
+      "biographySource": "Wikipédia — lien de lecture, non source primaire",
+      "headOfState": null,
+      "cabinet": null,
+      "commanders": [],
+      "historicalAccuracy": "Noms et rôles au scénario initial ; vérification individuelle non exhaustive."
+    },
+    "ALB": {
+      "country": "Albanie",
+      "at": "1936-01-01",
+      "leader": "Zog Ier",
+      "role": "Roi",
+      "biography": "https://en.wikipedia.org/wiki/Zog_I_of_Albania",
+      "biographySource": "Wikipédia — lien de lecture, non source primaire",
+      "headOfState": null,
+      "cabinet": null,
+      "commanders": [],
+      "historicalAccuracy": "Noms et rôles au scénario initial ; vérification individuelle non exhaustive."
+    },
+    "TUR": {
+      "country": "Turquie",
+      "at": "1936-01-01",
+      "leader": "Mustafa Kemal Atatürk",
+      "role": "Président",
+      "biography": "https://en.wikipedia.org/wiki/Mustafa_Kemal_Atat%C3%BCrk",
+      "biographySource": "Wikipédia — lien de lecture, non source primaire",
+      "headOfState": null,
+      "cabinet": null,
+      "commanders": [
+        {
+          "name": "Fevzi Çakmak",
+          "reference": "https://en.wikipedia.org/w/index.php?search=Fevzi%20%C3%87akmak",
+          "note": "Compétences et affectations abstraites pour le jeu, pas une fiche de service authentifiée."
+        }
+      ],
+      "historicalAccuracy": "Noms et rôles au scénario initial ; vérification individuelle non exhaustive."
+    },
+    "IRN": {
+      "country": "Iran",
+      "at": "1936-01-01",
+      "leader": "Reza Chah",
+      "role": "Chah",
+      "biography": "https://en.wikipedia.org/wiki/Reza_Shah",
+      "biographySource": "Wikipédia — lien de lecture, non source primaire",
+      "headOfState": null,
+      "cabinet": null,
+      "commanders": [],
+      "historicalAccuracy": "Noms et rôles au scénario initial ; vérification individuelle non exhaustive."
+    },
+    "AFG": {
+      "country": "Afghanistan",
+      "at": "1936-01-01",
+      "leader": "Mohammad Zaher Shah",
+      "role": "Roi",
+      "biography": "https://en.wikipedia.org/wiki/Mohammad_Zahir_Shah",
+      "biographySource": "Wikipédia — lien de lecture, non source primaire",
+      "headOfState": null,
+      "cabinet": null,
+      "commanders": [],
+      "historicalAccuracy": "Noms et rôles au scénario initial ; vérification individuelle non exhaustive."
+    },
+    "IRQ": {
+      "country": "Irak",
+      "at": "1936-01-01",
+      "leader": "Ghazi Ier",
+      "role": "Roi",
+      "biography": "https://en.wikipedia.org/wiki/Ghazi_of_Iraq",
+      "biographySource": "Wikipédia — lien de lecture, non source primaire",
+      "headOfState": null,
+      "cabinet": null,
+      "commanders": [],
+      "historicalAccuracy": "Noms et rôles au scénario initial ; vérification individuelle non exhaustive."
+    },
+    "SAU": {
+      "country": "Arabie saoudite",
+      "at": "1936-01-01",
+      "leader": "Abdelaziz ibn Saoud",
+      "role": "Roi",
+      "biography": "https://en.wikipedia.org/wiki/Ibn_Saud",
+      "biographySource": "Wikipédia — lien de lecture, non source primaire",
+      "headOfState": null,
+      "cabinet": null,
+      "commanders": [],
+      "historicalAccuracy": "Noms et rôles au scénario initial ; vérification individuelle non exhaustive."
+    },
+    "YEM": {
+      "country": "Yémen",
+      "at": "1936-01-01",
+      "leader": "Yahya Muhammad Hamid ed-Din",
+      "role": "Imam-roi",
+      "biography": "https://en.wikipedia.org/wiki/Yahya_Muhammad_Hamid_ed-Din",
+      "biographySource": "Wikipédia — lien de lecture, non source primaire",
+      "headOfState": null,
+      "cabinet": null,
+      "commanders": [],
+      "historicalAccuracy": "Noms et rôles au scénario initial ; vérification individuelle non exhaustive."
+    },
+    "OMA": {
+      "country": "Oman",
+      "at": "1936-01-01",
+      "leader": "Saïd ibn Taimour",
+      "role": "Sultan",
+      "biography": "https://en.wikipedia.org/wiki/Said_bin_Taimur",
+      "biographySource": "Wikipédia — lien de lecture, non source primaire",
+      "headOfState": null,
+      "cabinet": null,
+      "commanders": [],
+      "historicalAccuracy": "Noms et rôles au scénario initial ; vérification individuelle non exhaustive."
+    },
+    "SIA": {
+      "country": "Siam",
+      "at": "1936-01-01",
+      "leader": "Phraya Phahon",
+      "role": "Premier ministre",
+      "biography": "https://en.wikipedia.org/wiki/Phraya_Phahonphonphayuhasena",
+      "biographySource": "Wikipédia — lien de lecture, non source primaire",
+      "headOfState": null,
+      "cabinet": null,
+      "commanders": [],
+      "historicalAccuracy": "Noms et rôles au scénario initial ; vérification individuelle non exhaustive."
+    },
+    "NEP": {
+      "country": "Népal",
+      "at": "1936-01-01",
+      "leader": "Juddha Shumsher Rana",
+      "role": "Premier ministre",
+      "biography": "https://en.wikipedia.org/wiki/Juddha_Shumsher_Jung_Bahadur_Rana",
+      "biographySource": "Wikipédia — lien de lecture, non source primaire",
+      "headOfState": null,
+      "cabinet": null,
+      "commanders": [],
+      "historicalAccuracy": "Noms et rôles au scénario initial ; vérification individuelle non exhaustive."
+    },
+    "BHU": {
+      "country": "Bhoutan",
+      "at": "1936-01-01",
+      "leader": "Jigme Wangchuck",
+      "role": "Roi",
+      "biography": "https://en.wikipedia.org/wiki/Jigme_Wangchuck",
+      "biographySource": "Wikipédia — lien de lecture, non source primaire",
+      "headOfState": null,
+      "cabinet": null,
+      "commanders": [],
+      "historicalAccuracy": "Noms et rôles au scénario initial ; vérification individuelle non exhaustive."
+    },
+    "MON": {
+      "country": "Mongolie",
+      "at": "1936-01-01",
+      "leader": "Peljidiyn Genden",
+      "role": "Premier ministre",
+      "biography": "https://en.wikipedia.org/wiki/Peljidiin_Genden",
+      "biographySource": "Wikipédia — lien de lecture, non source primaire",
+      "headOfState": null,
+      "cabinet": null,
+      "commanders": [],
+      "historicalAccuracy": "Noms et rôles au scénario initial ; vérification individuelle non exhaustive."
+    },
+    "MAN": {
+      "country": "Mandchoukouo",
+      "at": "1936-01-01",
+      "leader": "Puyi",
+      "role": "Empereur",
+      "biography": "https://en.wikipedia.org/wiki/Puyi",
+      "biographySource": "Wikipédia — lien de lecture, non source primaire",
+      "headOfState": null,
+      "cabinet": null,
+      "commanders": [],
+      "historicalAccuracy": "Noms et rôles au scénario initial ; vérification individuelle non exhaustive."
+    },
+    "MEX": {
+      "country": "Mexique",
+      "at": "1936-01-01",
+      "leader": "Lázaro Cárdenas",
+      "role": "Président",
+      "biography": "https://en.wikipedia.org/wiki/L%C3%A1zaro_C%C3%A1rdenas",
+      "biographySource": "Wikipédia — lien de lecture, non source primaire",
+      "headOfState": null,
+      "cabinet": null,
+      "commanders": [],
+      "historicalAccuracy": "Noms et rôles au scénario initial ; vérification individuelle non exhaustive."
+    },
+    "BRA": {
+      "country": "Brésil",
+      "at": "1936-01-01",
+      "leader": "Getúlio Vargas",
+      "role": "Président",
+      "biography": "https://en.wikipedia.org/wiki/Get%C3%BAlio_Vargas",
+      "biographySource": "Wikipédia — lien de lecture, non source primaire",
+      "headOfState": null,
+      "cabinet": null,
+      "commanders": [],
+      "historicalAccuracy": "Noms et rôles au scénario initial ; vérification individuelle non exhaustive."
+    },
+    "ARG": {
+      "country": "Argentine",
+      "at": "1936-01-01",
+      "leader": "Agustín Pedro Justo",
+      "role": "Président",
+      "biography": "https://en.wikipedia.org/wiki/Agust%C3%ADn_Pedro_Justo",
+      "biographySource": "Wikipédia — lien de lecture, non source primaire",
+      "headOfState": null,
+      "cabinet": null,
+      "commanders": [],
+      "historicalAccuracy": "Noms et rôles au scénario initial ; vérification individuelle non exhaustive."
+    },
+    "CHL": {
+      "country": "Chili",
+      "at": "1936-01-01",
+      "leader": "Arturo Alessandri",
+      "role": "Président",
+      "biography": "https://en.wikipedia.org/wiki/Arturo_Alessandri",
+      "biographySource": "Wikipédia — lien de lecture, non source primaire",
+      "headOfState": null,
+      "cabinet": null,
+      "commanders": [],
+      "historicalAccuracy": "Noms et rôles au scénario initial ; vérification individuelle non exhaustive."
+    },
+    "BOL": {
+      "country": "Bolivie",
+      "at": "1936-01-01",
+      "leader": "José Luis Tejada Sorzano",
+      "role": "Président",
+      "biography": "https://en.wikipedia.org/wiki/Jos%C3%A9_Luis_Tejada_Sorzano",
+      "biographySource": "Wikipédia — lien de lecture, non source primaire",
+      "headOfState": null,
+      "cabinet": null,
+      "commanders": [],
+      "historicalAccuracy": "Noms et rôles au scénario initial ; vérification individuelle non exhaustive."
+    },
+    "PRU": {
+      "country": "Pérou",
+      "at": "1936-01-01",
+      "leader": "Óscar R. Benavides",
+      "role": "Président",
+      "biography": "https://en.wikipedia.org/wiki/%C3%93scar_R._Benavides",
+      "biographySource": "Wikipédia — lien de lecture, non source primaire",
+      "headOfState": null,
+      "cabinet": null,
+      "commanders": [],
+      "historicalAccuracy": "Noms et rôles au scénario initial ; vérification individuelle non exhaustive."
+    },
+    "ECU": {
+      "country": "Équateur",
+      "at": "1936-01-01",
+      "leader": "Federico Páez",
+      "role": "Chef de l'État",
+      "biography": "https://en.wikipedia.org/wiki/Federico_P%C3%A1ez",
+      "biographySource": "Wikipédia — lien de lecture, non source primaire",
+      "headOfState": null,
+      "cabinet": null,
+      "commanders": [],
+      "historicalAccuracy": "Noms et rôles au scénario initial ; vérification individuelle non exhaustive."
+    },
+    "COL": {
+      "country": "Colombie",
+      "at": "1936-01-01",
+      "leader": "Alfonso López Pumarejo",
+      "role": "Président",
+      "biography": "https://en.wikipedia.org/wiki/Alfonso_L%C3%B3pez_Pumarejo",
+      "biographySource": "Wikipédia — lien de lecture, non source primaire",
+      "headOfState": null,
+      "cabinet": null,
+      "commanders": [],
+      "historicalAccuracy": "Noms et rôles au scénario initial ; vérification individuelle non exhaustive."
+    },
+    "VEN": {
+      "country": "Venezuela",
+      "at": "1936-01-01",
+      "leader": "Eleazar López Contreras",
+      "role": "Président",
+      "biography": "https://en.wikipedia.org/wiki/Eleazar_L%C3%B3pez_Contreras",
+      "biographySource": "Wikipédia — lien de lecture, non source primaire",
+      "headOfState": null,
+      "cabinet": null,
+      "commanders": [],
+      "historicalAccuracy": "Noms et rôles au scénario initial ; vérification individuelle non exhaustive."
+    },
+    "URU": {
+      "country": "Uruguay",
+      "at": "1936-01-01",
+      "leader": "Gabriel Terra",
+      "role": "Président",
+      "biography": "https://en.wikipedia.org/wiki/Gabriel_Terra",
+      "biographySource": "Wikipédia — lien de lecture, non source primaire",
+      "headOfState": null,
+      "cabinet": null,
+      "commanders": [],
+      "historicalAccuracy": "Noms et rôles au scénario initial ; vérification individuelle non exhaustive."
+    },
+    "PAR": {
+      "country": "Paraguay",
+      "at": "1936-01-01",
+      "leader": "Eusebio Ayala",
+      "role": "Président",
+      "biography": "https://en.wikipedia.org/wiki/Eusebio_Ayala",
+      "biographySource": "Wikipédia — lien de lecture, non source primaire",
+      "headOfState": null,
+      "cabinet": null,
+      "commanders": [],
+      "historicalAccuracy": "Noms et rôles au scénario initial ; vérification individuelle non exhaustive."
+    },
+    "PAN": {
+      "country": "Panama",
+      "at": "1936-01-01",
+      "leader": "Harmodio Arias Madrid",
+      "role": "Président",
+      "biography": "https://en.wikipedia.org/wiki/Harmodio_Arias_Madrid",
+      "biographySource": "Wikipédia — lien de lecture, non source primaire",
+      "headOfState": null,
+      "cabinet": null,
+      "commanders": [],
+      "historicalAccuracy": "Noms et rôles au scénario initial ; vérification individuelle non exhaustive."
+    },
+    "COS": {
+      "country": "Costa Rica",
+      "at": "1936-01-01",
+      "leader": "Ricardo Jiménez Oreamuno",
+      "role": "Président",
+      "biography": "https://en.wikipedia.org/wiki/Ricardo_Jim%C3%A9nez_Oreamuno",
+      "biographySource": "Wikipédia — lien de lecture, non source primaire",
+      "headOfState": null,
+      "cabinet": null,
+      "commanders": [],
+      "historicalAccuracy": "Noms et rôles au scénario initial ; vérification individuelle non exhaustive."
+    },
+    "NIC": {
+      "country": "Nicaragua",
+      "at": "1936-01-01",
+      "leader": "Juan Bautista Sacasa",
+      "role": "Président",
+      "biography": "https://en.wikipedia.org/wiki/Juan_Bautista_Sacasa",
+      "biographySource": "Wikipédia — lien de lecture, non source primaire",
+      "headOfState": null,
+      "cabinet": null,
+      "commanders": [],
+      "historicalAccuracy": "Noms et rôles au scénario initial ; vérification individuelle non exhaustive."
+    },
+    "HON": {
+      "country": "Honduras",
+      "at": "1936-01-01",
+      "leader": "Tiburcio Carías Andino",
+      "role": "Président",
+      "biography": "https://en.wikipedia.org/wiki/Tiburcio_Car%C3%ADas_Andino",
+      "biographySource": "Wikipédia — lien de lecture, non source primaire",
+      "headOfState": null,
+      "cabinet": null,
+      "commanders": [],
+      "historicalAccuracy": "Noms et rôles au scénario initial ; vérification individuelle non exhaustive."
+    },
+    "ELS": {
+      "country": "Salvador",
+      "at": "1936-01-01",
+      "leader": "Maximiliano Hernández Martínez",
+      "role": "Président",
+      "biography": "https://en.wikipedia.org/wiki/Maximiliano_Hern%C3%A1ndez_Mart%C3%ADnez",
+      "biographySource": "Wikipédia — lien de lecture, non source primaire",
+      "headOfState": null,
+      "cabinet": null,
+      "commanders": [],
+      "historicalAccuracy": "Noms et rôles au scénario initial ; vérification individuelle non exhaustive."
+    },
+    "GUA": {
+      "country": "Guatemala",
+      "at": "1936-01-01",
+      "leader": "Jorge Ubico",
+      "role": "Président",
+      "biography": "https://en.wikipedia.org/wiki/Jorge_Ubico",
+      "biographySource": "Wikipédia — lien de lecture, non source primaire",
+      "headOfState": null,
+      "cabinet": null,
+      "commanders": [],
+      "historicalAccuracy": "Noms et rôles au scénario initial ; vérification individuelle non exhaustive."
+    },
+    "CUB": {
+      "country": "Cuba",
+      "at": "1936-01-01",
+      "leader": "José Agripino Barnet",
+      "role": "Président provisoire",
+      "biography": "https://en.wikipedia.org/wiki/Jos%C3%A9_Agripino_Barnet",
+      "biographySource": "Wikipédia — lien de lecture, non source primaire",
+      "headOfState": null,
+      "cabinet": null,
+      "commanders": [],
+      "historicalAccuracy": "Noms et rôles au scénario initial ; vérification individuelle non exhaustive."
+    },
+    "HAI": {
+      "country": "Haïti",
+      "at": "1936-01-01",
+      "leader": "Sténio Vincent",
+      "role": "Président",
+      "biography": "https://en.wikipedia.org/wiki/St%C3%A9nio_Vincent",
+      "biographySource": "Wikipédia — lien de lecture, non source primaire",
+      "headOfState": null,
+      "cabinet": null,
+      "commanders": [],
+      "historicalAccuracy": "Noms et rôles au scénario initial ; vérification individuelle non exhaustive."
+    },
+    "DOM": {
+      "country": "République dominicaine",
+      "at": "1936-01-01",
+      "leader": "Rafael Trujillo",
+      "role": "Président",
+      "biography": "https://en.wikipedia.org/wiki/Rafael_Trujillo",
+      "biographySource": "Wikipédia — lien de lecture, non source primaire",
+      "headOfState": null,
+      "cabinet": null,
+      "commanders": [],
+      "historicalAccuracy": "Noms et rôles au scénario initial ; vérification individuelle non exhaustive."
+    },
+    "LIB": {
+      "country": "Liberia",
+      "at": "1936-01-01",
+      "leader": "Edwin Barclay",
+      "role": "Président",
+      "biography": "https://en.wikipedia.org/wiki/Edwin_Barclay",
+      "biographySource": "Wikipédia — lien de lecture, non source primaire",
+      "headOfState": null,
+      "cabinet": null,
+      "commanders": [],
+      "historicalAccuracy": "Noms et rôles au scénario initial ; vérification individuelle non exhaustive."
+    },
+    "PHI": {
+      "country": "Philippines",
+      "at": "1936-01-01",
+      "leader": "Manuel L. Quezon",
+      "role": "Président du Commonwealth",
+      "biography": "https://en.wikipedia.org/wiki/Manuel_L._Quezon",
+      "biographySource": "Wikipédia — lien de lecture, non source primaire",
+      "headOfState": null,
+      "cabinet": null,
+      "commanders": [],
+      "historicalAccuracy": "Noms et rôles au scénario initial ; vérification individuelle non exhaustive."
+    },
+    "EGY": {
+      "country": "Égypte",
+      "at": "1936-01-01",
+      "leader": "Fouad Ier",
+      "role": "Roi",
+      "biography": "https://en.wikipedia.org/wiki/Fuad_I",
+      "biographySource": "Wikipédia — lien de lecture, non source primaire",
+      "headOfState": null,
+      "cabinet": null,
+      "commanders": [],
+      "historicalAccuracy": "Noms et rôles au scénario initial ; vérification individuelle non exhaustive."
+    },
+    "DNZ": {
+      "country": "Ville libre de Dantzig",
+      "at": "1936-01-01",
+      "leader": "Arthur Greiser",
+      "role": "Président du Sénat",
+      "biography": "https://en.wikipedia.org/wiki/Arthur_Greiser",
+      "biographySource": "Wikipédia — lien de lecture, non source primaire",
+      "headOfState": null,
+      "cabinet": null,
+      "commanders": [],
+      "historicalAccuracy": "Noms et rôles au scénario initial ; vérification individuelle non exhaustive."
+    },
+    "TIB": {
+      "country": "Tibet",
+      "at": "1936-01-01",
+      "leader": "Jamphel Yeshe Gyaltsen",
+      "role": "Régent (Reting Rinpoché)",
+      "biography": "https://en.wikipedia.org/wiki/Reting_Rinpoche",
+      "biographySource": "Wikipédia — lien de lecture, non source primaire",
+      "headOfState": null,
+      "cabinet": null,
+      "commanders": [],
+      "historicalAccuracy": "Noms et rôles au scénario initial ; vérification individuelle non exhaustive."
+    }
+  }
+}
