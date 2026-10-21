@@ -1,5 +1,8 @@
 # Frontières 1.5 — Optimisation et finition
 
+> **Publication GitHub 1.5 (instantané):** `index.html` permet de lancer le jeu; `src/` regroupe les grands modules extraits du HTML et `data/` les données JSON embarquées. Le dépôt ne contient pas encore toute la chaîne de build, les fixtures et les tests mentionnés plus bas dans cette documentation historique. Pour l'archive de développement intégrale, voir le fichier ZIP de livraison Frontières 1.5 dans la conversation d'origine. Les modules séparés sont fournis pour consultation et nécessitent une étape d'assemblage pour produire un nouveau HTML. Les résultats de benchmarks décrits plus bas sont ceux de l'archive de développement, pas des tests CI GitHub.
+
+
 **Jeu de grande stratégie solo original pour navigateur.** La 1.5 prend la suite de la 1.4.1, sans changer les règles de combat, de politique, d'économie ou les identifiants de géographie. Elle accélère la simulation, réduit les calculs graphiques inutiles et fournit un diagnostic de performance accessible au joueur.
 
 ## Lancer
