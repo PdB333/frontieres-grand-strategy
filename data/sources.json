@@ -1,0 +1,38 @@
+[
+  {
+    "id": "geography",
+    "title": "Natural Earth : base géographique",
+    "url": "https://www.naturalearthdata.com/about/terms-of-use/",
+    "use": "Contours des terres et frontières modernes. Domaine public. Les corrections vers 1936 et les subdivisions Voronoï sont des simplifications de jeu."
+  },
+  {
+    "id": "lebrun",
+    "title": "Élysée : Albert Lebrun",
+    "url": "https://www.elysee.fr/albert-lebrun",
+    "use": "Présidence 1932-1940 et chronologie politique française."
+  },
+  {
+    "id": "baldwin",
+    "title": "GOV.UK : Stanley Baldwin",
+    "url": "https://www.gov.uk/government/history/past-prime-ministers/stanley-baldwin",
+    "use": "Premier ministre en 1935-1937, et non Winston Churchill en janvier 1936."
+  },
+  {
+    "id": "fdr",
+    "title": "FDR Presidential Library : présidence et élections",
+    "url": "https://www.fdrlibrary.org/fdr-presidency",
+    "use": "Présidence et élection de 1936 ; adversaire Alf Landon."
+  },
+  {
+    "id": "roster",
+    "title": "Répertoire des dirigeants en 1936",
+    "url": "https://de.wikipedia.org/wiki/Liste_der_Staatsoberh%C3%A4upter_1936",
+    "use": "Référence secondaire pour les dirigeants de départ. Chefs d’État et chefs de gouvernement distingués dans les rôles. Les successions ne sont pas toutes simulées."
+  },
+  {
+    "id": "workers",
+    "title": "MDN : Using Web Workers",
+    "url": "https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Using_web_workers",
+    "use": "Architecture de simulation isolée du rendu."
+  }
+]
