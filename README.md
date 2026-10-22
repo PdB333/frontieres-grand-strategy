@@ -53,13 +53,13 @@ The core simulation does **not** require a connection to a game server. Optional
 | World map | **81** starting countries, **3,396** gameplay provinces grouped into **717** states, **8** terrain types, **12** straits |
 | Starting scenarios | **1936** and **1939** historical bookmarks |
 | Campaign engine | Pausable, day-by-day simulation with 5 speed settings, hourly battles and AI-controlled countries |
-| Historical content | **71** historical event/government entries, **37** conditional events, **44** releasable nations |
-| National focus trees | **8** country-specific trees plus a generic tree; **64–69** focuses per tree with exclusive regime paths |
+| Historical content | **71** historical event/government entries, **82** conditional events (45 of them national), **44** releasable nations |
+| National focus trees | **23** country-specific trees plus a generic tree; **64–70** focuses per tree with exclusive regime paths |
 | Technology | **150** technologies across 10 research categories, including exclusive land, naval and air doctrines |
 | Production | **24** equipment types, **73** equipment models, tank/aircraft/ship designers, **13** building types |
 | Ground forces | **20** battalion and **15** support types, battle plans, reserves, combat width, weather and attrition |
 | Air and sea | Air superiority, interception, close support, strategic and naval bombing, paradrops, carriers; patrols, strike forces, raiding, mines, sea control and naval invasions |
-| State management | **17** laws (economy, conscription, trade), **33** advisors, **48** national spirits, **46** decisions, budgets and elections |
+| State management | **17** laws (economy, conscription, trade), **33** advisors, **59** national spirits, **76** decisions, budgets and elections |
 | Intelligence | Relations, espionage and intelligence-based information (abstracted) |
 | Modding | Declarative JSON scenarios, countries, territory changes, new provinces, technologies, focuses, and events |
 | Saves | Browser storage plus JSON export/import, with compatibility checks |
@@ -116,9 +116,10 @@ All rules, names and texts are original to Frontières; no file, text, icon or m
 - Civil unrest, tensions, strikes, and interactions with the national economy.
 - Economic organization and wartime laws that change the country's available capacity.
 - National focus trees for **France, Germany, the United Kingdom, the Soviet Union, the United States, Italy, Japan, and China**, plus a generic tree for other countries: 64 to 69 focuses each, with political, economic, military research and foreign policy branches.
+- National trees for **15 secondary powers** (Poland, Spain, Romania, Czechoslovakia, Turkey, Yugoslavia, Hungary, the Netherlands, Belgium, Sweden, Finland, Canada, Australia, India and Brazil): national names, three regime paths of their own and a branch of national priorities (fortified lines, strategic resources, alliances, claims, research), with three national events and two national decisions each, taken by the AI as well.
 - Mutually exclusive **regime paths** (democratic, fascist, communist, authoritarian) that can change the government, grant national spirits, join factions, guarantee neighbours or justify war goals; OR prerequisites and conditions.
-- **Laws** for the economy (6), conscription (7) and trade (4); **33 advisors** and chiefs of staff in six offices; **48 national spirits**; **46 decisions** in five categories.
-- **37 conditional events** (strikes, scandals, discoveries, mutinies, partisans, codebreaking…) with a mean time to happen, answered by the AI as well.
+- **Laws** for the economy (6), conscription (7) and trade (4); **33 advisors** and chiefs of staff in six offices; **59 national spirits**; **76 decisions** in five categories.
+- **82 conditional events** (strikes, scandals, discoveries, mutinies, partisans, codebreaking, Danzig, the Sudetenland, Finland's winter, the Bengal shortage…) with a mean time to happen, answered by the AI as well; the draws depend on the campaign seed.
 
 These political systems are **simulation abstractions** rather than historically measured election results or an exhaustive representation of individual states.
 
@@ -463,7 +464,7 @@ Please read this section before reporting a feature as broken:
 
 1. **Historical accuracy is approximate.** Modern low-resolution base geography is adapted for gameplay; not all country borders, names, military deployments, or leaders are exhaustively researched. The map has 3,396 provinces, far fewer than large commercial games, so one province can stand for a whole region.
 2. **The AI is heuristic.** It manages fronts, production, research, air, navy and invasions, but long campaigns can still diverge strongly from history (a civil war can last seven months or three years depending on the seed).
-3. **Air and naval operations are zone-based.** They affect the campaign but are not ship-by-ship or plane-by-plane simulations.
+3. **Air and naval movement is zone-based.** Ships are tracked individually and air wings count their planes, but fleets and wings operate over sea and air zones rather than moving freely.
 4. **The economy is game-scaled.** GDP, budgets, votes, demographics, and industrial outputs are not real-world historical datasets.
 5. **Modding extends the current world.** It cannot yet replace all 3,396 base provinces with a wholly independent map. Mod effects accept the 1.6 bonus keys (organization, breakthrough, entrench, attrition, surrender…), but mods cannot yet define new battalions, laws, advisors or decisions.
 6. **Content volume is limited.** Focus trees, events and decisions are original and playable, but far less numerous than in commercial games.

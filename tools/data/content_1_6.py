@@ -61,7 +61,25 @@ NEW_SPIRITS = [
     spirit('scandal', 'Gouvernement discrédité', 'Un scandale financier éclabousse les ministres.',
            {'ppGain': -.1, 'stabilityGrowth': -.15}),
 ]
+NEW_SPIRITS += [
+    spirit('ethnic_tensions', 'Tensions entre nationalités', 'Le centralisme de la capitale heurte les autres peuples du royaume.',
+           {'stabilityGrowth': -.15, 'recruitment': -.05, 'ppGain': -.05}),
+    spirit('people_army', 'Armée populaire', 'Les milices sont fondues dans des brigades régulières encadrées par des officiers de carrière.',
+           {'organization': .05, 'recruitment': .1, 'defense': .05}),
+    spirit('air_training_plan', 'Plan d’entraînement aérien', 'Des dizaines d’écoles forment les équipages de tout le Commonwealth.',
+           {'air': .1, 'airDefense': .05}),
+    spirit('armed_neutrality', 'Neutralité armée', 'Le pays commerce avec tous mais garde ses frontières sous les armes.',
+           {'defense': .05, 'stabilityGrowth': .1, 'ppGain': .05}),
+    spirit('kemalist_reforms', 'Réformes kémalistes', 'Écoles, routes et usines d’État transforment un pays agricole.',
+           {'research': .03, 'construction': .03, 'stabilityGrowth': .05}),
+]
 catalog['spirits'] = [s for s in catalog['spirits'] if not s.get('c16')] + NEW_SPIRITS
+for scenario, tags in {'1936': {'YUG': 'ethnic_tensions', 'TUR': 'kemalist_reforms'},
+                       '1939': {'YUG': 'ethnic_tensions', 'SWE': 'armed_neutrality', 'TUR': 'kemalist_reforms'}}.items():
+    for tag, sid in tags.items():
+        lst = catalog['startSpirits'].setdefault(scenario, {}).setdefault(tag, [])
+        if sid not in lst:
+            lst.append(sid)
 
 # --- Focus trees ---------------------------------------------------------------------------
 PATH_DEFAULT = {
@@ -287,6 +305,321 @@ def foreign(col):
     ]
 
 
+# --- National trees for secondary powers --------------------------------------------------
+# Each tree takes the structure of the generic tree with national names, its
+# own regime paths and a branch of national priorities. Names and effects are
+# original game content.
+BASE_IDS = ['cabinet', 'industry', 'army', 'diplomacy', 'social', 'mobilization', 'research', 'logistics', 'air', 'navy',
+            'peace', 'expansion', 'arsenals', 'strategic', 'v1_modern', 'v1_diplomacy', 'v1_supply', 'v1_reserve',
+            'v1_shipyards', 'v1_carriers', 'v1_command', 'v1_rebuild']
+
+
+def u(fid, name, col, row, days, req=(), effect=None, **extra):
+    return (fid, name, col, row, days, list(req), effect or {}, extra)
+
+
+NATIONAL = {
+    'POL': {
+        'names': ['Gouvernement des colonels', 'Région industrielle centrale', 'Moderniser l’armée', 'Diplomatie de l’équilibre',
+                  'Réforme agraire', 'Réserves mobilisables', 'Institut technique de Varsovie', 'Chemins de fer stratégiques',
+                  'Aviation polonaise', 'Port de Gdynia', 'Pacte avec les démocraties', 'Puissance régionale', 'Arsenaux de Radom',
+                  'Stocks de guerre', 'Plan de modernisation sexennal', 'Entente avec Bucarest', 'Routes vers la Roumanie',
+                  'Brigades motorisées', 'Chantiers de Gdynia', 'Défense côtière', 'Commandement unifié', 'Reconstruction nationale'],
+        'root': 'L’héritage du maréchal',
+        'paths': {'authoritarian': ['Régime des colonels', 'Camp de l’unité nationale', 'État militaire', 'Bloc intermédiaire', 'Autarcie nationale'],
+                  'democratic': ['Opposition de Morges', 'Gouvernement d’union', 'Démocratie combative', 'Alliance occidentale', 'Garanties d’indépendance'],
+                  'fascist': ['Camp national-radical', 'Prise du pouvoir', 'Parti unique', 'Pacte avec Berlin', 'Revendications territoriales']},
+        'unique': [
+            u('pol_intermarium', 'Fédération des mers', 12, 0, 70, (), {'pp': 30}, invite={'list': ['ROM', 'LIT', 'LAT', 'EST', 'HUN'], 'name': 'Intermarium'}),
+            u('pol_west_wall', 'Fortifier la frontière occidentale', 12, 1, 60, ['pol_intermarium'], {}, special={'forts': 6, 'facing': ['GER'], 'fortLevel': 2}),
+            u('pol_east_wall', 'Couvrir la frontière orientale', 13, 1, 60, ['pol_intermarium'], {}, special={'forts': 5, 'facing': ['SOV']}),
+            u('pol_cipher', 'Bureau du chiffre', 12, 2, 70, ['pol_west_wall'], {'intel': .12}, researchBonus={'group': 'electronics', 'value': .8, 'uses': 2}),
+            u('pol_cavalry', 'Cavalerie et chars', 13, 2, 60, ['pol_east_wall'], {'tanks': 120}, researchBonus={'group': 'armor', 'value': .6, 'uses': 2}),
+            u('pol_warsaw', 'Défendre la capitale', 12, 3, 60, ['pol_cipher', 'pol_cavalry'], {'defense': .05}, special={'aa': 3, 'militia': 2}),
+        ],
+    },
+    'SPA': {
+        'names': ['Gouvernement de la République', 'Électrification des Asturies', 'Réformer l’armée', 'Neutralité active',
+                  'Réforme agraire', 'Milices de réserve', 'Universités de Madrid', 'Chemins de fer péninsulaires', 'Aviation militaire',
+                  'Flotte de Carthagène', 'Société des Nations', 'Ambitions africaines', 'Arsenaux de Tolède', 'Stocks stratégiques',
+                  'Plan de reconstruction', 'Amitié ibérique', 'Routes de l’intérieur', 'Brigades mixtes', 'Arsenal du Ferrol',
+                  'Défense des Baléares', 'État-major central', 'Reconstruire le pays'],
+        'root': 'La crise du régime',
+        'paths': {'democratic': ['Front des gauches', 'Majorité républicaine', 'Démocratie combative', 'Appel aux démocraties', 'Garanties d’indépendance'],
+                  'fascist': ['Phalange', 'Mouvement national', 'Parti unique', 'Rapprochement avec Rome', 'Revendications africaines'],
+                  'communist': ['Comités ouvriers', 'Gouvernement des conseils', 'Armée révolutionnaire', 'Aide de Moscou', 'Collectivisation']},
+        'unique': [
+            u('spa_mines', 'Mines du Rif et des Asturies', 12, 0, 60, (), {'resources': .1}),
+            u('spa_tungsten', 'Wolfram galicien', 12, 1, 50, ['spa_mines'], {'pp': 40}, relations={'GBR': 15, 'GER': 15}),
+            u('spa_morocco', 'Armée d’Afrique', 13, 1, 60, ['spa_mines'], {'xp': 20, 'manpower': 30000}),
+            u('spa_mountains', 'Défendre les sierras', 12, 2, 60, ['spa_tungsten'], {'defense': .05}, special={'forts': 4}),
+            u('spa_gibraltar', 'Question de Gibraltar', 13, 2, 70, ['spa_morocco'], {'tension': 3}, claims=['GBR'], requires={'ideology': ['fascist']}),
+            u('spa_neutral', 'Neutralité armée', 12, 3, 60, ['spa_mountains'], {'stability': 8, 'defense': .03}, requires={'peace': True}),
+        ],
+    },
+    'ROM': {
+        'names': ['Gouvernement royal', 'Industries de Ploiești', 'Réorganiser l’armée', 'Petite Entente', 'Réforme rurale',
+                  'Réserves territoriales', 'Écoles polytechniques', 'Chemins de fer des Carpates', 'Aviation royale', 'Flotte du Danube',
+                  'Entente balkanique', 'Grande Roumanie', 'Arsenaux de Reșița', 'Réserves de pétrole', 'Plan d’armement décennal',
+                  'Alliance avec Varsovie', 'Routes de Moldavie', 'Divisions de montagne', 'Chantiers de Galați', 'Défense de Constanța',
+                  'Haut commandement', 'Reconstruction'],
+        'root': 'Le roi et les partis',
+        'paths': {'authoritarian': ['Dictature royale', 'Front de la renaissance nationale', 'État militaire', 'Neutralité armée', 'Autarcie nationale'],
+                  'fascist': ['Légion', 'État national-légionnaire', 'Parti unique', 'Pacte avec Berlin', 'Revendications territoriales'],
+                  'democratic': ['Parti national-paysan', 'Élections libres', 'Démocratie combative', 'Fidélité à l’Entente', 'Garanties d’indépendance']},
+        'unique': [
+            u('rom_oil', 'Moderniser Ploiești', 12, 0, 60, (), {'fuel': 8000, 'resources': .08}, special={'refinery': 1}),
+            u('rom_carpathians', 'Ligne des Carpates', 12, 1, 60, ['rom_oil'], {}, special={'forts': 5}),
+            u('rom_oil_export', 'Pétrole contre armes', 13, 1, 50, ['rom_oil'], {'rifles': 3000, 'artillery': 300}),
+            u('rom_bessarabia', 'Défendre la Bessarabie', 12, 2, 60, ['rom_carpathians'], {}, special={'forts': 4, 'facing': ['SOV']}),
+            u('rom_mountain', 'Chasseurs de montagne', 13, 2, 60, ['rom_oil_export'], {'attack': .03}, researchBonus={'group': 'infantry', 'value': .6, 'uses': 2}),
+            u('rom_navy', 'Escadrille de la mer Noire', 12, 3, 60, ['rom_bessarabia'], {'destroyers': 2, 'submarines': 1}),
+        ],
+    },
+    'CZE': {
+        'names': ['Gouvernement de Prague', 'Industries de Bohême', 'Armée tchécoslovaque', 'Petite Entente', 'Compromis national',
+                  'Réservistes', 'Instituts techniques', 'Chemins de fer de Moravie', 'Aviation militaire', 'Flottille du Danube',
+                  'Alliance française', 'Fermeté face à Berlin', 'Usines Škoda', 'Stocks d’armement', 'Programme d’armement',
+                  'Pacte avec Moscou', 'Routes de Slovaquie', 'Divisions rapides', 'Chantiers de Bratislava', 'Défense des cols',
+                  'État-major central', 'Reconstruction'],
+        'root': 'L’héritage de la Première République',
+        'paths': {'democratic': ['Défendre la république', 'Gouvernement d’union', 'Démocratie combative', 'Alliance avec la France', 'Garanties d’indépendance'],
+                  'authoritarian': ['Parti de l’unité nationale', 'Gouvernement fort', 'État militaire', 'Neutralité armée', 'Autarcie nationale'],
+                  'communist': ['Syndicats ouvriers', 'Gouvernement des conseils', 'Armée révolutionnaire', 'Pacte avec Moscou', 'Planification socialiste']},
+        'unique': [
+            u('cze_bunkers', 'Ligne de casemates', 12, 0, 70, (), {}, special={'forts': 8, 'facing': ['GER', 'AUS', 'HUN'], 'fortLevel': 2}),
+            u('cze_skoda', 'Expansion des usines Škoda', 13, 0, 70, (), {'mil': 2}, researchBonus={'group': 'armor', 'value': .5, 'uses': 2}),
+            u('cze_lt38', 'Char léger national', 13, 1, 60, ['cze_skoda'], {'lightTanks': 150}),
+            u('cze_defend', 'Défendre la Bohême', 12, 1, 60, ['cze_bunkers'], {'defense': .05}, spirits=['national_redoubt']),
+            u('cze_allies', 'Appel aux garants', 12, 2, 50, ['cze_defend'], {'pp': 40}, relations={'FRA': 30, 'SOV': 30, 'GBR': 20}),
+            u('cze_export', 'Exportations d’armes', 13, 2, 50, ['cze_lt38'], {'pp': 50, 'rifles': 2000}),
+        ],
+    },
+    'TUR': {
+        'names': ['Héritage kémaliste', 'Plan quinquennal turc', 'Réformer l’armée', 'Diplomatie de l’équilibre', 'Réformes sociales',
+                  'Réservistes d’Anatolie', 'Université d’Istanbul', 'Chemins de fer d’Anatolie', 'Aviation turque', 'Flotte des détroits',
+                  'Pacte balkanique', 'Revendications du Hatay', 'Arsenaux de Kırıkkale', 'Stocks stratégiques', 'Programme de modernisation',
+                  'Pacte de Saadabad', 'Routes de l’Est', 'Divisions de cavalerie', 'Chantiers de Gölcük', 'Défense des Dardanelles',
+                  'État-major général', 'Développement national'],
+        'root': 'La république et ses six flèches',
+        'paths': {'authoritarian': ['Parti républicain du peuple', 'Gouvernement fort', 'État militaire', 'Neutralité armée', 'Autarcie nationale'],
+                  'democratic': ['Multipartisme', 'Élections libres', 'Démocratie combative', 'Rapprochement occidental', 'Garanties d’indépendance'],
+                  'fascist': ['Mouvement panturc', 'Prise du pouvoir', 'Parti unique', 'Pacte avec Berlin', 'Revendications territoriales']},
+        'unique': [
+            u('tur_straits', 'Remilitariser les détroits', 12, 0, 60, (), {'pp': 30}, special={'coastal': 4, 'forts': 2}),
+            u('tur_chrome', 'Chrome d’Anatolie', 13, 0, 50, (), {'resources': .1}),
+            u('tur_hatay', 'Question du Hatay', 12, 1, 60, ['tur_straits'], {'tension': 2}, claims=['FRA'], requires={'tension': 40}),
+            u('tur_neutral', 'Neutralité active', 13, 1, 60, ['tur_chrome'], {'stability': 8, 'pp': 40}, requires={'peace': True}),
+            u('tur_east', 'Développer l’Anatolie orientale', 13, 2, 70, ['tur_neutral'], {'civ': 2}, special={'infra': 5}),
+            u('tur_village', 'Instituts de village', 12, 2, 60, ['tur_hatay'], {'research': .05, 'stability': 5}),
+        ],
+    },
+    'YUG': {
+        'names': ['Gouvernement royal', 'Industrialiser la Serbie', 'Armée royale', 'Petite Entente', 'Accord serbo-croate',
+                  'Réserves mobilisables', 'Instituts de Belgrade', 'Chemins de fer des Balkans', 'Aviation royale', 'Flotte adriatique',
+                  'Entente balkanique', 'Ambitions balkaniques', 'Arsenaux de Kragujevac', 'Stocks stratégiques', 'Plan d’armement',
+                  'Rapprochement avec Paris', 'Routes de Bosnie', 'Divisions de montagne', 'Chantiers de Split', 'Défense de la côte',
+                  'État-major royal', 'Reconstruction'],
+        'root': 'La couronne et les nations',
+        'paths': {'authoritarian': ['Régence royale', 'Gouvernement d’autorité', 'État militaire', 'Neutralité armée', 'Autarcie nationale'],
+                  'democratic': ['Accord national', 'Élections libres', 'Démocratie combative', 'Alliance occidentale', 'Garanties d’indépendance'],
+                  'communist': ['Partisans ouvriers', 'Gouvernement des conseils', 'Armée révolutionnaire', 'Pacte avec Moscou', 'Planification socialiste']},
+        'unique': [
+            u('yug_sporazum', 'Autonomie croate', 12, 0, 60, (), {'stability': 12}, removeSpirits=['ethnic_tensions']),
+            u('yug_bauxite', 'Bauxite et cuivre', 13, 0, 50, (), {'resources': .1}),
+            u('yug_mountains', 'Réduit des montagnes', 12, 1, 60, ['yug_sporazum'], {'defense': .05}, special={'forts': 4}),
+            u('yug_partisan', 'Préparer la guérilla', 12, 2, 60, ['yug_mountains'], {'attrition': .2}, special={'militia': 2}),
+            u('yug_mining', 'Combinat de Bor', 13, 1, 60, ['yug_bauxite'], {'mil': 1, 'resources': .05}),
+            u('yug_adriatic', 'Défense de l’Adriatique', 13, 2, 50, ['yug_mining'], {}, special={'coastal': 3}),
+        ],
+    },
+    'HUN': {
+        'names': ['Régence de l’amiral', 'Programme de Győr', 'Honvéd moderne', 'Révisionnisme diplomatique', 'Réforme agraire',
+                  'Réserves du Honvéd', 'Université technique', 'Chemins de fer de la plaine', 'Aviation hongroise', 'Flottille du Danube',
+                  'Prudence diplomatique', 'Réviser Trianon', 'Arsenaux de Csepel', 'Bauxite stratégique', 'Plan d’armement de Győr',
+                  'Amitié avec Rome', 'Routes de Transylvanie', 'Divisions rapides', 'Chantiers de Budapest', 'Défense du Danube',
+                  'État-major du Honvéd', 'Reconstruction'],
+        'root': 'Un royaume sans roi',
+        'paths': {'authoritarian': ['Parti de l’unité', 'Gouvernement fort', 'État militaire', 'Neutralité armée', 'Autarcie nationale'],
+                  'fascist': ['Croix fléchées', 'Prise du pouvoir', 'Parti unique', 'Pacte avec Berlin', 'Revendications territoriales'],
+                  'democratic': ['Opposition libérale', 'Élections libres', 'Démocratie combative', 'Rapprochement occidental', 'Garanties d’indépendance']},
+        'unique': [
+            u('hun_gyor', 'Programme de réarmement', 12, 0, 70, (), {'mil': 2, 'rifles': 2000}),
+            u('hun_bauxite', 'Bauxite hongroise', 13, 0, 50, (), {'resources': .1}),
+            u('hun_trianon', 'Revendications de Trianon', 12, 1, 60, ['hun_gyor'], {'tension': 3}, claims=['CZE', 'ROM'], requires={'tension': 35}),
+            u('hun_tanks', 'Char national', 13, 1, 60, ['hun_bauxite'], {'lightTanks': 80}, researchBonus={'group': 'armor', 'value': .5, 'uses': 1}),
+            u('hun_hussars', 'Tradition des hussards', 12, 2, 50, ['hun_trianon'], {'xp': 15, 'attack': .03}),
+            u('hun_danube', 'Ligne du Danube', 13, 2, 50, ['hun_tanks'], {}, special={'forts': 3}),
+        ],
+    },
+    'HOL': {
+        'names': ['Gouvernement de coalition', 'Industrie de Rotterdam', 'Moderniser l’armée', 'Neutralité néerlandaise', 'Compromis social',
+                  'Réserves territoriales', 'Université de Delft', 'Canaux et voies ferrées', 'Aviation militaire', 'Flotte des Indes',
+                  'Neutralité stricte', 'Engagement occidental', 'Arsenaux de Hembrug', 'Pétrole des Indes', 'Plan de défense',
+                  'Coopération avec Londres', 'Ravitaillement des Indes', 'Divisions légères', 'Chantiers de Rotterdam', 'Aviation navale des Indes',
+                  'Commandement interarmes', 'Reconstruction'],
+        'root': 'Le royaume et ses colonies',
+        'paths': {'democratic': ['Défendre la démocratie', 'Cabinet d’union', 'Démocratie combative', 'Coopération avec Londres', 'Garanties d’indépendance'],
+                  'fascist': ['Mouvement national-socialiste', 'Prise du pouvoir', 'Parti unique', 'Pacte avec Berlin', 'Revendications territoriales'],
+                  'authoritarian': ['Ligue nationale', 'Gouvernement fort', 'État militaire', 'Neutralité armée', 'Autarcie nationale']},
+        'unique': [
+            u('hol_water', 'Ligne d’eau hollandaise', 12, 0, 60, (), {'defense': .05}, special={'forts': 4, 'fortLevel': 2}),
+            u('hol_indies_oil', 'Pétrole de Sumatra', 13, 0, 60, (), {'fuel': 10000, 'resources': .08}),
+            u('hol_fortress', 'Forteresse Hollande', 12, 1, 60, ['hol_water'], {'entrench': .1}, spirits=['national_redoubt']),
+            u('hol_indies_navy', 'Flotte des Indes orientales', 13, 1, 70, ['hol_indies_oil'], {'cruisers': 1, 'destroyers': 3, 'submarines': 2}),
+            u('hol_indies_army', 'Armée royale des Indes', 13, 2, 60, ['hol_indies_navy'], {'manpower': 30000}, special={'coastal': 3}),
+            u('hol_exile', 'Gouvernement de réserve', 12, 2, 50, ['hol_fortress'], {'stability': 6, 'surrender': .05}),
+        ],
+    },
+    'BEL': {
+        'names': ['Gouvernement d’union', 'Industrie wallonne', 'Moderniser l’armée', 'Politique d’indépendance', 'Concertation sociale',
+                  'Réserves mobilisables', 'Université de Louvain', 'Chemins de fer belges', 'Aéronautique militaire', 'Port d’Anvers',
+                  'Neutralité armée', 'Accords avec la France', 'Arsenal de Herstal', 'Cuivre du Katanga', 'Plan de défense',
+                  'Coopération franco-britannique', 'Routes du Congo', 'Chasseurs ardennais', 'Chantiers d’Anvers', 'Défense côtière',
+                  'État-major', 'Reconstruction'],
+        'root': 'Le roi et la neutralité',
+        'paths': {'democratic': ['Défendre la constitution', 'Cabinet d’union', 'Démocratie combative', 'Retour aux alliances', 'Garanties d’indépendance'],
+                  'fascist': ['Mouvement rexiste', 'Prise du pouvoir', 'Parti unique', 'Pacte avec Berlin', 'Revendications territoriales'],
+                  'authoritarian': ['Pouvoir royal', 'Gouvernement fort', 'État militaire', 'Neutralité armée', 'Autarcie nationale']},
+        'unique': [
+            u('bel_forts', 'Forts de la Meuse', 12, 0, 70, (), {}, special={'forts': 4, 'facing': ['GER'], 'fortLevel': 2}),
+            u('bel_congo', 'Ressources du Congo', 13, 0, 60, (), {'resources': .1}),
+            u('bel_kw', 'Ligne de défense', 12, 1, 60, ['bel_forts'], {'entrench': .1, 'defense': .03}),
+            u('bel_ardennes', 'Chasseurs ardennais', 13, 1, 50, ['bel_congo'], {'attrition': .15, 'xp': 10}),
+            u('bel_uranium', 'Uranium du Katanga', 13, 2, 60, ['bel_ardennes'], {'pp': 30}, researchBonus={'group': 'electronics', 'value': .5, 'uses': 1}),
+            u('bel_neutral', 'Neutralité garantie', 12, 2, 50, ['bel_kw'], {'stability': 6}, relations={'FRA': 15, 'GBR': 15}),
+        ],
+    },
+    'SWE': {
+        'names': ['Gouvernement social-démocrate', 'Industrie suédoise', 'Défense nationale', 'Neutralité scandinave', 'Modèle suédois',
+                  'Réserves territoriales', 'Institut royal de technologie', 'Chemins de fer du Norrland', 'Aviation suédoise', 'Flotte côtière',
+                  'Neutralité stricte', 'Solidarité nordique', 'Usines Bofors', 'Minerai de Kiruna', 'Plan de défense de 1936',
+                  'Coopération nordique', 'Routes du Norrland', 'Brigades d’hiver', 'Chantiers de Karlskrona', 'Défense côtière',
+                  'Commandement suprême', 'Reconstruction'],
+        'root': 'La maison du peuple',
+        'paths': {'democratic': ['Maison du peuple', 'Gouvernement d’union', 'Démocratie combative', 'Coopération nordique', 'Garanties d’indépendance'],
+                  'authoritarian': ['Mouvement paysan', 'Gouvernement fort', 'État militaire', 'Neutralité armée', 'Autarcie nationale'],
+                  'fascist': ['Union nationale', 'Prise du pouvoir', 'Parti unique', 'Pacte avec Berlin', 'Revendications territoriales']},
+        'unique': [
+            u('swe_ore', 'Minerai de fer de Kiruna', 12, 0, 50, (), {'resources': .12}),
+            u('swe_bofors', 'Canons Bofors', 13, 0, 60, (), {'antiAir': 300, 'artillery': 300}, researchBonus={'group': 'infantry', 'value': .5, 'uses': 1}),
+            u('swe_neutral', 'Neutralité armée', 12, 1, 60, ['swe_ore'], {'stability': 6, 'defense': .05}),
+            u('swe_trade', 'Commerce avec les belligérants', 12, 2, 50, ['swe_neutral'], {'pp': 50}, requires={'tension': 40}),
+            u('swe_volunteers', 'Volontaires pour la Finlande', 13, 1, 50, ['swe_bofors'], {'rifles': -1500}, relations={'FIN': 40}),
+            u('swe_air', 'Défense aérienne du Sud', 13, 2, 50, ['swe_volunteers'], {'airDefense': .15}, special={'aa': 3}),
+        ],
+    },
+    'FIN': {
+        'names': ['Gouvernement national', 'Industrie forestière', 'Armée finlandaise', 'Orientation scandinave', 'Réconciliation nationale',
+                  'Garde civique', 'Université d’Helsinki', 'Routes de Carélie', 'Aviation finlandaise', 'Défense du golfe',
+                  'Neutralité nordique', 'Grande Finlande', 'Arsenaux de Tampere', 'Stocks de guerre', 'Programme de défense',
+                  'Coopération avec Stockholm', 'Routes de Laponie', 'Bataillons de skieurs', 'Chantiers de Turku', 'Défense des îles',
+                  'Quartier général', 'Reconstruction'],
+        'root': 'Une jeune république',
+        'paths': {'democratic': ['Défendre la république', 'Gouvernement d’union', 'Démocratie combative', 'Coopération nordique', 'Garanties d’indépendance'],
+                  'authoritarian': ['Mouvement de Lapua', 'Gouvernement fort', 'État militaire', 'Neutralité armée', 'Autarcie nationale'],
+                  'fascist': ['Mouvement patriotique', 'Prise du pouvoir', 'Parti unique', 'Pacte avec Berlin', 'Revendications territoriales']},
+        'unique': [
+            u('fin_line', 'Ligne fortifiée de l’isthme', 12, 0, 70, (), {}, special={'forts': 4, 'facing': ['SOV'], 'fortLevel': 2}),
+            u('fin_skis', 'Guerre d’hiver', 13, 0, 60, (), {'attrition': .2, 'xp': 15}),
+            u('fin_motti', 'Tactique des encerclements', 13, 1, 60, ['fin_skis'], {'attack': .05, 'breakthrough': .05}),
+            u('fin_civic', 'Garde civique', 12, 1, 50, ['fin_line'], {'manpower': 25000}, special={'militia': 2}),
+            u('fin_nordic', 'Solidarité nordique', 12, 2, 50, ['fin_civic'], {'pp': 30}, relations={'SWE': 30, 'NOR': 20}),
+            u('fin_lotta', 'Auxiliaires féminines', 13, 2, 50, ['fin_motti'], {'production': .03, 'stability': 5}),
+        ],
+    },
+    'CAN': {
+        'names': ['Gouvernement fédéral', 'Industries de l’Ontario', 'Milice permanente', 'Statut de Westminster', 'Relance de l’emploi',
+                  'Réserves de la milice', 'Conseil national de recherches', 'Chemins de fer transcontinentaux', 'Aviation royale canadienne',
+                  'Marine royale canadienne', 'Autonomie nationale', 'Engagement impérial', 'Arsenaux de Montréal', 'Ressources du Bouclier',
+                  'Programme de guerre', 'Coopération avec Washington', 'Routes de l’Atlantique', 'Divisions canadiennes', 'Chantiers d’Halifax',
+                  'Escorte des convois', 'Quartier général outre-mer', 'Reconstruction'],
+        'root': 'Un dominion souverain',
+        'paths': {'democratic': ['Libéraux et conservateurs', 'Union nationale', 'Démocratie combative', 'Fidélité au Commonwealth', 'Garanties d’indépendance'],
+                  'authoritarian': ['Union nationale du Québec', 'Gouvernement fort', 'État militaire', 'Neutralité armée', 'Autarcie nationale'],
+                  'communist': ['Mouvement ouvrier', 'Gouvernement du travail', 'Armée révolutionnaire', 'Solidarité internationale', 'Planification socialiste']},
+        'unique': [
+            u('can_training', 'Plan d’entraînement aérien', 12, 0, 70, (), {'air': .08}, researchBonus={'group': 'air', 'value': .5, 'uses': 2}),
+            u('can_nickel', 'Nickel et aluminium', 13, 0, 60, (), {'resources': .12}),
+            u('can_convoys', 'Escorte de l’Atlantique', 12, 1, 60, ['can_training'], {'convoy': .15, 'destroyers': 4, 'convoys': 40}),
+            u('can_arsenal', 'Arsenal du Commonwealth', 13, 1, 70, ['can_nickel'], {'mil': 2, 'civ': 2}),
+            u('can_mutual', 'Aide mutuelle', 13, 2, 50, ['can_arsenal'], {'pp': 40}, relations={'GBR': 25, 'USA': 25}),
+            u('can_army', 'Armée canadienne outre-mer', 12, 2, 60, ['can_convoys'], {'xp': 15, 'manpower': 40000}),
+        ],
+    },
+    'AST': {
+        'names': ['Gouvernement fédéral', 'Industries de Nouvelle-Galles', 'Forces citoyennes', 'Statut de Westminster', 'Relance de l’emploi',
+                  'Milice territoriale', 'Conseil scientifique', 'Chemins de fer transcontinentaux', 'Aviation royale australienne',
+                  'Marine royale australienne', 'Défense du Pacifique', 'Engagement impérial', 'Usines de Lithgow', 'Ressources du continent',
+                  'Programme de défense', 'Rapprochement avec Washington', 'Routes du Nord', 'Divisions du désert', 'Chantiers de Sydney',
+                  'Défense de Darwin', 'Quartier général', 'Reconstruction'],
+        'root': 'Un continent à défendre',
+        'paths': {'democratic': ['Travaillistes et unionistes', 'Union nationale', 'Démocratie combative', 'Fidélité au Commonwealth', 'Garanties d’indépendance'],
+                  'authoritarian': ['Ligue nationale', 'Gouvernement fort', 'État militaire', 'Neutralité armée', 'Autarcie nationale'],
+                  'communist': ['Syndicats de mineurs', 'Gouvernement du travail', 'Armée révolutionnaire', 'Solidarité internationale', 'Planification socialiste']},
+        'unique': [
+            u('ast_bhp', 'Aciéries de Newcastle', 12, 0, 60, (), {'civ': 2, 'resources': .08}),
+            u('ast_darwin', 'Fortifier Darwin', 13, 0, 60, (), {}, special={'coastal': 3, 'aa': 2}),
+            u('ast_aircraft', 'Usines aéronautiques', 12, 1, 60, ['ast_bhp'], {'fighters': 80}, researchBonus={'group': 'air', 'value': .5, 'uses': 1}),
+            u('ast_desert', 'Divisions du désert', 13, 1, 50, ['ast_darwin'], {'xp': 15, 'attrition': .1}),
+            u('ast_usa', 'Se tourner vers l’Amérique', 13, 2, 50, ['ast_desert'], {'pp': 40}, relations={'USA': 40}, requires={'tension': 50}),
+            u('ast_jungle', 'Guerre dans la jungle', 12, 2, 60, ['ast_aircraft'], {'attrition': .15, 'defense': .03}),
+        ],
+    },
+    'RAJ': {
+        'names': ['Gouvernement de l’Inde', 'Industries de Bombay', 'Armée des Indes', 'Diplomatie impériale', 'Réformes provinciales',
+                  'Recrutement volontaire', 'Institut des sciences de Bangalore', 'Chemins de fer des Indes', 'Aviation indienne',
+                  'Marine royale indienne', 'Autonomie provinciale', 'Engagement impérial', 'Arsenaux de Kanpur', 'Ressources de l’Inde',
+                  'Programme de guerre', 'Coopération avec Londres', 'Routes de Birmanie', 'Divisions indiennes', 'Chantiers de Bombay',
+                  'Défense du golfe du Bengale', 'Commandement de l’Inde', 'Reconstruction'],
+        'root': 'Le chemin de l’autonomie',
+        'paths': {'democratic': ['Congrès national', 'Gouvernements provinciaux', 'Démocratie combative', 'Fidélité au Commonwealth', 'Garanties d’indépendance'],
+                  'authoritarian': ['Princes et notables', 'Gouvernement fort', 'État militaire', 'Neutralité armée', 'Autarcie nationale'],
+                  'communist': ['Mouvement paysan', 'Gouvernement des conseils', 'Armée révolutionnaire', 'Solidarité internationale', 'Réforme agraire']},
+        'unique': [
+            u('raj_volunteers', 'Plus grande armée de volontaires', 12, 0, 70, (), {'manpower': 150000}),
+            u('raj_tata', 'Aciéries de Jamshedpur', 13, 0, 60, (), {'civ': 2, 'mil': 1}),
+            u('raj_burma', 'Défendre la Birmanie', 12, 1, 60, ['raj_volunteers'], {}, special={'forts': 3}),
+            u('raj_mountain', 'Frontière du Nord-Ouest', 13, 1, 50, ['raj_tata'], {'xp': 15, 'attrition': .1}),
+            u('raj_congress', 'Négocier avec le Congrès', 12, 2, 60, ['raj_burma'], {'stability': 10}, partyShift={'democratic': 10}),
+            u('raj_jungle', 'Divisions de jungle', 13, 2, 60, ['raj_mountain'], {'attrition': .15}, researchBonus={'group': 'infantry', 'value': .5, 'uses': 1}),
+        ],
+    },
+    'BRA': {
+        'names': ['Estado Novo', 'Industrie de São Paulo', 'Armée brésilienne', 'Bon voisinage', 'Lois du travail', 'Réserves nationales',
+                  'Instituts de recherche', 'Chemins de fer de l’intérieur', 'Aviation brésilienne', 'Escadre du Brésil', 'Neutralité continentale',
+                  'Puissance sud-américaine', 'Arsenaux de Rio', 'Caoutchouc d’Amazonie', 'Plan d’équipement', 'Accords avec Washington',
+                  'Routes de l’Amazonie', 'Divisions expéditionnaires', 'Chantiers de Rio', 'Défense du Nordeste', 'État-major', 'Développement national'],
+        'root': 'L’État nouveau',
+        'paths': {'authoritarian': ['État nouveau', 'Gouvernement fort', 'État militaire', 'Neutralité armée', 'Autarcie nationale'],
+                  'democratic': ['Opposition libérale', 'Élections libres', 'Démocratie combative', 'Solidarité panaméricaine', 'Garanties d’indépendance'],
+                  'fascist': ['Mouvement intégraliste', 'Prise du pouvoir', 'Parti unique', 'Pacte avec Berlin', 'Revendications territoriales']},
+        'unique': [
+            u('bra_volta', 'Aciéries de Volta Redonda', 12, 0, 70, (), {'civ': 2, 'mil': 1}),
+            u('bra_rubber', 'Caoutchouc d’Amazonie', 13, 0, 50, (), {'resources': .12}),
+            u('bra_bases', 'Bases contre aide', 12, 1, 60, ['bra_volta'], {'pp': 40, 'trucks': 400}, relations={'USA': 40}, requires={'tension': 50}),
+            u('bra_feb', 'Corps expéditionnaire', 12, 2, 60, ['bra_bases'], {'xp': 20, 'manpower': 40000}),
+            u('bra_northeast', 'Défendre le Nordeste', 13, 1, 50, ['bra_rubber'], {}, special={'coastal': 3, 'aa': 2}),
+            u('bra_interior', 'Marche vers l’Ouest', 13, 2, 60, ['bra_northeast'], {'stability': 5}, special={'infra': 5}),
+        ],
+    },
+}
+
+generic_base = [f for f in catalog['focus']['generic'] if not f.get('c16')]
+assert [f['id'] for f in generic_base] == BASE_IDS, [f['id'] for f in generic_base]
+for tag, spec in NATIONAL.items():
+    assert len(spec['names']) == len(BASE_IDS), tag
+    nodes = []
+    for f, name in zip(generic_base, spec['names']):
+        g = json.loads(json.dumps(f))
+        g['name'] = name
+        nodes.append(g)
+    catalog['focus'][tag] = nodes
+    paths = {}
+    for ide, names in spec['paths'].items():
+        paths[ide] = {'names': names}
+    POLITICS[tag] = {'root': spec['root'], 'paths': paths}
+
 for tag, tree in catalog['focus'].items():
     base = [f for f in tree if not f.get('c16')]
     width = len(POLITICS[tag]['paths'])
@@ -298,6 +631,10 @@ for tag, tree in catalog['focus'].items():
     added += military(col)
     col += 2
     added += foreign(col)
+    for fid, name, ucol, row, days, req, effect, extra in NATIONAL.get(tag, {}).get('unique', []):
+        added.append(node(fid, name, col + 1 + ucol - 12, row, days, req, effect, national=True, **extra))
+    cells = [(f['col'], f['row']) for f in base + added]
+    assert len(cells) == len(set(cells)), (tag, sorted(c for c in cells if cells.count(c) > 1))
     ids = {f['id'] for f in base}
     for f in added:
         assert f['id'] not in ids, (tag, f['id'])
@@ -656,6 +993,368 @@ catalog['events16'] = [
               choice('Appeler à la vengeance', {'support': 6, 'stability': -2}),
           ], mtth=500, cooldown=540),
 ]
+
+# --- National events of the secondary powers ------------------------------------------------
+def nat(tag, eid, title, text, conditions, choices, mtth=600, cooldown=720, once=True):
+    return event(eid, title, text, dict(conditions, countries=[tag]), choices, mtth, cooldown, once)
+
+
+NATIONAL_EVENTS = [
+    nat('POL', 'pol_danzig', 'La question de Dantzig',
+        'Berlin exige le rattachement de la ville libre et une route à travers le corridor.',
+        {'tensionAbove': 45, 'yearMin': 1938, 'peace': None}, [
+            choice('Refuser toute concession', {'stability': 5, 'tension': 2}, 2, spirit='war_enthusiasm', spiritDays=120,
+                   relations={'GER': -20, 'GBR': 10, 'FRA': 10}),
+            choice('Proposer une route extraterritoriale', {'pp': -30, 'stability': -5, 'tension': -3}, relations={'GER': 15}),
+        ]),
+    nat('POL', 'pol_teschen', 'Le litige de Teschen',
+        'La région disputée depuis 1920 redevient un sujet brûlant à mesure que Prague s’affaiblit.',
+        {'tensionAbove': 35}, [
+            choice('Revendiquer la région', {'tension': 2}, 1, claims=['CZE']),
+            choice('Rester solidaire de Prague', {'pp': 20}, 2, relations={'CZE': 20, 'FRA': 10}),
+        ]),
+    nat('POL', 'pol_cipher_breakthrough', 'Les mathématiciens du chiffre',
+        'Trois jeunes cryptologues ont reconstitué la machine de chiffrement de l’armée allemande.',
+        {'yearMin': 1937}, [
+            choice('Partager le secret avec Paris et Londres', {}, 2, relations={'FRA': 20, 'GBR': 20},
+                   researchBonus={'group': 'electronics', 'value': 1, 'uses': 1}),
+            choice('Garder le secret', {}, 1, spirit='decrypt', spiritDays=365),
+        ], mtth=500),
+    nat('SPA', 'spa_gold', 'L’or de la Banque d’Espagne',
+        'Les réserves d’or de la nation sont menacées par l’avance ennemie. Où les mettre à l’abri ?',
+        {'war': True}, [
+            choice('Les envoyer à Moscou contre des armes', {'rifles': 3000, 'artillery': 300, 'tanks': 40}, 2, relations={'SOV': 30}),
+            choice('Les garder à Carthagène', {'stability': 3, 'pp': 20}),
+        ], mtth=200),
+    nat('SPA', 'spa_brigades', 'Les volontaires étrangers',
+        'Des milliers de volontaires venus de toute l’Europe se présentent aux bureaux de recrutement.',
+        {'war': True, 'warDays': 60}, [
+            choice('Former des brigades internationales', {'manpower': 20000, 'xp': 10}, 2),
+            choice('Les répartir dans les milices', {'manpower': 12000, 'stability': 2}),
+        ], mtth=150),
+    nat('SPA', 'spa_militias', 'Querelles entre milices',
+        'Anarchistes, communistes et républicains se disputent armes et commandement.',
+        {'war': True, 'hasSpirit': 'popular_militias'}, [
+            choice('Militariser les milices', {'stability': -4, 'pp': -20}, 2, removeSpirit='popular_militias', spirit='people_army'),
+            choice('Respecter les comités', {'stability': 4, 'support': 4}),
+        ], mtth=300),
+    nat('ROM', 'rom_oil_pressure', 'Pétrole contre garanties',
+        'Berlin propose des armes et une garantie de frontières contre des livraisons massives de pétrole.',
+        {'tensionAbove': 50}, [
+            choice('Livrer le pétrole', {'fuel': -4000, 'rifles': 2000, 'artillery': 200}, 1, relations={'GER': 30}),
+            choice('Rester fidèle aux alliés', {'pp': 20}, 2, relations={'FRA': 15, 'GBR': 15, 'GER': -10}),
+        ]),
+    nat('ROM', 'rom_legion', 'Agitation légionnaire',
+        'Les « chemises vertes » multiplient défilés, attentats et assassinats politiques.',
+        {'stabilityBelow': 60, 'notIdeology': ['fascist']}, [
+            choice('Dissoudre la Légion', {'stability': 5, 'pp': -25}, 2, partyShift={'fascist': -8}),
+            choice('Composer avec les légionnaires', {'stability': -3, 'pp': 15}, partyShift={'fascist': 8}),
+        ], mtth=500, cooldown=900, once=False),
+    nat('ROM', 'rom_transylvania', 'Pressions sur la Transylvanie',
+        'Budapest réclame les territoires perdus en 1920 et cherche l’appui de Rome et de Berlin.',
+        {'tensionAbove': 65, 'war': False}, [
+            choice('Refuser tout arbitrage', {'tension': 3}, 2, spirit='war_enthusiasm', spiritDays=180, relations={'HUN': -25}),
+            choice('Accepter l’arbitrage', {'stability': -10, 'tension': -3}, relations={'GER': 15, 'ITA': 15}),
+        ]),
+    nat('CZE', 'cze_sudeten', 'La crise des Sudètes',
+        'Le parti des Allemands des Sudètes exige l’autonomie ; Berlin menace d’intervenir.',
+        {'tensionAbove': 40, 'yearMin': 1938}, [
+            choice('Mobiliser l’armée', {'manpower': 60000, 'tension': 4}, 2, spirit='war_enthusiasm', spiritDays=180, relations={'FRA': 10}),
+            choice('Négocier un statut d’autonomie', {'stability': -8, 'tension': -3, 'pp': 20}),
+        ], mtth=300),
+    nat('CZE', 'cze_order', 'Une commande étrangère',
+        'Plusieurs pays veulent acheter les canons et les chars de nos usines.',
+        {'war': False}, [
+            choice('Livrer la commande', {'pp': 30}, 1, special={'treasury': 300}),
+            choice('Réserver la production à l’armée', {'artillery': 250, 'rifles': 1500}, 2),
+        ], mtth=500, cooldown=720, once=False),
+    nat('CZE', 'cze_slovak', 'L’autonomie slovaque',
+        'À Bratislava, le parti populaire réclame un gouvernement slovaque.',
+        {'stabilityBelow': 65}, [
+            choice('Accorder l’autonomie', {'stability': 6, 'pp': -20}, 2),
+            choice('Défendre l’État unitaire', {'stability': -4, 'pp': 10}),
+        ]),
+    nat('TUR', 'tur_succession', 'La mort du fondateur',
+        'Le père de la république s’est éteint ; le pays entier porte son deuil.',
+        {'yearMin': 1938}, [
+            choice('Continuité du parti', {'stability': 5, 'pp': 25}, 2),
+            choice('Ouverture politique', {'stability': -3}, 1, partyShift={'democratic': 10}),
+        ], mtth=400),
+    nat('TUR', 'tur_straits_conference', 'La conférence des détroits',
+        'Les puissances acceptent de discuter du statut des détroits et de leur remilitarisation.',
+        {'yearMax': 1937}, [
+            choice('Remilitariser les détroits', {'pp': 20}, 2, special={'coastal': 3}),
+            choice('Garanties britanniques', {}, 1, relations={'GBR': 20, 'FRA': 10}),
+        ], mtth=200),
+    nat('TUR', 'tur_courted', 'Courtisée par les belligérants',
+        'Les deux camps multiplient les offres de crédits et d’armes pour attirer Ankara.',
+        {'tensionAbove': 70, 'war': False}, [
+            choice('Neutralité active', {'stability': 4}, 2, spirit='armed_neutrality'),
+            choice('Vendre le chrome au plus offrant', {'pp': 30}, 1, special={'treasury': 300}, relations={'GER': 15}),
+        ]),
+    nat('YUG', 'yug_croat_question', 'La question croate',
+        'Les députés croates boycottent le parlement et réclament une large autonomie.',
+        {'hasSpirit': 'ethnic_tensions'}, [
+            choice('Conclure un accord', {'pp': -40, 'stability': 6}, 2, removeSpirit='ethnic_tensions'),
+            choice('Maintenir le centralisme', {'stability': -3, 'pp': 10}),
+        ], mtth=500),
+    nat('YUG', 'yug_coup', 'Coup d’État à Belgrade',
+        'Des officiers aviateurs renversent le gouvernement qui venait de signer avec l’Axe.',
+        {'tensionAbove': 70, 'faction': True, 'notIdeology': ['democratic']}, [
+            choice('Le nouveau gouvernement rompt le pacte', {'stability': 5}, 2, spirit='war_enthusiasm', spiritDays=180,
+                   relations={'GER': -30, 'GBR': 20}),
+            choice('Rétablir l’ordre', {'stability': -6}, 1, relations={'GER': 10}),
+        ], mtth=400),
+    nat('YUG', 'yug_resistance', 'Maquis dans les montagnes',
+        'Des officiers et des militants refusent la défaite et gagnent les montagnes.',
+        {'war': True, 'losing': True}, [
+            choice('Armer les maquis', {'rifles': -1000}, 2, special={'militia': 3}),
+            choice('Attendre les alliés', {'stability': 2}),
+        ], mtth=150),
+    nat('HUN', 'hun_award', 'L’arbitrage de Vienne',
+        'Rome et Berlin proposent de redessiner les frontières de 1920 en faveur de Budapest.',
+        {'tensionAbove': 55}, [
+            choice('Accepter l’arbitrage', {'tension': 2}, 2, claims=['CZE'], relations={'GER': 20, 'ITA': 20}),
+            choice('Refuser l’ingérence', {'stability': 3}, 1, relations={'GBR': 10}),
+        ]),
+    nat('HUN', 'hun_transit', 'Les troupes de passage',
+        'Berlin demande le droit de faire transiter ses divisions par la Hongrie.',
+        {'tensionAbove': 65, 'war': False}, [
+            choice('Laisser passer les troupes', {'stability': -6}, 2, relations={'GER': 25}),
+            choice('Refuser le transit', {'stability': 4}, 1, relations={'GER': -20, 'GBR': 10}),
+        ]),
+    nat('HUN', 'hun_arrow', 'La montée des Croix fléchées',
+        'Le mouvement national-socialiste gagne les faubourgs ouvriers et les campagnes.',
+        {'stabilityBelow': 60, 'notIdeology': ['fascist']}, [
+            choice('Interdire le parti', {'stability': 4, 'pp': -25}, 2, partyShift={'fascist': -8}),
+            choice('Reprendre leurs idées', {'stability': -2}, 1, partyShift={'fascist': 8}),
+        ], mtth=500, cooldown=900, once=False),
+    nat('HOL', 'hol_neutrality', 'Neutralité en péril',
+        'Les attachés militaires rapportent des concentrations de troupes de l’autre côté de la frontière.',
+        {'tensionAbove': 60, 'war': False}, [
+            choice('Préparer les inondations', {'pp': -25}, 2, special={'forts': 3}),
+            choice('Faire confiance à la neutralité', {'stability': 4}),
+        ]),
+    nat('HOL', 'hol_indies', 'Le gouverneur des Indes',
+        'Batavia réclame des renforts face aux ambitions japonaises dans le Pacifique.',
+        {'tensionAbove': 50}, [
+            choice('Renforcer l’armée des Indes', {'manpower': -5000, 'xp': 10}, 2, special={'coastal': 2}),
+            choice('Développer les puits de pétrole', {'fuel': 6000}, 1),
+        ]),
+    nat('HOL', 'hol_february_strike', 'La grève de février',
+        'Dans les villes occupées, ouvriers et employés cessent le travail pour protester contre les persécutions.',
+        {'war': True, 'losing': True}, [
+            choice('Soutenir la grève depuis l’exil', {'support': 6, 'stability': 3}, 2),
+            choice('Appeler au calme', {'stability': 1}),
+        ], mtth=300),
+    nat('BEL', 'bel_independence', 'La politique d’indépendance',
+        'Le roi annonce que la Belgique ne sera plus liée par l’alliance militaire avec la France.',
+        {'yearMax': 1937}, [
+            choice('Neutralité armée', {'stability': 5}, 2, spirit='armed_neutrality', relations={'FRA': -15}),
+            choice('Rester liés à Paris', {'tension': 1}, 1, relations={'FRA': 20}),
+        ], mtth=300),
+    nat('BEL', 'bel_rex', 'La montée du rexisme',
+        'Un jeune tribun dénonce la corruption des partis et remplit les salles de meeting.',
+        {'stabilityBelow': 60, 'notIdeology': ['fascist']}, [
+            choice('Une élection partielle pour le battre', {'pp': -20, 'stability': 4}, 2, partyShift={'fascist': -6}),
+            choice('Ignorer le mouvement', {}, 1, partyShift={'fascist': 6}),
+        ], mtth=500),
+    nat('BEL', 'bel_king_army', 'Le roi et l’armée',
+        'Le roi refuse de quitter ses soldats alors que le gouvernement prépare son départ pour Londres.',
+        {'war': True, 'losing': True}, [
+            choice('Le roi reste avec l’armée', {'stability': 4, 'defense': .03}, 1),
+            choice('Le gouvernement poursuit la guerre en exil', {'support': 6}, 2),
+        ], mtth=100),
+    nat('SWE', 'swe_transit', 'Les trains de permissionnaires',
+        'Un belligérant demande le passage de ses troupes sur le réseau ferré suédois.',
+        {'tensionAbove': 60, 'war': False, 'neighbourWar': True}, [
+            choice('Autoriser le transit', {'stability': -5, 'pp': 20}, 1, relations={'GER': 20}),
+            choice('Refuser le passage', {'stability': 3}, 2, relations={'GER': -15}),
+        ]),
+    nat('SWE', 'swe_ore', 'Commandes de minerai',
+        'Les aciéries étrangères réclament le minerai de Kiruna en quantités record.',
+        {'tensionAbove': 45}, [
+            choice('Exporter sans restriction', {'pp': 40}, 1, special={'treasury': 300}, relations={'GER': 15, 'GBR': -10}),
+            choice('Limiter les exportations', {'stability': 2}, 2, relations={'GBR': 15}),
+        ], mtth=500),
+    nat('SWE', 'swe_finland_volunteers', 'Volontaires pour le voisin',
+        'Des milliers de Suédois veulent aller combattre aux côtés des Finlandais.',
+        {'neighbourWar': True, 'war': False}, [
+            choice('Laisser partir les volontaires', {'manpower': -8000, 'rifles': -1500}, 2, relations={'FIN': 30}),
+            choice('Neutralité stricte', {'stability': 2}),
+        ], mtth=400),
+    nat('FIN', 'fin_demands', 'Les exigences soviétiques',
+        'Moscou réclame l’isthme de Carélie et une base navale à l’entrée du golfe.',
+        {'tensionAbove': 50, 'war': False}, [
+            choice('Refuser', {'tension': 2}, 2, spirit='war_enthusiasm', spiritDays=180, relations={'SOV': -20}),
+            choice('Proposer un échange de territoires', {'stability': -8}, 1, relations={'SOV': 15}),
+        ], mtth=300),
+    nat('FIN', 'fin_marshal', 'Le maréchal reprend du service',
+        'Le vieux chef de 1918 accepte le commandement suprême.',
+        {'war': True}, [
+            choice('Lui confier toute l’armée', {'planning': .05, 'xp': 15}, 2),
+            choice('Garder un contrôle civil', {'stability': 5}),
+        ], mtth=60),
+    nat('FIN', 'fin_aid', 'Aide des pays nordiques',
+        'Fusils, avions et volontaires arrivent de Suède et de Norvège.',
+        {'war': True, 'warDays': 30}, [
+            choice('Accepter l’aide', {'manpower': 8000, 'rifles': 2000, 'fighters': 20}, 2),
+        ], mtth=120),
+    nat('CAN', 'can_conscription', 'La crise de la conscription',
+        'Le Québec rejette la conscription pour le service outre-mer ; le gouvernement est divisé.',
+        {'war': True, 'warDays': 365}, [
+            choice('Conscription pour l’outre-mer', {'manpower': 70000, 'stability': -8}, 1),
+            choice('Volontariat seulement', {'stability': 4, 'manpower': 15000}, 2),
+        ], mtth=300),
+    nat('CAN', 'can_halifax', 'Les convois de Halifax',
+        'Les cargos s’entassent dans le port en attendant leurs escortes.',
+        {'war': True}, [
+            choice('Priorité aux escorteurs', {'destroyers': 2}, 2),
+            choice('Priorité aux cargos', {'convoys': 30}, 1),
+        ], mtth=300),
+    nat('CAN', 'can_research', 'Recherche commune',
+        'Des scientifiques britanniques proposent de travailler dans les laboratoires d’Ottawa.',
+        {'tensionAbove': 50}, [
+            choice('Accueillir les équipes', {}, 2, spirit='refugee_scientists', spiritDays=365, relations={'GBR': 10}),
+            choice('Financer nos propres programmes', {'pp': 20}),
+        ]),
+    nat('AST', 'ast_singapore', 'La stratégie de Singapour',
+        'La défense du continent repose sur une base britannique lointaine et une flotte qui n’y est pas.',
+        {'tensionAbove': 55}, [
+            choice('Préparer la défense du continent', {'pp': -20}, 2, special={'coastal': 3, 'forts': 2}),
+            choice('Faire confiance à Londres', {'stability': 3}, 1, relations={'GBR': 15}),
+        ]),
+    nat('AST', 'ast_appeal', 'Appel à l’Amérique',
+        'Le Premier ministre déclare que l’Australie se tourne désormais vers les États-Unis.',
+        {'war': True, 'warDays': 180}, [
+            choice('Se tourner vers Washington', {'stability': 3}, 2, relations={'USA': 30, 'GBR': -5}),
+            choice('Fidélité impériale', {'stability': 2}, 1, relations={'GBR': 15}),
+        ], mtth=400),
+    nat('AST', 'ast_coastwatchers', 'Les guetteurs côtiers',
+        'Planteurs et missionnaires des îles signalent par radio les mouvements ennemis.',
+        {'war': True}, [
+            choice('Organiser le réseau', {'pp': -15, 'intel': .08}, 2),
+        ], mtth=300),
+    nat('RAJ', 'raj_independence', 'Agitation pour l’indépendance',
+        'Le Congrès exige l’indépendance immédiate en échange de sa participation à la guerre.',
+        {'war': True, 'warDays': 365}, [
+            choice('Promettre l’autonomie après la guerre', {'pp': -30, 'stability': 4}, 2, partyShift={'democratic': 6}),
+            choice('Arrêter les dirigeants', {'stability': -6, 'pp': 10}),
+        ], mtth=300),
+    nat('RAJ', 'raj_famine', 'Disette au Bengale',
+        'Les réquisitions et la perte des rizières birmanes provoquent une terrible disette.',
+        {'war': True, 'yearMin': 1942}, [
+            choice('Importer du grain', {'pp': -40, 'stability': 2}, 2),
+            choice('Priorité à l’armée', {'stability': -10, 'support': -6}),
+        ], mtth=400),
+    nat('RAJ', 'raj_recruits', 'Vague d’engagements',
+        'Les dépôts de recrutement du Pendjab débordent de volontaires.',
+        {'tensionAbove': 50}, [
+            choice('Former de nouvelles divisions', {'manpower': 80000, 'pp': -15}, 2),
+        ], mtth=400),
+    nat('BRA', 'bra_integralists', 'Tentative de coup intégraliste',
+        'Des militants en chemise verte attaquent le palais présidentiel.',
+        {'yearMax': 1938, 'notIdeology': ['fascist']}, [
+            choice('Réprimer le mouvement', {'stability': 4}, 2, partyShift={'fascist': -8}),
+            choice('Composer avec les insurgés', {'stability': -4}, 1, partyShift={'fascist': 6}),
+        ], mtth=500),
+    nat('BRA', 'bra_bases', 'Bases contre crédits',
+        'Washington propose de financer une aciérie en échange de bases aériennes dans le Nordeste.',
+        {'tensionAbove': 60}, [
+            choice('Accepter l’accord', {'civ': 1}, 2, relations={'USA': 30}),
+            choice('Rester neutre', {'stability': 3}, 1, relations={'GER': 10}),
+        ]),
+    nat('BRA', 'bra_rubber_soldiers', 'Les soldats du caoutchouc',
+        'Des milliers de travailleurs partent pour les plantations de l’Amazonie.',
+        {'war': True}, [
+            choice('Organiser le recrutement', {'resources': .05, 'stability': -2}, 2),
+            choice('Laisser faire le marché', {'pp': 10}),
+        ], mtth=300),
+]
+for e in NATIONAL_EVENTS:
+    e['conditions'] = {k: v for k, v in e['conditions'].items() if v is not None}
+catalog['events16'] += NATIONAL_EVENTS
+
+
+# --- National decisions of the secondary powers ---------------------------------------------
+def ndec(tag, did, name, cost, desc, requires=None, effect=None, spirit_id=None, days=None, cooldown=0, once=True,
+         special=None, remove=None):
+    entry = {'id': did, 'name': name, 'category': 'national', 'cost': cost, 'desc': desc,
+             'requires': dict(requires or {}, country=[tag]), 'effect': effect or {}, 'cooldown': cooldown, 'once': once,
+             'ai': True, 'c16': True}
+    if spirit_id:
+        entry['spirit'] = spirit_id
+        entry['days'] = days
+    if special:
+        entry['special'] = special
+    if remove:
+        entry['removeSpirit'] = remove
+    return entry
+
+
+NATIONAL_DECISIONS = [
+    ndec('POL', 'pol_secret_mobilization', 'Mobilisation secrète', 70, 'Rappeler discrètement les réservistes et fortifier la frontière ouest.',
+         {'tension': 60}, special={'manpower': .25, 'forts': 4, 'facing': ['GER']}),
+    ndec('POL', 'pol_gold_evacuation', 'Évacuer l’or de la Banque', 40, 'Mettre les réserves d’or à l’abri à l’étranger.',
+         {'war': True}, {'stability': 3}, special={'treasury': 500}),
+    ndec('SPA', 'spa_people_army', 'Armée populaire', 80, 'Fondre les milices dans des brigades régulières.',
+         {'war': True, 'spirit': 'popular_militias'}, spirit_id='people_army', days=None, remove=['popular_militias']),
+    ndec('SPA', 'spa_reconstruction', 'Reconstruction nationale', 90, 'Relever les villes, les ponts et les usines détruits.',
+         {'peace': True}, {'stability': 5}, special={'build': {'civ': 2}, 'infra': 4}),
+    ndec('ROM', 'rom_ploiesti_defense', 'Défense de Ploiești', 50, 'Batteries antiaériennes et ballons autour des raffineries.',
+         {'tension': 50}, special={'aa': 3}),
+    ndec('ROM', 'rom_royal_front', 'Front de la renaissance nationale', 60, 'Un parti unique au service de la couronne.',
+         {'ideology': ['authoritarian']}, {'stability': 6}, special={'party': 6, 'unrest': -10}),
+    ndec('CZE', 'cze_mobilize', 'Mobilisation générale', 70, 'Un million d’hommes rejoignent les casemates.',
+         {'tension': 45}, spirit_id='war_enthusiasm', days=180, special={'manpower': .3}),
+    ndec('CZE', 'cze_skoda_contracts', 'Contrats d’exportation', 40, 'Vendre canons et chars aux armées étrangères.',
+         {'peace': True}, cooldown=365, once=False, special={'treasury': 400}),
+    ndec('TUR', 'tur_etatism', 'Étatisme industriel', 90, 'L’État construit les usines que le capital privé ne bâtit pas.',
+         {}, special={'build': {'civ': 2, 'mil': 1}}),
+    ndec('TUR', 'tur_close_straits', 'Fermer les détroits', 50, 'Interdire le passage des navires de guerre et fortifier les rives.',
+         {'tension': 60}, special={'coastal': 4}),
+    ndec('YUG', 'yug_mountain_redoubt', 'Réduit des montagnes', 60, 'Replier l’armée dans les montagnes de Bosnie.',
+         {'war': True}, special={'militia': 3, 'forts': 4}),
+    ndec('YUG', 'yug_bor_mines', 'Mines de Bor', 50, 'Développer les mines de cuivre de l’Est.',
+         {}, spirit_id='prospecting', days=365),
+    ndec('HUN', 'hun_gyor_program', 'Programme de Győr', 90, 'Un milliard de pengős pour l’armement.',
+         {}, special={'build': {'mil': 2}}),
+    ndec('HUN', 'hun_honved_expansion', 'Agrandir le Honvéd', 60, 'Rétablir le service militaire et doubler les effectifs.',
+         {'tension': 50}, {'xp': 15}, special={'manpower': .2}),
+    ndec('HOL', 'hol_inundation', 'Inonder la ligne d’eau', 50, 'Ouvrir les écluses pour noyer les polders devant l’ennemi.',
+         {'war': True}, spirit_id='national_redoubt', days=365, special={'forts': 4, 'fortLevel': 2}),
+    ndec('HOL', 'hol_indies_defense', 'Défense des Indes', 60, 'Batteries côtières et aérodromes à Java et Sumatra.',
+         {'tension': 50}, special={'coastal': 4, 'aa': 2}),
+    ndec('BEL', 'bel_kw_line', 'Ligne de défense de la Dyle', 60, 'Un fossé antichar et des abris entre Anvers et Namur.',
+         {'tension': 45}, special={'forts': 5, 'facing': ['GER']}),
+    ndec('BEL', 'bel_congo_gold', 'L’or du Congo', 40, 'Les ressources de la colonie financent la guerre.',
+         {'war': True}, special={'treasury': 600}),
+    ndec('SWE', 'swe_rearmament', 'Réarmement suédois', 80, 'Deux arsenaux et un programme d’aviation.',
+         {'tension': 45}, special={'build': {'mil': 2}}),
+    ndec('SWE', 'swe_civil_defense', 'Défense civile', 40, 'Abris et batteries autour des grandes villes.',
+         {'tension': 55}, special={'aa': 4}),
+    ndec('FIN', 'fin_isthmus_line', 'Fortifier l’isthme', 60, 'Bunkers et pièges antichars face à Leningrad.',
+         {}, special={'forts': 4, 'facing': ['SOV']}),
+    ndec('FIN', 'fin_total_mobilization', 'Mobilisation totale', 50, 'Toute la nation se met au service de l’armée.',
+         {'war': True}, spirit_id='war_enthusiasm', days=120, special={'manpower': .3}),
+    ndec('CAN', 'can_air_training', 'Plan d’entraînement aérien', 70, 'Des écoles de pilotage pour tout le Commonwealth.',
+         {'tension': 40}, spirit_id='air_training_plan', days=None),
+    ndec('CAN', 'can_victory_bonds', 'Emprunts de la victoire', 40, 'Les citoyens financent l’effort de guerre.',
+         {'war': True}, {'support': 4}, cooldown=240, once=False, special={'treasury': 400}),
+    ndec('AST', 'ast_northern_defense', 'Défense du Nord', 60, 'Fortifier Darwin et les côtes du Queensland.',
+         {'tension': 55}, special={'coastal': 3, 'forts': 3}),
+    ndec('AST', 'ast_war_cabinet', 'Cabinet de guerre', 50, 'Toute l’économie au service de la défense du continent.',
+         {'war': True}, {'stability': 8}, spirit_id='women_workforce', days=365),
+    ndec('RAJ', 'raj_volunteer_drive', 'Campagne de recrutement', 40, 'Des bureaux de recrutement dans tous les districts.',
+         {}, cooldown=365, once=False, special={'manpower': .05}),
+    ndec('RAJ', 'raj_tata_expansion', 'Expansion de Jamshedpur', 80, 'Agrandir les aciéries et les arsenaux de l’Inde.',
+         {}, special={'build': {'civ': 1, 'mil': 2}}),
+    ndec('BRA', 'bra_volta_redonda', 'Aciérie nationale', 90, 'Construire la première grande aciérie du pays.',
+         {}, special={'build': {'civ': 2, 'mil': 1}}),
+    ndec('BRA', 'bra_expeditionary', 'Corps expéditionnaire', 50, 'Envoyer une division combattre outre-mer.',
+         {'war': True}, {'xp': 20}, special={'manpower': .05}),
+]
+catalog['decisions'] = [d for d in catalog['decisions'] if not d.get('c16')] + NATIONAL_DECISIONS
 
 # --- AI strategic plans ----------------------------------------------------------------------
 # Per country and target: a mode (attack, defend, hold, prepare), a weight on

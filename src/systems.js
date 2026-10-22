@@ -1632,28 +1632,44 @@ function installSystems16(Engine,H){
       const capCtrl=this.s.provinces[c.identity.capital]?.ctrl,limit=clamp(.65+(c.bonus.surrender||0),.4,.95);
       const share=total>0?.6*lost/total+.4*occupied.length/scored.length:0;
       if(!(share>limit&&this.war(id,capCtrl)||share>Math.min(.97,limit+.15)||!this.owned(id).length))continue;
-      if(id==='FRA'&&this.s.historical&&!c.identity.exile&&this.s.historyState&&!this.s.historyState.flags.france_armistice&&capCtrl==='GER'){
+      if(id==='FRA'&&this.s.historical&&!c.identity.exile&&this.s.historyState&&!this.s.historyState.flags.france_armistice&&(capCtrl==='GER'||this.mainOccupier16(id)==='GER')){
         const event=this.catalog.historicalEvents.find(e=>e.id==='h_french_armistice');
-        if(event&&this.owned('FRA').some(p=>distance(p,{x:2.35,y:48.86})>2300)){
-          if(!this.s.seenEvents.includes(event.id)){this.s.seenEvents.push(event.id);if(this.s.player==='FRA'){this.s.eventQueue.push({country:'FRA',event:clone(event)});this.historyRecord(event,'queued');}else this.historyChoice('FRA',event,0);}
+        if(event&&this.s.eventQueue.some(q=>q.event?.id===event.id))continue;
+        if(event&&!this.s.seenEvents.includes(event.id)&&this.owned('FRA').some(p=>distance(p,{x:2.35,y:48.86})>2300)){
+          // The armistice terms hand the capital over when it still holds out.
+          if(!this.war('FRA',capCtrl))this.s.provinces[c.identity.capital].ctrl='GER';
+          this.s.seenEvents.push(event.id);if(this.s.player==='FRA'){this.s.eventQueue.push({country:'FRA',event:clone(event)});this.historyRecord(event,'queued');}else this.historyChoice('FRA',event,0);
           continue;
         }
       }
       this.capitulate16(id);
     }
   };
-  Engine.prototype.capitulate16=function(id){
-    const c=this.nation(id),enemies=this.enemies(id),tally={};
+  Engine.prototype.mainOccupier16=function(id){
+    const tally={};
     for(const p of this.coreProvinces16(id)){const ctrl=this.s.provinces[p.id].ctrl;if(this.war(id,ctrl))tally[ctrl]=(tally[ctrl]||0)+p.vp;}
-    const occupier=Object.keys(tally).sort((a,b)=>tally[b]-tally[a]||a.localeCompare(b))[0]||enemies[0];
+    return Object.keys(tally).sort((a,b)=>tally[b]-tally[a]||a.localeCompare(b))[0]||this.enemies(id)[0];
+  };
+  Engine.prototype.capitulate16=function(id){
+    const c=this.nation(id),enemies=this.enemies(id),occupier=this.mainOccupier16(id);
+    const host=this.active().find(o=>o!==id&&this.allies(id,o)&&!this.nation(o).capitulated16&&enemies.some(e=>this.war(o,e))&&this.owned(o).length);
+    // A government that fights on in exile keeps the distant possessions the
+    // enemy cannot reach by land; the homeland and everything in contact with
+    // enemy-held land fall to the main occupier.
+    let reach=null;
+    if(host){
+      const s=this.s,homeland=this.homeland16(id);reach=new Set();const q=[];
+      for(const p of this.prov)if(s.provinces[p.id].ctrl===id&&(homeland.has(p.id)||p.neighbors.some(n=>this.war(id,s.provinces[n].ctrl)))){reach.add(p.id);q.push(p.id);}
+      for(let h=0;h<q.length;h++)for(const n of this.prov[q[h]].neighbors)if(!reach.has(n)&&s.provinces[n].ctrl===id){reach.add(n);q.push(n);}
+    }
     // The defeated country's own land goes to the main occupier; land it
     // occupied returns to its owner when that owner is on the winning side.
-    for(const st of this.s.provinces)if(st.ctrl===id){
+    this.s.provinces.forEach((st,pid)=>{
+      if(st.ctrl!==id||reach&&!reach.has(pid))return;
       const owner=st.own&&st.own!==id?this.nation(st.own):null;
       if(owner?.alive&&(this.war(st.own,id)||this.allies(st.own,occupier))){st.ctrl=st.own;st.resistance=0;}
       else{st.ctrl=occupier;st.compliance=30;st.resistance=10;}
-    }
-    const host=this.active().find(o=>o!==id&&this.allies(id,o)&&!this.nation(o).capitulated16&&enemies.some(e=>this.war(o,e))&&this.owned(o).length);
+    });
     c.capitulated16={day:this.s.day,enemies:[...enemies],occupier};
     if(host){
       c.exile16={host};
@@ -2338,7 +2354,8 @@ function installSystems16(Engine,H){
   };
   Engine.onDay16(function(){
     const list=this.catalog.events16;if(!list?.length)return;
-    const seen=this.s.events16??={},ids=this.active();
+    // The salt is drawn once per campaign so that each seed gets its own events.
+    const seen=this.s.events16??={},ids=this.active(),salt=this.s.salt16??=hash32(this.s.seed)&0xffff;
     for(let i=0;i<ids.length;i++){
       const id=ids[i],code=id.charCodeAt(0)*961+id.charCodeAt(1)*31+id.charCodeAt(2);
       if((this.s.day+code)%5)continue;
@@ -2346,7 +2363,7 @@ function installSystems16(Engine,H){
       for(let j=0;j<list.length;j++){
         const ev=list[j],key=id+':'+ev.id,last=seen[key];
         if(last!=null&&(ev.once||this.s.day-last<(ev.cooldown||365)))continue;
-        if(unit01(this.s.day*7919+j*104729+code*31337)>=5/(ev.mtth||365))continue;
+        if(unit01(this.s.day*7919+j*104729+code*31337+salt*65537)>=5/(ev.mtth||365))continue;
         if(!this.eventCondition16(id,ev.conditions))continue;
         seen[key]=this.s.day;this.fireEvent16(id,ev);break;
       }
@@ -2476,7 +2493,7 @@ function installSystems16(Engine,H){
     if(!options.length)return;
     // Countries keep their regime: the matching political path is preferred,
     // the others are avoided.
-    const score=f=>{const e=f.effect||{};return (e.civ||e.mil||e.production||e.construction||f.special?.build?3:0)+(e.research||e.slots||f.researchBonus?2:0)+(e.attack||e.defense||e.xp?1.5:0)+((e.tension||0)>0||f.claims?prof.aggression*2-.8:0)+(f.path?(f.path===c.ideology?2.5:-20):0)-f.days/200;};
+    const score=f=>{const e=f.effect||{};return (e.civ||e.mil||e.production||e.construction||f.special?.build?3:0)+(e.research||e.slots||f.researchBonus?2:0)+(e.attack||e.defense||e.xp?1.5:0)+((e.tension||0)>0||f.claims?prof.aggression*2-.8:0)+(f.national?2:0)+(f.path?(f.path===c.ideology?2.5:-20):0)-f.days/200;};
     options.sort((a,b)=>score(b)-score(a)||a.id.localeCompare(b.id));
     if(score(options[0])<-10)return;
     this.focusStart(id,options[0].id);
@@ -2652,7 +2669,7 @@ function installSystems16(Engine,H){
     const enemies=this.enemies(id).filter(e=>!this.nation(e)?.capitulated16);
     const targets=[...enemies.map(e=>({e,war:true}))];
     for(const p of plans)if(p.mode==='prepare'&&!this.war(id,p.target)&&this.nation(p.target)?.alive&&!this.allies(id,p.target)&&!targets.some(t=>t.e===p.target))targets.push({e:p.target,war:false});
-    const capital=this.prov[this.cap(id)];
+    const capital=this.prov[this.cap(id)],homeland=this.homeland16(id);
     const fronts=[];
     for(const {e,war} of targets){
       const plan=planOf(e,war);
@@ -2673,7 +2690,9 @@ function installSystems16(Engine,H){
         // Remote sectors (colonies) only get a garrison unless the enemy masses
         // troops there or a plan objective lies within reach.
         const aimed=(plan?.objectives||[]).some(o=>distance({x:o.lon,y:o.lat},centre)<1500);
-        fronts.push({e,war,plan,mode,border,centre,local,weight:far&&!aimed?weight*.5:weight,cap:far&&!aimed?Math.max(2,Math.ceil(border.length/6)):Infinity});
+        // A sector on home soil (an enemy breaking into the homeland) is defended first.
+        const home=war&&border.some(p=>homeland.has(p.id));
+        fronts.push({e,war,plan,mode,border,centre,local,home,weight:far&&!aimed?weight*.5:weight,cap:far&&!aimed&&!home?Math.max(2,Math.ceil(border.length/6)):Infinity});
       }
     }
     // Volunteer and expeditionary armies keep their own command.
@@ -2705,7 +2724,15 @@ function installSystems16(Engine,H){
     // A plan may cap the share of the army sent against a target (an
     // expeditionary corps on an ally's front).
     for(const f of fronts)if(f.plan?.share){const group=fronts.filter(g=>g.e===f.e),w=sum(group.map(g=>g.weight));f.cap=Math.min(f.cap,Math.max(1,Math.floor(units.length*f.plan.share*f.weight/w)));}
-    for(const f of fronts)f.quota=Math.min(f.cap,Math.max(1,Math.round(units.length*f.weight/totalWeight)));
+    // Sectors at war first receive enough divisions to face the enemy massed
+    // in front of them; the rest is shared by weight (preparation included).
+    const avgPower=sum(units.map(u=>this.unitPower16(u)))/units.length||1;
+    let left=units.length;
+    for(const f of fronts)f.quota=0;
+    for(const f of [...fronts.filter(f=>f.home),...fronts.filter(f=>!f.home)])if(f.war&&f.mode!=='prepare'){
+      const need=Math.min(f.cap,f.border.length*3,Math.ceil(f.local/avgPower*(f.home?1.5:.8)));f.quota=Math.min(need,left);left-=f.quota;
+    }
+    for(const f of fronts)f.quota=Math.min(f.cap,Math.max(1,f.quota+Math.round(left*f.weight/totalWeight)));
     // Divisions freed by capped sectors go to the main uncapped sector.
     const spare=units.length-sum(fronts.map(f=>f.quota));if(spare>0)(fronts.find(f=>f.cap===Infinity)||fronts[0]).quota+=spare;
     for(const f of fronts){
@@ -2938,7 +2965,9 @@ function installSystems16(Engine,H){
       const pick=list.map(a=>this.catalog.advisors.find(x=>x.id===a)).find(a=>a&&!hired.includes(a.id)&&(!a.ideology||a.ideology.includes(c.ideology)));
       if(pick&&c.pp>=pick.cost+60){this.hireAdvisor16(id,pick.id);c.pp-=pick.cost;return;}
     }
-    for(const did of AI_DECISIONS){
+    // National decisions flagged for the AI come first, then the common list.
+    this.aiDecisionList16??=[...this.catalog.decisions.filter(d=>d.ai&&!AI_DECISIONS.includes(d.id)).map(d=>d.id),...AI_DECISIONS];
+    for(const did of this.aiDecisionList16){
       const d=this.catalog.decisions.find(x=>x.id===did);if(!d||c.pp<d.cost+50)continue;
       if(did==='evacuate_industry'&&(c.stats.coreShare??1)>.85)continue;
       if(did==='mobilize_reserves'&&c.manpower>this.units(id).length*5000)continue;
