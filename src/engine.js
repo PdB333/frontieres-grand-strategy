@@ -1,4 +1,5 @@
-/* Frontieres 1.3.1 - original deterministic strategy engine, MIT.
+/* Frontieres - original deterministic strategy engine (1.5 rules), MIT.
+ * Version 1.6 adds its systems in systems.js, installed at the end of this function.
  * Daily simulation. No DOM, network, eval, wall-clock RNG or external dependencies.
  * This function is serialized into a dedicated Worker by the standalone build.
  */
@@ -1355,8 +1356,8 @@ function createEngineClass() {
       const out={id:String(raw.id||'custom').slice(0,80),name:String(raw.name||'Mod personnalis\u00e9').slice(0,100),version:1,balance:{production:1,research:1,combat:1},events:[]};
       if(raw.components){assert(Array.isArray(raw.components)&&raw.components.length<=24,'Trop de composants.');out.components=raw.components.map(x=>String(x).slice(0,100));}
       for(const k in out.balance)if(raw.balance?.[k]!==undefined){assert(finite(raw.balance[k],.25,4),'Multiplicateur invalide : '+k);out.balance[k]=raw.balance[k];}
-      const effects=new Set(['pp','stability','support','manpower','xp','civ','mil','dock','slots','tension','fuel',...Object.keys(catalog.equipment),'attack','defense','production','construction','research','supply','planning','speed','armor','piercing','air','bombing','navy','raiding','intel']);
-      const checkEffect=e=>{assert(e&&typeof e==='object'&&!Array.isArray(e),'Effet invalide.');for(const [k,v] of Object.entries(e)){assert(effects.has(k)&&finite(v,-1e6,1e6),'Effet interdit ou invalide : '+k);if(['attack','defense','production','construction','research','supply','planning','speed','armor','piercing','air','bombing','navy','raiding','intel'].includes(k))assert(v>=-.5&&v<=2,'Bonus de mod compris entre -0.5 et 2 requis.');if(['civ','mil','dock','slots'].includes(k))assert(Number.isInteger(v)&&v>=0&&v<=20,'B\u00e2timent ou emplacement invalide.');}};
+      const effects=new Set(['pp','stability','support','manpower','xp','civ','mil','dock','slots','tension','fuel',...Object.keys(catalog.equipment),'attack','defense','production','construction','research','supply','planning','speed','armor','piercing','air','bombing','navy','raiding','intel','buildingSlots','recruitment','ppGain','consumer','organization','airDefense','invasion','paradrop','reliability','attrition','breakthrough','entrench','mines','convoy','naval','casualties','resources','stabilityGrowth','supportGrowth','surrender']);
+      const checkEffect=e=>{assert(e&&typeof e==='object'&&!Array.isArray(e),'Effet invalide.');for(const [k,v] of Object.entries(e)){assert(effects.has(k)&&finite(v,-1e6,1e6),'Effet interdit ou invalide : '+k);if(['attack','defense','production','construction','research','supply','planning','speed','armor','piercing','air','bombing','navy','raiding','intel','buildingSlots','recruitment','ppGain','consumer','organization','airDefense','invasion','paradrop','reliability','attrition','breakthrough','entrench','mines','convoy','naval','casualties','resources','stabilityGrowth','supportGrowth','surrender'].includes(k))assert(v>=-.5&&v<=2,'Bonus de mod compris entre -0.5 et 2 requis.');if(['civ','mil','dock','slots'].includes(k))assert(Number.isInteger(v)&&v>=0&&v<=20,'B\u00e2timent ou emplacement invalide.');}};
       const ids=new Set(world.countries.map(c=>c.id));
       assert(!raw.events||Array.isArray(raw.events)&&raw.events.length<=200,'Maximum : 200 \u00e9v\u00e9nements.');
       const eventIds=new Set(catalog.historicalEvents.map(e=>e.id));

@@ -2,7 +2,7 @@
 
 **A single-player grand strategy game for the browser — build a nation, shape history, and command a world at war.**
 
-**Current playable version:** `1.5` &nbsp;|&nbsp; **Project status:** Alpha / actively developed &nbsp;|&nbsp; **Interface:** French &nbsp;|&nbsp; **Documentation:** English &nbsp;|&nbsp; **License:** MIT (original code)
+**Current playable version:** `1.6` &nbsp;|&nbsp; **Project status:** Alpha / actively developed &nbsp;|&nbsp; **Interface:** French &nbsp;|&nbsp; **Documentation:** English &nbsp;|&nbsp; **License:** MIT (original code)
 
 [Play / download `index.html`](./index.html) · [Source code](./src/) · [Game data](./data/) · [Roadmap](#development-roadmap) · [Modding](#modding-and-custom-scenarios) · [Report an issue](https://github.com/PdB333/frontieres-grand-strategy/issues)
 
@@ -16,7 +16,7 @@ Start in **1936** and navigate the crises leading to World War II, or select the
 
 The goal is **not** to recreate another game's code or assets. Frontières is its own lightweight strategy project with its own rules, interface, data formats, and roadmap. The historical world is an *approximation for gameplay*, not an authoritative historical atlas.
 
-> **Important:** This is a **development build, not a finished commercial-quality simulation**. Many systems are playable but deliberately abstracted; the AI, aerial and naval warfare, historical borders, and balance still need substantial work. The UI is currently in French. Multiplayer is **not planned**.
+> **Important:** This is a **development build, not a finished commercial-quality simulation**. Many systems are playable but deliberately abstracted; the AI, historical borders and balance still need work, and the content volume (map detail, focus trees, events) is far smaller than in large commercial games. The UI is currently in French. Multiplayer is **not planned**.
 
 ## Quick start
 
@@ -48,24 +48,38 @@ The core simulation does **not** require a connection to a game server. Optional
 
 ## Game at a glance
 
-| Category | Included in version 1.5 |
+| Category | Included in version 1.6 |
 | --- | --- |
-| World map | **74** starting countries and **3,396** gameplay provinces |
+| World map | **81** starting countries, **3,396** gameplay provinces grouped into **717** states, **8** terrain types, **12** straits |
 | Starting scenarios | **1936** and **1939** historical bookmarks |
-| Campaign engine | Pausable, day-by-day simulation with 5 speed settings and AI-controlled countries |
-| Historical content | **71** historical event/government entries and documentary references |
-| National focus trees | **8** country-specific trees plus a generic tree; **22** focuses per tree |
-| Technology | **60** technologies across 7 research categories |
-| Production | **13** equipment types and **10** construction categories |
-| Ground forces | Division design, recruitment, armies, officers, front plans, combat, supply, and encirclements |
-| Air and sea | Air-zone missions, airbases, fleets, naval missions, convoys, ports, and invasions (abstracted) |
-| State management | Political decisions, institutions, public finances, industry, logistics, and diplomacy |
+| Campaign engine | Pausable, day-by-day simulation with 5 speed settings, hourly battles and AI-controlled countries |
+| Historical content | **71** historical event/government entries, **37** conditional events, **44** releasable nations |
+| National focus trees | **8** country-specific trees plus a generic tree; **64–69** focuses per tree with exclusive regime paths |
+| Technology | **150** technologies across 10 research categories, including exclusive land, naval and air doctrines |
+| Production | **24** equipment types, **73** equipment models, tank/aircraft/ship designers, **13** building types |
+| Ground forces | **20** battalion and **15** support types, battle plans, reserves, combat width, weather and attrition |
+| Air and sea | Air superiority, interception, close support, strategic and naval bombing, paradrops, carriers; patrols, strike forces, raiding, mines, sea control and naval invasions |
+| State management | **17** laws (economy, conscription, trade), **33** advisors, **48** national spirits, **46** decisions, budgets and elections |
 | Intelligence | Relations, espionage and intelligence-based information (abstracted) |
 | Modding | Declarative JSON scenarios, countries, territory changes, new provinces, technologies, focuses, and events |
 | Saves | Browser storage plus JSON export/import, with compatibility checks |
 | Display | Canvas-based interactive map, overlays, minimap, accessibility and performance controls |
 | Online services | **None required for core gameplay** |
 | Multiplayer | **Not planned** |
+
+### What's new in 1.6 — the strategic warfare update
+
+- **States and resources:** provinces are grouped into states with shared building slots and categories; six strategic resources (steel, oil, rubber, aluminium, tungsten, chromium), synthetic refineries and trade laws.
+- **Terrain and weather:** hills, marshes and jungles; straits; seasonal mud, snow, frost and storms; attrition.
+- **Divisions and equipment:** 20 battalions and 15 support companies; equipment generations, tank/aircraft/ship designers and modernisation.
+- **Land war:** battles last several days and are resolved hour by hour, with combat width, reserves and reinforcements; battle plans with front lines, offensive arrows and fallback lines.
+- **Navy and air:** fleet missions (patrol, strike, escort, raid, mines, sweep), detection and sea control, naval invasions; air superiority, interception, close air support, strategic, logistics and naval bombing, paradrops and carriers.
+- **Peace and diplomacy:** capitulation with governments in exile, peace conferences with state-by-state demands, war goals, volunteers and expeditionary forces, subject autonomy, releasable nations and ideological civil wars.
+- **Politics:** extended laws, advisors and chiefs of staff, national spirits, decisions, regime paths in the focus trees and conditional events.
+- **AI:** country profiles, front sectors sized by the enemy facing them, doctrine-driven production and research, air and naval missions, naval invasions, advisors and decisions.
+- **Scale:** Chinese regional powers and Iceland as new playable countries; indexed war lookups and a faster supply flood (about 40 % less time per simulated day in a 1939 world war).
+
+All rules, names and texts are original to Frontières; no file, text, icon or map data comes from another game.
 
 ### Recommended first campaign
 
@@ -81,7 +95,9 @@ The core simulation does **not** require a connection to a game server. Optional
 
 ### 1. Countries, history, and the map
 
-- **74 starting countries** with names, ideologies, industries, military forces, and initial leadership information.
+- **81 starting countries** with names, ideologies, industries, military forces, and initial leadership information, including the Chinese regional powers of 1936 (Yan'an communists, Shanxi, Guangxi, Yunnan, the Muslim north-west, Xinjiang) and Iceland.
+- **717 states** derived from the provinces: shared building slots, categories (from wasteland to megalopolis) and core territory.
+- **Eight terrain types** (plains, forest, hills, mountains, marsh, jungle, desert, urban), **12 straits** crossable under fire, and seasonal weather (mud, snow, frost, sea storms).
 - **Two historical starts:** January 1936 and late August 1939, with scenario-specific geopolitical adjustments.
 - **3,396 base provinces** with terrain, owners, infrastructure, industry, resources, supply connections, and other gameplay properties.
 - Interactive, zoomable Canvas map with selectable provinces, countries, units, and army overlays.
@@ -99,18 +115,20 @@ The core simulation does **not** require a connection to a game server. Optional
 - Political cooldowns and consequences for unpopular or disruptive decisions.
 - Civil unrest, tensions, strikes, and interactions with the national economy.
 - Economic organization and wartime laws that change the country's available capacity.
-- National focus trees for **France, Germany, the United Kingdom, the Soviet Union, the United States, Italy, Japan, and China**, plus a generic tree for other countries.
-- Focus prerequisites, branching decisions, bonuses, and country-specific strategic directions.
+- National focus trees for **France, Germany, the United Kingdom, the Soviet Union, the United States, Italy, Japan, and China**, plus a generic tree for other countries: 64 to 69 focuses each, with political, economic, military research and foreign policy branches.
+- Mutually exclusive **regime paths** (democratic, fascist, communist, authoritarian) that can change the government, grant national spirits, join factions, guarantee neighbours or justify war goals; OR prerequisites and conditions.
+- **Laws** for the economy (6), conscription (7) and trade (4); **33 advisors** and chiefs of staff in six offices; **48 national spirits**; **46 decisions** in five categories.
+- **37 conditional events** (strikes, scandals, discoveries, mutinies, partisans, codebreaking…) with a mean time to happen, answered by the AI as well.
 
 These political systems are **simulation abstractions** rather than historically measured election results or an exhaustive representation of individual states.
 
 ### 3. Economy, budgets, and industry
 
-- Civilian factories, military factories, dockyards, and construction queues.
-- **Ten construction categories:** civilian factories, military factories, dockyards, infrastructure, railways, logistics hubs, forts, ports, airbases, and radar stations.
-- **Thirteen equipment categories:** rifles, support equipment, artillery, trucks, tanks, fighters, bombers, destroyers, submarines, convoys, cruisers, battleships, and aircraft carriers.
+- Civilian factories, military factories, dockyards, and construction queues; factories, dockyards and refineries share each state's building slots.
+- **Thirteen building types:** civilian and military factories, dockyards, synthetic refineries, infrastructure, railways, logistics hubs, forts, coastal forts, anti-aircraft defences, ports, airbases, and radar stations.
+- **24 equipment types** (from rifles and anti-tank guns to heavy tanks, naval bombers and carriers) with **73 models** across generations; tank, aircraft and ship **designers** with **61 modules**; production lines can modernise existing stocks.
 - Production-line allocation, efficiency, equipment stockpiles, resource shortages, and industrial bottlenecks.
-- Economic resources including **steel, oil, and rubber**, plus fuel and logistics constraints.
+- **Six strategic resources** — steel, oil, rubber, aluminium, tungsten and chromium — with trade laws deciding how much is exported.
 - National budget controls: taxation, welfare/services, spending, treasury, borrowing, debt limits, interest, inflation, and fiscal balance.
 - Financial crises with **arrears**, which can affect national production and social stability.
 - Rationing, national economic models, investment choices, and the political costs of difficult decisions.
@@ -120,26 +138,30 @@ These political systems are **simulation abstractions** rather than historically
 
 ### 4. Research and national development
 
-The base game includes **60 technologies**:
+The base game includes **150 technologies**:
 
 | Research field | Technologies |
 | --- | ---: |
-| Industry | 11 |
-| Infantry | 9 |
-| Armor | 6 |
-| Aircraft | 7 |
-| Navy | 11 |
-| Logistics | 8 |
-| Doctrine | 8 |
-| **Total** | **60** |
+| Industry | 16 |
+| Infantry | 18 |
+| Armor | 15 |
+| Aircraft | 17 |
+| Navy | 13 |
+| Logistics | 11 |
+| Land doctrines | 25 |
+| Naval doctrines | 12 |
+| Air doctrines | 10 |
+| Electronics | 13 |
+| **Total** | **150** |
 
-Technology prerequisites, research time, national bonuses, and production improvements encourage long-term planning. Focus trees and modded technologies can add different paths through a campaign.
+Land doctrines offer four exclusive paths (motorised manoeuvre, battle of materiel, methodical battle, nation in arms); naval and air doctrines three each. Technologies unlock battalions, support companies, equipment models, designer modules and buildings. Focuses and events grant research bonuses for a domain.
 
 ### 5. Armies, divisions, and ground warfare
 
 - Form armies, assign available officers and commanders, and group divisions.
-- Create or modify division templates with infantry, motorized forces, artillery, tanks, and support companies.
-- Support options include engineers, logistics, reconnaissance, anti-tank teams, and field hospitals.
+- Create or modify division templates from **20 battalion types** (infantry, mountain, marines, paratroopers, cavalry, motorised, mechanised, light/medium/heavy armour, artillery, anti-tank, anti-air…) and **15 support companies**.
+- Battles last several days and are resolved **hour by hour**: combat width depends on terrain and attack directions, reserves enter the line, and disorganised divisions withdraw.
+- **Battle plans:** draw a front line, offensive arrows and a fallback line; planning builds up and decays while attacking.
 - Division statistics cover manpower, equipment, soft/hard attack, defense, breakthrough, armor, piercing, organization, speed, combat width, and more.
 - Recruit and reequip divisions; shortages can reduce combat effectiveness.
 - Give movement orders manually or configure army-level **fronts, postures, objectives, and offensive plans**.
@@ -148,7 +170,7 @@ Technology prerequisites, research time, national bonuses, and production improv
 - Detect encircled divisions; cut-off forces can suffer attrition and lose access to routine reinforcement.
 - Battle reports, casualties, territorial changes, and a dedicated military/operations interface.
 
-The AI can operate fronts and react to wars, but it is **heuristic**. Version 1.6 aims to make it much better at preparing, coordinating, and sustaining strategic campaigns.
+The AI splits each border into sectors, sizes an army for each according to the enemy facing it, attacks when the odds allow and probes quiet fronts every few months. It remains **heuristic**.
 
 ### 6. Logistics and supply
 
@@ -156,35 +178,37 @@ The AI can operate fronts and react to wars, but it is **heuristic**. Version 1.
 - Sea connections and convoy availability matter for overseas supply.
 - Poor supply affects movement, organization, attack effectiveness, and reinforcement.
 - Isolation and encirclement can make an otherwise strong army collapse.
-- Version 1.5 optimizes repeated supply calculations and minimap redraws without deliberately changing the underlying combat rules.
+- Supply flows from capitals and ports (weighted by convoys and blockades) through accessible territory; version 1.6 settles each province once at its best value, which keeps large wars fast.
+- Weather and terrain cause attrition; winter gear and doctrines reduce it.
 
 The supply network is a gameplay model, **not** a full historical railroad or transportation simulation.
 
 ### 7. Air operations
 
-- Produce fighters and bombers and organize air wings.
-- Select operating regions, airbases, and available mission types.
-- Air activity can affect battlefield support, air control, and infrastructure damage.
-- Range, weather, radar, base conditions, strength, and aircraft losses influence operations.
+- Produce fighters, close-support aircraft, tactical, strategic and naval bombers and transport planes, and organise air wings.
+- Missions per aircraft type: air superiority, interception, close air support, strategic bombing, logistics strikes, naval strikes, port strikes, air supply and paradrops.
+- Air control per zone, anti-aircraft defences and aircraft range; air superiority penalises the enemy's land combat.
 
-Air warfare is **region-based and simplified**. Detailed interception, air logistics, detection, and strategic bombing balance are roadmap goals.
+Air warfare remains **zone-based**: no individual aircraft or dogfights.
 
 ### 8. Navies and overseas warfare
 
-- Build fleets using destroyers, submarines, cruisers, battleships, and aircraft carriers.
-- Manage fleets, ports, sea zones, missions, and convoy-related operations.
-- Use naval presence to escort routes, raid shipping, and support or interfere with overseas transport.
-- Carry out amphibious or overseas operations subject to game rules and infrastructure.
-- Track naval equipment, losses, resources, and operational limitations.
+- Build fleets using destroyers, submarines, cruisers, battleships, and aircraft carriers, from designed ship models.
+- Fleet missions: patrol, strike force, convoy escort, raiding, minelaying, minesweeping and invasion support; detection and **sea control** per zone.
+- **Naval invasions** need sea control and convoys; landings fight at a penalty, marines reduce it.
+- Carriers project naval aircraft; mines and submarines threaten convoys and supply.
 
-Naval battles currently use **aggregated combat mechanics**, rather than a ship-by-ship tactical simulation.
+Naval battles still use **aggregated combat mechanics**, rather than a ship-by-ship tactical simulation.
 
 ### 9. Diplomacy, international politics, and intelligence
 
 - Improve or worsen relations with other nations.
 - Negotiate military access and form or join diplomatic groupings.
 - Manage guarantees, non-aggression arrangements, and war justifications.
-- Declare war and negotiate forms of peace or armistice when conditions are met.
+- Declare war with a **war goal** (conquest, vassalisation, border rectification); send **volunteers** or **expeditionary forces**.
+- **Capitulation** depends on lost victory points and land; a defeated country can continue the war in **exile** with an ally.
+- **Peace conferences** distribute states, puppets and liberated nations between the winners according to their contribution.
+- Subjects gain or lose **autonomy**; **44 releasable nations**; ideological **civil wars** when a rival party dominates an unstable country.
 - Trade strategic resources, support partners, and organize lend-lease-style assistance.
 - Use intelligence and espionage mechanics to gather information and influence decisions.
 
@@ -239,7 +263,7 @@ There is also an on-screen **Order** action for touch input where right-click is
 
 A central goal of Frontières is to support **original alternate-history worlds** through structured **JSON mods**. The current format is **declarative**: it specifies data and supported actions rather than loading arbitrary JavaScript supplied by a mod.
 
-### Mod features available in 1.5
+### Mod features available in 1.6
 
 | Capability | Status |
 | --- | --- |
@@ -310,7 +334,7 @@ The repository includes [`data/map-demo.json`](./data/map-demo.json), an example
 
 ```text
 frontieres-grand-strategy/
-├── index.html             # Current self-contained playable build (v1.5)
+├── index.html             # Current self-contained playable build (v1.6)
 ├── README.md              # Project overview and roadmap
 ├── LICENSE                # MIT license for original code
 ├── THIRD_PARTY.md         # Geographic data and image credits
@@ -318,12 +342,15 @@ frontieres-grand-strategy/
 ├── tools/
 │   ├── build.mjs          # Rebuilds index.html from src/ and data/
 │   ├── smoke.mjs          # Headless engine smoke test (Node.js)
-│   └── browser-smoke.mjs  # Starts a campaign in headless Chromium (Playwright)
+│   ├── browser-smoke.mjs  # Starts a campaign in headless Chromium (Playwright)
+│   └── data/              # Idempotent data passes for 1.6 (world, catalogue, content)
 ├── src/
 │   ├── shell.html         # Page template; build.mjs inlines the files below
-│   ├── engine.js          # Simulation engine source
+│   ├── engine.js          # Simulation engine source (1.5 rules)
+│   ├── systems.js         # 1.6 systems layered on the engine
 │   ├── worker.js          # Background simulation worker
 │   ├── ui.js              # Interface and user actions
+│   ├── ui16.js            # 1.6 panels, map modes and dialogs
 │   └── styles.css         # Interface styles
 └── data/
     ├── world.json         # World/province data
@@ -362,6 +389,8 @@ node tools/browser-smoke.mjs
 
 GitHub Actions runs all of these checks on every push and pull request. Historical test fixtures and development ZIP tools are not yet published.
 
+The 1.6 data is produced by three idempotent scripts, run in this order after editing them: `python3 tools/data/world_1_6.py` (terrain, straits, resources, new countries), `python3 tools/data/catalog_1_6.py` (buildings, laws, equipment, battalions, advisors, spirits, decisions, AI profiles) and `python3 tools/data/content_1_6.py` (focus branches, doctrines, events).
+
 ## Development roadmap
 
 Features listed as **planned** are goals, **not** claims about what the current build already does. Timing and scope may change as testing identifies constraints.
@@ -376,25 +405,23 @@ Features listed as **planned** are goals, **not** claims about what the current 
 | `1.2 / 1.2.1` | Armies, battle planning, division templates, encirclement and military corrections | Completed in development |
 | `1.3 / 1.3.1` | Domestic politics, budget, taxation, debt, arrears, crises and elections | Completed in development |
 | `1.4 / 1.4.1` | JSON mod workshop, custom countries, conditional events, map extensions and validation | Completed in development |
-| **`1.5`** | Supply-path and map-rendering optimizations, graphics settings, diagnostic tools | **Current public snapshot** |
+| `1.5` | Supply-path and map-rendering optimizations, graphics settings, diagnostic tools | Completed in development |
+| **`1.6`** | States, resources, weather, battalions and designers, hourly battles and plans, air and naval war, peace conferences, politics, AI, content | **Current public snapshot** |
 
 These are **project development milestones**, not a claim that each version is separately tagged as a GitHub release.
 
-### Next: v1.6 — Strategic Warfare Update
+### v1.6 — Strategic Warfare Update (current)
 
-**Target:** Make multi-year solo campaigns feel coherent, demanding, and distinct between major powers.
-
-- [ ] **Strategic AI:** war preparation, realistic prioritization, front management, reserves, withdrawals, coordinated attacks, and fewer self-destructive offensives.
-- [ ] **Operational planning:** multi-army battle plans with preparation stages, territorial objectives, breakthrough exploitation, and defensive fallback plans.
-- [ ] **Ground balance:** improve planning bonuses, logistics penalties, entrenchment, attrition, encirclements, and equipment consumption.
-- [ ] **Air warfare:** clearer regional air superiority, missions, interception, aircraft range, airfield capacity, ground support, and strategic bombing.
-- [ ] **Naval warfare:** task-force behavior, convoy escort/raiding, submarine operations, blockade effects, carrier roles, and amphibious support.
-- [ ] **Logistics and wartime industry:** make fuel, infrastructure, convoy losses, and equipment deficits more consequential.
-- [ ] **National campaigns:** richer historical and alternative decisions for Germany, France, the United Kingdom, the USSR, the USA, and Japan.
-- [ ] **Military UX:** clearer battle reports, frontline alerts, losses, supply forecasts, and operational objectives.
-- [ ] **Balance scenarios:** automated and hands-on playthroughs for European and Pacific theatres, 1936–1945.
-
-**Acceptance goal:** The AI should meaningfully wage war on multiple fronts and sustain a campaign. Presence of a UI button alone will not count as feature completion.
+- [x] **States and economy:** state building slots, six strategic resources, refineries, trade laws, extended economy and conscription laws.
+- [x] **Terrain and weather:** hills, marshes, jungles, straits, mud, snow, frost, storms and attrition.
+- [x] **Divisions and equipment:** battalions and support companies, equipment generations, designers and modernisation.
+- [x] **Operational planning:** multi-day hourly battles with reserves; front lines, offensive arrows and fallback lines.
+- [x] **Air warfare:** air superiority, interception, close support, strategic, logistics and naval bombing, paradrops, carriers.
+- [x] **Naval warfare:** fleet missions, detection, sea control, mines, raiding and naval invasions.
+- [x] **Peace and diplomacy:** capitulation and exile, peace conferences, war goals, volunteers, expeditionary forces, autonomy, releasables, civil wars.
+- [x] **Politics and content:** advisors, national spirits, decisions, larger focus trees with regime paths, doctrines, electronics, conditional events.
+- [x] **Strategic AI:** front sectors, doctrine-driven production and research, air and naval missions, invasions, decisions.
+- [x] **Scale:** new starting countries and a faster simulation.
 
 ### Next: v1.6.1 — Stability and Campaign Validation
 
@@ -432,16 +459,17 @@ A TNO-scale alternate-history experience is a **future inspiration, not current 
 
 Please read this section before reporting a feature as broken:
 
-1. **Historical accuracy is approximate.** Modern low-resolution base geography is adapted for gameplay; not all country borders, names, military deployments, or leaders are exhaustively researched.
-2. **The AI is heuristic.** Strategic preparation and combined-arms coordination need substantial improvement.
-3. **Air and naval operations are abstracted.** They affect the campaign but are not deep tactical simulations.
+1. **Historical accuracy is approximate.** Modern low-resolution base geography is adapted for gameplay; not all country borders, names, military deployments, or leaders are exhaustively researched. The map has 3,396 provinces, far fewer than large commercial games, so one province can stand for a whole region.
+2. **The AI is heuristic.** It manages fronts, production, research, air, navy and invasions, but long campaigns can still diverge strongly from history (a civil war can last seven months or three years depending on the seed).
+3. **Air and naval operations are zone-based.** They affect the campaign but are not ship-by-ship or plane-by-plane simulations.
 4. **The economy is game-scaled.** GDP, budgets, votes, demographics, and industrial outputs are not real-world historical datasets.
-5. **Modding extends the current world.** It cannot yet replace all 3,396 base provinces with a wholly independent map.
-6. **Save compatibility is conditional.** Export backups and preserve the original mod data used for each campaign.
-7. **The UI is currently French.** This README is English; full UI localization is a future goal.
-8. **Browser support needs broader testing.** Development testing has focused on Chromium. The original automated environment did not certify real `file://` behavior or persistence across normal user browser sessions.
-9. **Some portraits require Internet access.** Portrait files are generally referenced rather than bundled. Third-party licensing varies.
-10. **The GitHub source snapshot is not yet a full developer SDK.** The build script and CI are available (see [Building and testing](#building-and-testing)), but historical test fixtures are not published yet.
+5. **Modding extends the current world.** It cannot yet replace all 3,396 base provinces with a wholly independent map. Mod effects accept the 1.6 bonus keys (organization, breakthrough, entrench, attrition, surrender…), but mods cannot yet define new battalions, laws, advisors or decisions.
+6. **Content volume is limited.** Focus trees, events and decisions are original and playable, but far less numerous than in commercial games.
+7. **Save compatibility is conditional.** 1.5 saves are migrated on load (new systems start from defaults). Export backups and preserve the original mod data used for each campaign.
+8. **The UI is currently French.** This README is English; full UI localization is a future goal.
+9. **Browser support needs broader testing.** Development testing has focused on Chromium. The original automated environment did not certify real `file://` behavior or persistence across normal user browser sessions.
+10. **Some portraits require Internet access.** Portrait files are generally referenced rather than bundled. Third-party licensing varies.
+11. **The GitHub source snapshot is not yet a full developer SDK.** The build script and CI are available (see [Building and testing](#building-and-testing)), but historical test fixtures are not published yet.
 
 ## Contributing and bug reports
 

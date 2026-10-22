@@ -660,4 +660,19 @@ showEvent=function(){
   const e=S.pending?.event;if(!e?.dyn16)return showEvent15();
   modal(`<div class="row between"><div class="eyebrow">DÉPÊCHE / ${dateText(S.day)}</div>${tag('DÉCISION REQUISE','gold')}</div><div class="event-title">${esc(e.title)}</div><div class="event-paper"><p>${esc(e.text)}</p></div><div class="event-choices">${e.choices.map((choice,index)=>btn(`<span>${esc(choice.text)}<small style="display:block;margin-top:5px">${esc([effectText16(choice.effect||{}),...extrasText16(choice)].filter(Boolean).join(' / '))}</small></span>${icon('arrow')}`,'event',{index})).join('')}</div><p class="note" style="margin-top:18px">La campagne est suspendue jusqu’à votre décision.</p>`,'event','narrow');
 };
+
+/* ---- Manual ---- */
+showHelp=function(){
+  pauseGame();
+  const card=(title,text)=>`<div class="card"><h3>${title}</h3><p class="note" style="margin-top:10px">${text}</p></div>`;
+  modal(`${modalHead('Manuel de campagne','FRONTIÈRES 1.6 / PRISE EN MAIN')}<div class="grid2">
+    ${card('1. Préparer l’État','Choisissez une priorité nationale et affectez vos équipes de recherche. Les usines, chantiers et raffineries partagent les emplacements de chaque État. Six ressources stratégiques alimentent les lignes de production ; la loi commerciale fixe la part exportée.')}
+    ${card('2. Lois, conseillers, décisions','L’économie, la conscription et le commerce se règlent par des lois. Nommez des conseillers et des chefs d’état-major, prenez des décisions ponctuelles et surveillez vos esprits nationaux. Les voies politiques de l’arbre peuvent changer le régime.')}
+    ${card('3. Former les forces','Composez vos divisions à partir de bataillons et de compagnies de soutien. Concevez chars, avions et navires, puis modernisez vos stocks. Le recrutement consomme matériel et effectifs.')}
+    ${card('4. Plans de bataille','Dans Armées, tracez une ligne de front, des flèches d’offensive et une ligne de repli. La planification s’accumule avant l’attaque. Les batailles durent plusieurs jours, heure par heure : largeur de combat, réserves, terrain, météo et ravitaillement décident de l’issue.')}
+    ${card('5. Ciel et mers','Les escadres reçoivent des missions selon leur type : supériorité, interception, appui, bombardement, frappes navales, parachutages. Les flottes patrouillent, frappent, escortent, mouillent des mines et disputent le contrôle des mers, indispensable aux invasions navales.')}
+    ${card('6. Guerre et paix','Justifiez un but de guerre, puis déclarez la guerre. Un pays capitule quand il a perdu l’essentiel de ses points de victoire et de son territoire ; certains esprits repoussent ce seuil. Un gouvernement allié peut poursuivre la lutte en exil. La conférence de paix répartit les États selon la contribution de chacun.')}
+  </div><div class="card" style="margin-top:18px"><h3>Raccourcis</h3><p class="note" style="margin-top:10px"><span class="hotkey">Espace</span> Pause / <span class="hotkey">1–5</span> Vitesse / <span class="hotkey">A</span> Armées / <span class="hotkey">I</span> Industrie / <span class="hotkey">R</span> Recherche / <span class="hotkey">D</span> Diplomatie / <span class="hotkey">P</span> Priorités / <span class="hotkey">F</span> Recentrer / <span class="hotkey">Échap</span> Fermer.</p></div>
+  <p class="note" style="margin-top:18px">Limites de cette version : simulation journalière avec combats horaires, carte de 3 396 provinces, combat aérien et naval par zones, IA heuristique, contenu original moins abondant que celui des grands jeux commerciaux. Pas de multijoueur ni de compatibilité avec les mods d’autres jeux.</p>`,'help','wide');
+};
 renderRail();
