@@ -282,3 +282,103 @@ document.addEventListener('change',ev=>{
   if(el.classList?.contains('design-input'))updateDesignPreview16();
   if(el.id==='tmpl-base')templateEditor(el.value||null);
 });
+
+/* ---- Multi-day battles and battle plans ---- */
+const unitById16=id=>S?.units.find(u=>u.id===id);
+function battleSide16(ids,reserve,title,country,power,losses){
+  const row=id=>{const u=unitById16(id);if(!u)return '';return `<div class="unitrow"><div class="unit-symbol">${u.template.tank?'▱':'×'}</div><div class="grow"><div class="row between"><strong>${esc(u.name)}</strong><span class="mono" style="font-size:10px">${Math.round(u.org)} / ${Math.round(u.strength*100)} %</span></div><small>${esc(u.template.name||'')}</small>${bar(u.strength*100,'#a7b58f')}<div style="height:3px"></div>${bar(u.org,'#88a7b7')}</div></div>`;};
+  return `<div class="card"><div class="eyebrow">${title}</div><h3 style="margin:9px 0">${esc(countryName(country))}</h3>${metric('Divisions en ligne',ids.length)}${metric('En réserve',(reserve||[]).length)}${metric('Puissance effective',num(power))}${metric('Pertes cumulées',num(losses||0))}
+    <div class="stack" style="margin-top:9px">${ids.map(row).join('')}</div>${(reserve||[]).length?`<div class="label" style="margin-top:9px">Réserves</div><div class="stack">${reserve.map(row).join('')}</div>`:''}</div>`;
+}
+showBattle=function(pid){
+  const b=S?.battles.find(b=>b.pid===pid);if(!b){toast('Cette bataille est terminée.');return;}pauseGame();
+  const days=Math.floor((b.hours||24)/24);
+  modal(`${modalHead('Bataille de '+pname(pid),'RAPPORT OPÉRATIONNEL / '+days+' JOUR'+(days>1?'S':'')+' DE COMBAT')}
+    <div style="margin:4px 0 16px"><div class="row between"><small>${esc(countryName(b.a))}</small><small>${Math.round(b.ratio*100)} % / ${Math.round((1-b.ratio)*100)} %</small><small>${esc(countryName(b.b))}</small></div>${bar(b.ratio*100,'#c29b78')}</div>
+    <div class="grid2">${battleSide16(b.attackers,b.reserveA,'ATTAQUANTS',b.a,b.ap,b.lossesA)}${battleSide16(b.defenders,b.reserveD,'DÉFENSEURS',b.b,b.dp,b.lossesD)}</div>
+    <div class="card" style="margin-top:12px">${metric('Terrain',esc(CATALOG.terrain[b.terrain]?.name||b.terrain))}${metric('Météo',esc(b.weather))}${metric('Largeur attaquant / défenseur',b.width+' / '+(b.widthD??'?')+' (max '+b.maxWidth+')')}${metric('Fortification',S.provinces[pid].fort)}${metric('Franchissement',b.amphibious?'Débarquement amphibie':b.strait?'Détroit':b.river?'Fleuve':'Aucun')}${metric('Début',dateText(b.start??S.day))}</div>
+    <p class="note" style="margin-top:15px">Le combat est résolu heure par heure. Les divisions dont l’organisation s’effondre se retirent et les réserves prennent leur place. La barre indique l’organisation restante de chaque camp, pas une probabilité.</p>`,'battle','wide');
+};
+const warfarePanel15=warfarePanel;
+warfarePanel=function(){
+  const html=warfarePanel15(),mine=S.battles.filter(b=>b.a===S.player||b.b===S.player);
+  const list=`<div class="sectionlabel">Batailles en cours / ${mine.length}</div><div class="stack">${mine.slice(0,20).map(b=>`<div class="card"><div class="row between"><strong>${esc(pname(b.pid))}</strong>${tag(b.a===S.player?'OFFENSIVE':'DÉFENSE',b.a===S.player?'gold':'')}</div>
+    <small>${Math.floor((b.hours||24)/24)} j / ${esc(b.weather)} / ${esc(CATALOG.terrain[b.terrain]?.name||b.terrain)}${b.amphibious?' / débarquement':b.strait?' / détroit':b.river?' / fleuve':''}</small>
+    <div style="margin:8px 0">${bar(b.ratio*100,'#c5a46e')}</div>${metric('En ligne / réserves',b.attackers.length+'+'+(b.reserveA||[]).length+' contre '+b.defenders.length+'+'+(b.reserveD||[]).length)}${metric('Pertes',num(b.lossesA||0)+' / '+num(b.lossesD||0))}${btn('Rapport de bataille','battle',{pid:b.pid},'small')}</div>`).join('')||'<p class="note">Aucun combat actif.</p>'}</div>`;
+  return html.replace(/<div class="sectionlabel">Combats en cours<\/div>[\s\S]*?<div class="sectionlabel">Rapports tactiques<\/div>/,list+'<div class="sectionlabel">Rapports tactiques</div>');
+};
+function planCard16(a){
+  const plan=a.plan16||{offensive:[],fallback:[],execute:false};
+  return `<div class="card stack"><div class="eyebrow">PLAN DE BATAILLE</div>
+    ${metric('Ligne de front',(a.frontSelection||[]).length?(a.frontSelection.length+' points tracés'):'Toute la frontière avec la cible')}
+    ${metric('Ligne d’offensive',plan.offensive.length?plan.offensive.length+' points / '+esc(pname(plan.offensive.at(-1))):'Aucune')}
+    ${metric('Ligne de repli',plan.fallback.length?plan.fallback.length+' points':'Aucune')}
+    ${metric('Préparation',percent(a.planning))}${bar(a.planning*100)}
+    <div class="row wrap">${btn('Tracer le front','drawFront',{army:a.id},'small')}${btn('Tracer l’offensive','drawPlan16',{army:a.id,kind:'offensive'},'small')}${btn('Tracer le repli','drawPlan16',{army:a.id,kind:'fallback'},'small')}</div>
+    <div class="row wrap">${btn(plan.execute?'Suspendre l’offensive':'Exécuter le plan '+icon('arrow'),'planExecute16',{army:a.id,value:!plan.execute},plan.execute?'small danger':'small primary')}${btn('Effacer l’offensive','planLine16',{army:a.id,kind:'offensive',provinces:[]},'small ghost')}${btn('Effacer le repli','planLine16',{army:a.id,kind:'fallback',provinces:[]},'small ghost')}</div>
+    <small>La préparation augmente tant que le plan attend et diminue pendant l’offensive. En défense, la ligne de repli remplace le front.</small></div>`;
+}
+const operationExtension15=operationExtension;
+operationExtension=function(){
+  const a=S.armies.find(a=>a.id===army&&a.owner===S.player);
+  return operationExtension15()+(a?planCard16(a):'');
+};
+const showOperations15=showOperations;
+showOperations=function(){
+  showOperations15();
+  const a=S?.armies.find(a=>a.id===army&&a.owner===S.player),el=$('modal')?.querySelector('.war-tactic');
+  if(a&&el)el.insertAdjacentHTML('beforebegin',planCard16(a));
+};
+function beginPlanTool16(kind,aid){
+  closeModal();army=aid;operationTool={kind,army:aid,points:[]};document.body.classList.remove('panel-open');
+  const tool=$('operation-toolbar');tool.hidden=false;
+  tool.innerHTML=`<span>${kind==='offensive'?'OFFENSIVE / Cliquez les provinces visées, dans l’ordre (30 au maximum)':'REPLI / Cliquez la ligne à tenir en territoire accessible'}</span>${btn('Valider la ligne','finishPlan16',{},'primary small')}${btn('Annuler','cancelOperation',{},'small')}`;
+  $('map-hint').textContent=kind==='offensive'?'La flèche part du front de l’armée et suit vos points.':'Les divisions s’y déploient lorsqu’elles défendent.';
+  dirty=true;
+}
+window.addEventListener('pointerup',ev=>{
+  if(!operationTool||!['offensive','fallback'].includes(operationTool.kind)||ev.target!==canvas||!drag||drag.moved||ev.button!==0)return;
+  const r=canvas.getBoundingClientRect(),id=pointAt(ev.clientX-r.left,ev.clientY-r.top);
+  ev.stopImmediatePropagation();drag=null;
+  if(id===null)return;
+  if(operationTool.kind==='fallback'&&!(allied(S.player,control(id))||nation().access.includes(control(id)))){toast('Tracez le repli en territoire accessible.',true);return;}
+  const i=operationTool.points.indexOf(id);
+  if(i>=0)operationTool.points.splice(i,1);else if(operationTool.points.length<30)operationTool.points.push(id);
+  dirty=true;
+},true);
+const arrowHead16=(ctx,from,to,size)=>{const angle=Math.atan2(to.y-from.y,to.x-from.x);ctx.beginPath();ctx.moveTo(to.x,to.y);ctx.lineTo(to.x-size*Math.cos(angle-.45),to.y-size*Math.sin(angle-.45));ctx.lineTo(to.x-size*Math.cos(angle+.45),to.y-size*Math.sin(angle+.45));ctx.closePath();ctx.fill();};
+DRAW16.push((ctx,zoom)=>{
+  if(!S)return;
+  const a=S.armies.find(a=>a.id===army&&a.owner===S.player),tool=operationTool&&['offensive','fallback'].includes(operationTool.kind)?operationTool:null;
+  const lines=[];
+  if(a?.plan16?.offensive?.length)lines.push(['offensive',a.plan16.offensive]);
+  if(a?.plan16?.fallback?.length)lines.push(['fallback',a.plan16.fallback]);
+  if(tool)lines.push([tool.kind,tool.points]);
+  for(const [kind,points] of lines){
+    if(!points.length)continue;
+    const nodes=points.map(id=>centers[id]).filter(Boolean);
+    if(kind==='offensive'){
+      const troops=S.units.filter(u=>u.army===a?.id),start=troops.length?{x:total(troops.map(u=>centers[u.pid].x))/troops.length,y:total(troops.map(u=>centers[u.pid].y))/troops.length}:nodes[0];
+      const path=[start,...nodes];ctx.strokeStyle='#d0614cd9';ctx.fillStyle='#d0614cd9';ctx.lineWidth=5/zoom;ctx.lineJoin='round';
+      ctx.beginPath();path.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y));ctx.stroke();
+      if(path.length>1)arrowHead16(ctx,path.at(-2),path.at(-1),14/zoom);
+    }else{
+      ctx.strokeStyle='#7fb2d4';ctx.lineWidth=3/zoom;ctx.setLineDash([7/zoom,4/zoom]);ctx.beginPath();nodes.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y));ctx.stroke();ctx.setLineDash([]);
+      for(const p of nodes){ctx.fillStyle='#7fb2d4';ctx.beginPath();ctx.arc(p.x,p.y,3/zoom,0,Math.PI*2);ctx.fill();}
+    }
+  }
+  if(camera.zoom>1.55)for(const b of S.battles){
+    if(b.a!==S.player&&b.b!==S.player)continue;
+    const p=centers[b.pid];if(!p)continue;const w=22/zoom,y=p.y-4/zoom;
+    ctx.fillStyle='#2b201c';ctx.fillRect(p.x-w/2,y,w,3/zoom);ctx.fillStyle=b.a===S.player?'#d8b06a':'#c97a62';ctx.fillRect(p.x-w/2,y,w*(b.a===S.player?b.ratio:1-b.ratio),3/zoom);
+  }
+});
+ACTIONS16.push(async(action,p)=>{
+  switch(action){
+    case 'drawPlan16':beginPlanTool16(p.kind,p.army);return true;
+    case 'finishPlan16':if(operationTool){const {army:aid,kind,points}=operationTool;await cmd('planLine',{army:aid,kind,provinces:points});endOperationTool();renderPanel(true);toast(kind==='offensive'?'Ligne d’offensive enregistrée.':'Ligne de repli enregistrée.');}return true;
+    case 'planLine16':await cmd('planLine',{army:p.army,kind:p.kind,provinces:p.provinces});renderPanel(true);if(modalKind==='operations')showOperations();dirty=true;return true;
+    case 'planExecute16':await cmd('planExecute',{army:p.army,value:p.value});renderPanel(true);if(modalKind==='operations')showOperations();toast(p.value?'L’offensive est lancée.':'L’offensive est suspendue.');dirty=true;return true;
+  }
+  return false;
+});

@@ -1793,6 +1793,8 @@ function installSystems16(Engine,H){
   const NOT_HANDLED=Symbol('not handled');
   const handlers=new Map();
   Engine.command16=(name,fn)=>handlers.set(name,fn);
+  const invariants=[];
+  Engine.invariant16=fn=>invariants.push(fn);
   const execute15=Engine.prototype.execute;
   Engine.prototype.execute=function(action,p){
     const handler=handlers.get(action);
@@ -2055,6 +2057,236 @@ function installSystems16(Engine,H){
   };
 
   // ---------------------------------------------------------------------------
+  // Land combat: battles last several days and are resolved hour by hour.
+  // Each side fills the combat width from its pool; the rest waits in reserve
+  // and enters when a front-line division withdraws. Soft/hard attacks are
+  // weighed by the target's hardness and compared with defence (defender) or
+  // breakthrough (attacker): attacks beyond that value hit four times as often.
+  // ---------------------------------------------------------------------------
+  const HIT_IN=.1,HIT_OVER=.4,ORG_PER_HIT=3.6,STRENGTH_PER_HIT=.00011;
+  Engine.prototype.strait16=function(a,b){const key=a<b?a+':'+b:b+':'+a;return !!this.world.straits?.[key];};
+  Engine.prototype.combatProfile16=function(u,pid,offense,ctx){
+    const c=this.nation(u.owner),st=this.unitStats16(u),army=ctx.armies.get(u.army),g=this.general(army);
+    const terrainKey=this.prov[pid].terrain,terr=st.terrain?.[terrainKey]||{},tactic=army?.tactic||'balanced';
+    let m=(1+(offense?c.bonus.attack:c.bonus.defense)+(g?(offense?g.attack:g.defense)*.035:0))*(.2+.8*u.supply);
+    m*=1+Math.min(.2,u.xp*.05)+this.groupModifier(army,offense);
+    if(u.owner!==this.s.player)m*=this.s.difficulty==='veteran'?1.12:this.s.difficulty==='relaxed'?.88:1;
+    if(st.armor&&c.stock.fuel<10)m*=.5;
+    if(u.pocketed)m*=offense?.7:.58;
+    const enemyShield=offense?ctx.shieldD:ctx.shieldA;
+    m*=1+clamp(this.airSupport?.[u.owner+'_'+this.prov[pid].zone]||0,0,.35)*(1+c.bonus.air)*(1-enemyShield);
+    let attack=m,defense=m;
+    if(offense){
+      attack*=(1+(terr.attack||0))*ctx.weather.attack*(1+(army?army.planning*.2:0)+c.bonus.planning);
+      if(st.recon)attack*=1.05;if(st.tank&&st.motor)attack*=1.06;
+      if(tactic==='spearhead')attack*=1.16;if(tactic==='elastic')attack*=.88;
+      if(u.landing16)attack*=.4+.6*(st.special?.amphibious||0)*(1+c.bonus.invasion);
+      else if(this.strait16(u.pid,pid))attack*=.55;
+      else{const river=this.riverAttackFactor(u,pid);if(river<1)attack*=Math.min(1,river+(st.mods?.river||0)*.4);}
+      defense=attack;
+    }else{
+      const fort=Math.max(0,this.s.provinces[pid].fort*(1-ctx.fortAttack));
+      defense*=this.catalog.terrain[terrainKey].defense*(1+fort*.15)*(1+u.entrench*.025*(1+(st.mods?.entrench||0)+c.bonus.entrench))*(1+(terr.defense||0));
+      if(tactic==='elastic')defense*=1.14;
+      if(ctx.amphibious)defense*=1+this.s.provinces[pid].coastalFort*.12;
+      attack=m*(1+(terr.attack||0)*.5);
+    }
+    return {u,st,soft:st.soft*attack,hard:st.hard*attack,defense:st.defense*defense,breakthrough:st.breakthrough*(offense?attack*(1+c.bonus.breakthrough):defense),
+      armor:st.armor*(1+c.bonus.armor),piercing:st.piercing*(1+c.bonus.piercing),hardness:st.hardness,orgMax:Math.max(5,st.orgMax*(1+c.bonus.organization)),width:st.width,offense};
+  };
+  Engine.prototype.fillFront16=function(pool,maxWidth){
+    const front=[],reserve=[];let w=0;
+    for(const u of [...pool].sort((a,b)=>b.org*b.strength-a.org*a.strength||a.id-b.id)){
+      const uw=this.unitStats16(u).width;
+      if(!front.length||w+uw<=maxWidth){front.push(u);w+=uw;}else reserve.push(u);
+    }
+    return {front,reserve,width:w};
+  };
+  Engine.prototype.militaryStep=function(){
+    const day=this.s.day,attacks=new Map(),busy=new Set(),previous=new Map((this.s.battles||[]).map(b=>[b.pid,b]));
+    this.indexUnits();
+    for(const u of this.s.units){
+      if(u.strength<=0||u.retreatUntil>day||!u.path.length)continue;
+      const to=u.path[0],ctrl=this.s.provinces[to]?.ctrl;
+      if(u.landing16){
+        // Amphibious or airborne assault: the division is committed to the target.
+        if(u.landing16.to!==to||!this.war(u.owner,ctrl)){u.landing16=null;u.path=[];continue;}
+        if(!attacks.has(to))attacks.set(to,[]);attacks.get(to).push(u);continue;
+      }
+      const e=this.edge(u.pid,to);
+      if(this.historyBlocked(u.owner,to)){u.path=[];continue;}
+      if(!e||(!this.access(u.owner,ctrl)&&!this.war(u.owner,ctrl))){u.path=[];continue;}
+      if(e.sea&&(!this.s.provinces[u.pid].port||!this.s.provinces[to].port||!this.seaAllowed(u.owner,e,ctrl))){u.path=[];continue;}
+      const st=this.unitStats16(u),weather=this.weather(to),terr=st.terrain?.[this.prov[to].terrain];
+      const speed=st.speed*(.25+.75*u.supply)*weather.move*(1+this.nation(u.owner).bonus.speed)*(1+(terr?.move||0));
+      if(this.war(u.owner,ctrl)){
+        if(u.org<12){u.path=[];continue;}
+        if(e.sea){u.progress+=speed;if(u.progress<e.days)continue;}
+        if(!attacks.has(to))attacks.set(to,[]);attacks.get(to).push(u);
+      }else{
+        u.progress+=speed;u.entrench=0;
+        const duration=e.sea?e.days:this.catalog.terrain[this.prov[to].terrain].move*(this.strait16(u.pid,to)?1.5:1);
+        if(u.progress>=duration){u.pid=to;u.path.shift();u.progress=0;if(e.sea)this.nation(u.owner).stock.fuel=Math.max(0,this.nation(u.owner).stock.fuel-40);}
+      }
+    }
+    this.indexUnits();
+    const battles=[],armies=new Map(this.s.armies.map(a=>[a.id,a]));
+    for(const [pid,all] of attacks){
+      const eligible=all.filter(u=>u.strength>0&&this.war(u.owner,this.s.provinces[pid].ctrl));
+      if(!eligible.length)continue;
+      const old=previous.get(pid),lead=old&&eligible.some(u=>u.owner===old.a)?eligible.find(u=>u.owner===old.a):eligible[0];
+      const attackers=eligible.filter(u=>this.allies(lead.owner,u.owner));
+      const defenders=(this.unitsAt.get(pid)||[]).filter(u=>u.strength>0&&attackers.some(a=>this.war(a.owner,u.owner)));
+      if(!defenders.length){
+        if(this.prov[pid].vp>=4||this.prov[pid].city)this.recordCombat({pid,a:lead.owner,b:this.s.provinces[pid].ctrl,outcome:'unopposed',attackers:attackers.length,defenders:0,lossesA:0,lossesD:0,terrain:this.prov[pid].terrain});
+        for(const u of attackers)u.landing16=null;
+        this.capture(pid,attackers);continue;
+      }
+      const battle=this.resolveBattle16(pid,attackers,defenders,old,armies,busy);
+      if(battle)battles.push(battle);
+    }
+    this.s.battles=battles;
+    for(const u of this.s.units){
+      if(u.strength<=0)continue;
+      const c=this.nation(u.owner),t=this.unitStats16(u);
+      if(!busy.has(u.id)){u.org=clamp(u.org+(u.path.length?3:8)*(.3+u.supply)*(1+(c.bonus.organization||0)),0,100);if(!u.path.length)u.entrench=Math.min(10,u.entrench+1);}
+      if(u.supply<.22)this.loss(u,.0015*(1-u.supply),.7);
+      if(u.pocketed)this.loss(u,.0025*(1.15-u.supply),1.8);
+      if(u.strength<1&&u.supply>.35&&!u.pocketed&&!busy.has(u.id)){
+        let change=Math.min(.006*(1+(t.mods?.reinforce||0)),1-u.strength,c.manpower/Math.max(1,t.men));for(const [k,n] of Object.entries(t.eq))if(n)change=Math.min(change,c.stock[k]/n);
+        if(change>0){u.strength+=change;c.manpower-=change*t.men;for(const [k,n] of Object.entries(t.eq))c.stock[k]=Math.max(0,c.stock[k]-change*n);}
+      }
+    }
+    this.s.units=this.s.units.filter(u=>u.strength>.04);this.indexUnits();
+  };
+  Engine.prototype.resolveBattle16=function(pid,attackPool,defendPool,old,armies,busy){
+    const terrain=this.catalog.terrain[this.prov[pid].terrain],weather=this.weather(pid);
+    const approaches=new Set(attackPool.map(u=>u.landing16?'sea':u.pid)).size;
+    const maxWidth=Math.round(terrain.width*Math.min(2,1+.5*(approaches-1)));
+    const amphibious=attackPool.some(u=>u.landing16?.amphibious);
+    const shield=list=>clamp(sum(list.map(u=>this.unitStats16(u).mods?.airShield||0))/Math.max(1,list.length)+sum(list.map(u=>this.unitStats16(u).ap))/4000,0,.6);
+    const ctx={armies,weather,amphibious,shieldA:shield(attackPool),shieldD:shield(defendPool),fortAttack:clamp(Math.max(0,...attackPool.map(u=>this.unitStats16(u).mods?.fortAttack||0)),0,.6)};
+    const profiles=new Map();
+    const profile=(u,offense)=>{let p=profiles.get(u.id);if(!p){p=this.combatProfile16(u,pid,offense,ctx);profiles.set(u.id,p);}return p;};
+    const before=list=>sum(list.map(u=>u.strength*this.unitStats16(u).men));
+    const menA=before(attackPool),menD=before(defendPool),intensity=this.s.mod.balance.combat;
+    const withdrawn=new Set(),retreated=new Set();
+    // Disorganised divisions cannot hold or attack: they leave before the first hour.
+    for(const u of attackPool)if(u.org<5)withdrawn.add(u.id);
+    for(const u of defendPool)if(u.org<1)retreated.add(u.id);
+    let A=this.fillFront16(attackPool.filter(u=>!withdrawn.has(u.id)),maxWidth),D=this.fillFront16(defendPool.filter(u=>!retreated.has(u.id)),maxWidth);
+    const strike=(from,to)=>{
+      // Damage dealt by side "from" to each division of side "to" during one hour.
+      const targets=to.front.filter(u=>!withdrawn.has(u.id)&&!retreated.has(u.id)),totalWidth=sum(targets.map(u=>profile(u,to===A).width))||1;
+      if(!targets.length)return;
+      const jitter=.9+this.random()*.2;
+      for(const t of targets){
+        const tp=profile(t,to===A),share=tp.width/totalWidth;
+        let attacks=0;
+        for(const u of from.front){
+          if(withdrawn.has(u.id)||retreated.has(u.id))continue;
+          const p=profile(u,from===A),value=(p.soft*(1-tp.hardness)+p.hard*tp.hardness)*u.strength*share;
+          attacks+=value*(tp.armor>p.piercing?.5:1);
+        }
+        const guard=(to===A?tp.breakthrough:tp.defense)*t.strength;
+        let hits=(Math.min(attacks,guard)*HIT_IN+Math.max(0,attacks-guard)*HIT_OVER)*jitter*intensity;
+        const enemyPierce=Math.max(0,...from.front.map(u=>profile(u,from===A).piercing));
+        if(tp.armor>enemyPierce)hits*=.6;
+        t.org=clamp(t.org-hits*ORG_PER_HIT/tp.orgMax,0,100);
+        this.loss(t,hits*STRENGTH_PER_HIT*(1-tp.hardness*.4),0);
+      }
+    };
+    for(let hour=0;hour<24;hour++){
+      if(!A.front.length||!D.front.length)break;
+      strike(A,D);strike(D,A);
+      for(const u of A.front)if(!withdrawn.has(u.id)&&(u.org<5||u.strength<.1))withdrawn.add(u.id);
+      for(const u of D.front)if(!retreated.has(u.id)&&(u.org<1||u.strength<.08))retreated.add(u.id);
+      if(hour%4===3||A.front.some(u=>this.unitStats16(u).mods?.reinforce)){
+        A=this.fillFront16(attackPool.filter(u=>!withdrawn.has(u.id)),maxWidth);
+        D=this.fillFront16(defendPool.filter(u=>!retreated.has(u.id)),maxWidth);
+      }else{
+        A.front=A.front.filter(u=>!withdrawn.has(u.id));D.front=D.front.filter(u=>!retreated.has(u.id));
+      }
+    }
+    for(const u of [...A.front,...D.front])busy.add(u.id);
+    const c=this.nation(attackPool[0].owner);
+    for(const u of attackPool){if(A.front.includes(u)){u.xp+=.003;c.xp+=.09;this.nation(u.owner).stock.fuel=Math.max(0,this.nation(u.owner).stock.fuel-(u.template.tank*4+u.template.motor*1.5));}}
+    for(const u of defendPool)if(D.front.includes(u)){u.xp+=.003;this.nation(u.owner).xp+=.08;}
+    for(const u of attackPool)if(withdrawn.has(u.id)){u.path=[];u.landing16=null;u.retreatUntil=this.s.day+1;}
+    for(const u of defendPool)if(retreated.has(u.id))this.retreat(u);
+    const remainingD=defendPool.filter(u=>u.pid===pid&&u.strength>.04&&!retreated.has(u.id));
+    const remainingA=attackPool.filter(u=>u.strength>.04&&!withdrawn.has(u.id)&&u.path[0]===pid);
+    const lossesA=Math.max(0,Math.round(menA-before(attackPool))),lossesD=Math.max(0,Math.round(menD-before(defendPool)));
+    const sumA=sum(remainingA.map(u=>u.org*u.strength)),sumD=sum(remainingD.map(u=>u.org*u.strength));
+    const outcome=!remainingD.length&&remainingA.length?'breakthrough':!remainingA.length?'repulsed':'engaged';
+    const a=attackPool[0].owner,b=defendPool[0]?.owner||this.s.provinces[pid].ctrl;
+    const ap=Math.round(sum(A.front.map(u=>profile(u,true).soft+profile(u,true).hard))),dp=Math.round(sum(D.front.map(u=>profile(u,false).defense)));
+    this.recordCombat({pid,a,b,outcome,attackers:attackPool.length,defenders:defendPool.length,lossesA,lossesD,river:attackPool.some(u=>this.riverAttackFactor(u,pid)<1),terrain:this.prov[pid].terrain,ap,dp});
+    this.warContribution16?.(a,b,lossesD,lossesA);
+    if(outcome==='breakthrough'){for(const u of remainingA)u.landing16=null;this.capture(pid,remainingA);return null;}
+    if(outcome==='repulsed'){for(const u of attackPool)if(u.landing16){u.landing16=null;u.path=[];}return null;}
+    const startDay=old?.start??this.s.day;
+    return {id:old?.id??this.s.uid++,pid,a,b,start:startDay,hours:(old?.hours||0)+24,
+      attackers:A.front.map(u=>u.id),defenders:D.front.map(u=>u.id),reserveA:A.reserve.filter(u=>remainingA.includes(u)).map(u=>u.id),reserveD:D.reserve.filter(u=>remainingD.includes(u)).map(u=>u.id),
+      ratio:sumA/Math.max(1,sumA+sumD),width:A.width,maxWidth,widthD:D.width,terrain:this.prov[pid].terrain,weather:weather.name,
+      river:attackPool.some(u=>this.riverAttackFactor(u,pid)<1),strait:attackPool.some(u=>this.strait16(u.pid,pid)),amphibious,
+      ap,dp,lossesA:(old?.lossesA||0)+lossesA,lossesD:(old?.lossesD||0)+lossesD};
+  };
+
+  // ---------------------------------------------------------------------------
+  // Battle plans: front line (drawn sector or full border), offensive line and
+  // fallback line. Planning builds up while the plan waits and is spent as the
+  // offensive advances.
+  // ---------------------------------------------------------------------------
+  Engine.command16('planLine',function(p,id,c){
+    const a=this.s.armies.find(a=>a.id===p.army&&a.owner===id);assert(a,'Armée inconnue.');
+    assert(['offensive','fallback'].includes(p.kind),'Ligne inconnue.');
+    assert(Array.isArray(p.provinces)&&p.provinces.length<=30&&p.provinces.every(pid=>Number.isInteger(pid)&&this.prov[pid]),'Une ligne compte au maximum 30 points.');
+    if(p.kind==='fallback')assert(p.provinces.every(pid=>this.access(id,this.s.provinces[pid].ctrl)),'La ligne de repli doit être tracée en territoire accessible.');
+    a.plan16??={offensive:[],fallback:[],execute:false};a.plan16[p.kind]=[...new Set(p.provinces)];
+    if(p.kind==='offensive'&&p.provinces.length){const ctrl=this.s.provinces[p.provinces.at(-1)].ctrl;if(ctrl!==id&&!this.allies(id,ctrl))a.target=ctrl;}
+  });
+  Engine.command16('planExecute',function(p,id,c){
+    const a=this.s.armies.find(a=>a.id===p.army&&a.owner===id);assert(a,'Armée inconnue.');
+    a.plan16??={offensive:[],fallback:[],execute:false};a.plan16.execute=!!p.value;
+    if(p.value){assert(a.target&&this.war(id,a.target),'Le plan vise un pays avec lequel vous êtes en guerre.');a.order='attack';a.auto=true;}
+    else a.order='defend';
+  });
+  const armyAI15=Engine.prototype.armyAI;
+  Engine.prototype.armyAI=function(){
+    // Offensive lines steer the 1.5 objective logic toward the nearest point of
+    // the line; fallback lines replace the front when defending.
+    const restore=[];
+    for(const a of this.s.armies){
+      const plan=a.plan16;if(!plan)continue;
+      if(plan.execute&&a.order!=='attack')a.order='attack';
+      if(plan.offensive?.length&&a.order==='attack'){
+        const troops=this.s.units.filter(u=>u.army===a.id);
+        const centre=troops.length?{x:sum(troops.map(u=>this.prov[u.pid].x))/troops.length,y:sum(troops.map(u=>this.prov[u.pid].y))/troops.length}:this.prov[plan.offensive[0]];
+        const next=plan.offensive.find(pid=>!this.allies(a.owner,this.s.provinces[pid].ctrl))??plan.offensive.at(-1);
+        restore.push([a,a.objective]);a.objective=next;
+        if(!next||distance(centre,this.prov[next])<1)a.objective=plan.offensive.at(-1);
+      }
+      if(plan.fallback?.length&&a.order==='defend'){restore.push([a,a.objective,a.frontSelection]);a.frontSelection=plan.fallback.slice(0,20);}
+    }
+    const planning=new Map(this.s.armies.map(a=>[a.id,a.planning]));
+    armyAI15.call(this);
+    for(const a of this.s.armies){
+      // Planning only builds up while the army is not attacking.
+      const engaged=this.s.battles.some(b=>b.a===a.owner&&b.attackers.some(id=>this.s.units.find(u=>u.id===id)?.army===a.id));
+      if(a.order==='attack'&&engaged)a.planning=clamp((planning.get(a.id)??a.planning)-.015,0,1);
+    }
+    for(const [a,objective,front] of restore){a.objective=objective;if(front!==undefined)a.frontSelection=front;}
+  };
+  Engine.invariant16(function(state){
+    for(const a of state.armies)if(a.plan16){
+      assert(Array.isArray(a.plan16.offensive)&&a.plan16.offensive.length<=30&&Array.isArray(a.plan16.fallback)&&a.plan16.fallback.length<=30&&typeof a.plan16.execute==='boolean','Plan de bataille invalide.');
+      for(const pid of [...a.plan16.offensive,...a.plan16.fallback])assert(Number.isInteger(pid)&&this.prov[pid],'Point de plan invalide.');
+    }
+    for(const b of state.battles)assert(Number.isInteger(b.pid)&&this.prov[b.pid]&&Array.isArray(b.attackers)&&Array.isArray(b.defenders),'Bataille invalide.');
+  });
+
+  // ---------------------------------------------------------------------------
   // Release identifier, saves and invariants
   // ---------------------------------------------------------------------------
   const createNation15=Engine.prototype.createNation;
@@ -2104,11 +2336,9 @@ function installSystems16(Engine,H){
         assert(Object.entries(t.bat).every(([k,n])=>BAT.has(k)&&Number.isInteger(n)&&n>0&&n<=25)&&Array.isArray(t.sup)&&t.sup.length<=5&&t.sup.every(k=>SUP.has(k)),'Mod\u00e8le de division invalide : '+id+'.');
       }
     }
-    for(const h of this.invariants16||[])h.call(this,state);
+    for(const h of invariants)h.call(this,state);
     return result;
   };
-  Engine.invariant16=fn=>{(Engine.prototype.invariants16??=[]).push(fn);};
-  Engine.prototype.invariants16=[];
 }
 if(typeof module!=='undefined')module.exports={installSystems16};
 </script>
@@ -5931,6 +6161,106 @@ document.addEventListener('change',ev=>{
   if(el.id==='design-base')showDesigner16($('design-type').value,{...designForm16(),base:el.value});
   if(el.classList?.contains('design-input'))updateDesignPreview16();
   if(el.id==='tmpl-base')templateEditor(el.value||null);
+});
+
+/* ---- Multi-day battles and battle plans ---- */
+const unitById16=id=>S?.units.find(u=>u.id===id);
+function battleSide16(ids,reserve,title,country,power,losses){
+  const row=id=>{const u=unitById16(id);if(!u)return '';return `<div class="unitrow"><div class="unit-symbol">${u.template.tank?'▱':'×'}</div><div class="grow"><div class="row between"><strong>${esc(u.name)}</strong><span class="mono" style="font-size:10px">${Math.round(u.org)} / ${Math.round(u.strength*100)} %</span></div><small>${esc(u.template.name||'')}</small>${bar(u.strength*100,'#a7b58f')}<div style="height:3px"></div>${bar(u.org,'#88a7b7')}</div></div>`;};
+  return `<div class="card"><div class="eyebrow">${title}</div><h3 style="margin:9px 0">${esc(countryName(country))}</h3>${metric('Divisions en ligne',ids.length)}${metric('En réserve',(reserve||[]).length)}${metric('Puissance effective',num(power))}${metric('Pertes cumulées',num(losses||0))}
+    <div class="stack" style="margin-top:9px">${ids.map(row).join('')}</div>${(reserve||[]).length?`<div class="label" style="margin-top:9px">Réserves</div><div class="stack">${reserve.map(row).join('')}</div>`:''}</div>`;
+}
+showBattle=function(pid){
+  const b=S?.battles.find(b=>b.pid===pid);if(!b){toast('Cette bataille est terminée.');return;}pauseGame();
+  const days=Math.floor((b.hours||24)/24);
+  modal(`${modalHead('Bataille de '+pname(pid),'RAPPORT OPÉRATIONNEL / '+days+' JOUR'+(days>1?'S':'')+' DE COMBAT')}
+    <div style="margin:4px 0 16px"><div class="row between"><small>${esc(countryName(b.a))}</small><small>${Math.round(b.ratio*100)} % / ${Math.round((1-b.ratio)*100)} %</small><small>${esc(countryName(b.b))}</small></div>${bar(b.ratio*100,'#c29b78')}</div>
+    <div class="grid2">${battleSide16(b.attackers,b.reserveA,'ATTAQUANTS',b.a,b.ap,b.lossesA)}${battleSide16(b.defenders,b.reserveD,'DÉFENSEURS',b.b,b.dp,b.lossesD)}</div>
+    <div class="card" style="margin-top:12px">${metric('Terrain',esc(CATALOG.terrain[b.terrain]?.name||b.terrain))}${metric('Météo',esc(b.weather))}${metric('Largeur attaquant / défenseur',b.width+' / '+(b.widthD??'?')+' (max '+b.maxWidth+')')}${metric('Fortification',S.provinces[pid].fort)}${metric('Franchissement',b.amphibious?'Débarquement amphibie':b.strait?'Détroit':b.river?'Fleuve':'Aucun')}${metric('Début',dateText(b.start??S.day))}</div>
+    <p class="note" style="margin-top:15px">Le combat est résolu heure par heure. Les divisions dont l’organisation s’effondre se retirent et les réserves prennent leur place. La barre indique l’organisation restante de chaque camp, pas une probabilité.</p>`,'battle','wide');
+};
+const warfarePanel15=warfarePanel;
+warfarePanel=function(){
+  const html=warfarePanel15(),mine=S.battles.filter(b=>b.a===S.player||b.b===S.player);
+  const list=`<div class="sectionlabel">Batailles en cours / ${mine.length}</div><div class="stack">${mine.slice(0,20).map(b=>`<div class="card"><div class="row between"><strong>${esc(pname(b.pid))}</strong>${tag(b.a===S.player?'OFFENSIVE':'DÉFENSE',b.a===S.player?'gold':'')}</div>
+    <small>${Math.floor((b.hours||24)/24)} j / ${esc(b.weather)} / ${esc(CATALOG.terrain[b.terrain]?.name||b.terrain)}${b.amphibious?' / débarquement':b.strait?' / détroit':b.river?' / fleuve':''}</small>
+    <div style="margin:8px 0">${bar(b.ratio*100,'#c5a46e')}</div>${metric('En ligne / réserves',b.attackers.length+'+'+(b.reserveA||[]).length+' contre '+b.defenders.length+'+'+(b.reserveD||[]).length)}${metric('Pertes',num(b.lossesA||0)+' / '+num(b.lossesD||0))}${btn('Rapport de bataille','battle',{pid:b.pid},'small')}</div>`).join('')||'<p class="note">Aucun combat actif.</p>'}</div>`;
+  return html.replace(/<div class="sectionlabel">Combats en cours<\/div>[\s\S]*?<div class="sectionlabel">Rapports tactiques<\/div>/,list+'<div class="sectionlabel">Rapports tactiques</div>');
+};
+function planCard16(a){
+  const plan=a.plan16||{offensive:[],fallback:[],execute:false};
+  return `<div class="card stack"><div class="eyebrow">PLAN DE BATAILLE</div>
+    ${metric('Ligne de front',(a.frontSelection||[]).length?(a.frontSelection.length+' points tracés'):'Toute la frontière avec la cible')}
+    ${metric('Ligne d’offensive',plan.offensive.length?plan.offensive.length+' points / '+esc(pname(plan.offensive.at(-1))):'Aucune')}
+    ${metric('Ligne de repli',plan.fallback.length?plan.fallback.length+' points':'Aucune')}
+    ${metric('Préparation',percent(a.planning))}${bar(a.planning*100)}
+    <div class="row wrap">${btn('Tracer le front','drawFront',{army:a.id},'small')}${btn('Tracer l’offensive','drawPlan16',{army:a.id,kind:'offensive'},'small')}${btn('Tracer le repli','drawPlan16',{army:a.id,kind:'fallback'},'small')}</div>
+    <div class="row wrap">${btn(plan.execute?'Suspendre l’offensive':'Exécuter le plan '+icon('arrow'),'planExecute16',{army:a.id,value:!plan.execute},plan.execute?'small danger':'small primary')}${btn('Effacer l’offensive','planLine16',{army:a.id,kind:'offensive',provinces:[]},'small ghost')}${btn('Effacer le repli','planLine16',{army:a.id,kind:'fallback',provinces:[]},'small ghost')}</div>
+    <small>La préparation augmente tant que le plan attend et diminue pendant l’offensive. En défense, la ligne de repli remplace le front.</small></div>`;
+}
+const operationExtension15=operationExtension;
+operationExtension=function(){
+  const a=S.armies.find(a=>a.id===army&&a.owner===S.player);
+  return operationExtension15()+(a?planCard16(a):'');
+};
+const showOperations15=showOperations;
+showOperations=function(){
+  showOperations15();
+  const a=S?.armies.find(a=>a.id===army&&a.owner===S.player),el=$('modal')?.querySelector('.war-tactic');
+  if(a&&el)el.insertAdjacentHTML('beforebegin',planCard16(a));
+};
+function beginPlanTool16(kind,aid){
+  closeModal();army=aid;operationTool={kind,army:aid,points:[]};document.body.classList.remove('panel-open');
+  const tool=$('operation-toolbar');tool.hidden=false;
+  tool.innerHTML=`<span>${kind==='offensive'?'OFFENSIVE / Cliquez les provinces visées, dans l’ordre (30 au maximum)':'REPLI / Cliquez la ligne à tenir en territoire accessible'}</span>${btn('Valider la ligne','finishPlan16',{},'primary small')}${btn('Annuler','cancelOperation',{},'small')}`;
+  $('map-hint').textContent=kind==='offensive'?'La flèche part du front de l’armée et suit vos points.':'Les divisions s’y déploient lorsqu’elles défendent.';
+  dirty=true;
+}
+window.addEventListener('pointerup',ev=>{
+  if(!operationTool||!['offensive','fallback'].includes(operationTool.kind)||ev.target!==canvas||!drag||drag.moved||ev.button!==0)return;
+  const r=canvas.getBoundingClientRect(),id=pointAt(ev.clientX-r.left,ev.clientY-r.top);
+  ev.stopImmediatePropagation();drag=null;
+  if(id===null)return;
+  if(operationTool.kind==='fallback'&&!(allied(S.player,control(id))||nation().access.includes(control(id)))){toast('Tracez le repli en territoire accessible.',true);return;}
+  const i=operationTool.points.indexOf(id);
+  if(i>=0)operationTool.points.splice(i,1);else if(operationTool.points.length<30)operationTool.points.push(id);
+  dirty=true;
+},true);
+const arrowHead16=(ctx,from,to,size)=>{const angle=Math.atan2(to.y-from.y,to.x-from.x);ctx.beginPath();ctx.moveTo(to.x,to.y);ctx.lineTo(to.x-size*Math.cos(angle-.45),to.y-size*Math.sin(angle-.45));ctx.lineTo(to.x-size*Math.cos(angle+.45),to.y-size*Math.sin(angle+.45));ctx.closePath();ctx.fill();};
+DRAW16.push((ctx,zoom)=>{
+  if(!S)return;
+  const a=S.armies.find(a=>a.id===army&&a.owner===S.player),tool=operationTool&&['offensive','fallback'].includes(operationTool.kind)?operationTool:null;
+  const lines=[];
+  if(a?.plan16?.offensive?.length)lines.push(['offensive',a.plan16.offensive]);
+  if(a?.plan16?.fallback?.length)lines.push(['fallback',a.plan16.fallback]);
+  if(tool)lines.push([tool.kind,tool.points]);
+  for(const [kind,points] of lines){
+    if(!points.length)continue;
+    const nodes=points.map(id=>centers[id]).filter(Boolean);
+    if(kind==='offensive'){
+      const troops=S.units.filter(u=>u.army===a?.id),start=troops.length?{x:total(troops.map(u=>centers[u.pid].x))/troops.length,y:total(troops.map(u=>centers[u.pid].y))/troops.length}:nodes[0];
+      const path=[start,...nodes];ctx.strokeStyle='#d0614cd9';ctx.fillStyle='#d0614cd9';ctx.lineWidth=5/zoom;ctx.lineJoin='round';
+      ctx.beginPath();path.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y));ctx.stroke();
+      if(path.length>1)arrowHead16(ctx,path.at(-2),path.at(-1),14/zoom);
+    }else{
+      ctx.strokeStyle='#7fb2d4';ctx.lineWidth=3/zoom;ctx.setLineDash([7/zoom,4/zoom]);ctx.beginPath();nodes.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y));ctx.stroke();ctx.setLineDash([]);
+      for(const p of nodes){ctx.fillStyle='#7fb2d4';ctx.beginPath();ctx.arc(p.x,p.y,3/zoom,0,Math.PI*2);ctx.fill();}
+    }
+  }
+  if(camera.zoom>1.55)for(const b of S.battles){
+    if(b.a!==S.player&&b.b!==S.player)continue;
+    const p=centers[b.pid];if(!p)continue;const w=22/zoom,y=p.y-4/zoom;
+    ctx.fillStyle='#2b201c';ctx.fillRect(p.x-w/2,y,w,3/zoom);ctx.fillStyle=b.a===S.player?'#d8b06a':'#c97a62';ctx.fillRect(p.x-w/2,y,w*(b.a===S.player?b.ratio:1-b.ratio),3/zoom);
+  }
+});
+ACTIONS16.push(async(action,p)=>{
+  switch(action){
+    case 'drawPlan16':beginPlanTool16(p.kind,p.army);return true;
+    case 'finishPlan16':if(operationTool){const {army:aid,kind,points}=operationTool;await cmd('planLine',{army:aid,kind,provinces:points});endOperationTool();renderPanel(true);toast(kind==='offensive'?'Ligne d’offensive enregistrée.':'Ligne de repli enregistrée.');}return true;
+    case 'planLine16':await cmd('planLine',{army:p.army,kind:p.kind,provinces:p.provinces});renderPanel(true);if(modalKind==='operations')showOperations();dirty=true;return true;
+    case 'planExecute16':await cmd('planExecute',{army:p.army,value:p.value});renderPanel(true);if(modalKind==='operations')showOperations();toast(p.value?'L’offensive est lancée.':'L’offensive est suspendue.');dirty=true;return true;
+  }
+  return false;
 });
 </script>
 </body>
