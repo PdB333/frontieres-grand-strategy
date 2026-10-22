@@ -533,3 +533,54 @@ ACTIONS16.push(async(action,p)=>{
   }
   return false;
 });
+
+/* ---- Government: national spirits, advisors and decisions ---- */
+TABS.decisions=['check','Décisions'];
+const spiritDef16=id=>(CATALOG.spirits||[]).find(s=>s.id===id);
+const advisorDef16=id=>(CATALOG.advisors||[]).find(a=>a.id===id);
+const effectText16=e=>{const labels={stabilityGrowth:'stabilité / jour',supportGrowth:'soutien / jour',consumer:'biens de consommation',organization:'organisation',airDefense:'défense antiaérienne',invasion:'débarquements',paradrop:'aeroporté',reliability:'fiabilité',attrition:'résistance à l’attrition',breakthrough:'percée',entrench:'retranchement',mines:'guerre des mines',convoy:'escorte des convois',resources:'extraction',ppGain:'pouvoir politique',recruitment:'incorporation',buildingSlots:'emplacements'};
+  return Object.entries(e||{}).map(([k,v])=>labels[k]?`${v>=0?'+':''}${Math.round(v*100)} % ${labels[k]}`:effectText({[k]:v})).join(' / ');};
+NATION_EXTRA16.push(()=>{
+  const c=nation(),list=c.spirits16||[];
+  return `<div class="sectionlabel">Esprits nationaux / ${list.length}</div>${list.length?`<div class="stack">${list.map(s=>{const d=spiritDef16(s.id);return d?`<div class="card"><div class="row between"><strong>${esc(d.name)}</strong>${s.until!==null?tag('JUSQU’AU '+dateText(s.until)):tag('PERMANENT','gold')}</div><p class="note" style="margin:5px 0">${esc(d.desc)}</p><small>${esc(effectText16(d.effect))}</small></div>`:'';}).join('')}</div>`:'<p class="note">Aucun trait national particulier.</p>'}`;
+});
+politicalExtension=function(){
+  const c=nation(),hired=Object.values(c.advisors16||{}).flat();
+  return `<div class="sectionlabel">Gouvernement</div><div class="card stack">${metric('Conseillers et chefs d’état-major',hired.length)}${hired.map(id=>`<small>${esc(advisorDef16(id)?.name||id)} : ${esc(effectText16(advisorDef16(id)?.effect))}</small>`).join('')}${btn('Nommer des conseillers '+icon('arrow'),'tab',{id:'politics'},'small')}${btn('Décisions nationales '+icon('arrow'),'tab',{id:'decisions'},'small')}${metric('Usure de guerre',Math.round(c.warFatigue||0)+' %')}${btn('Démobiliser en temps de paix / 40 PP','demobilize',{},'small')}</div>
+   <div class="sectionlabel">Vie politique / trajectoires alternatives</div><div class="card stack"><p class="note">La propagande politique déplace le soutien entre tendances. Une majorité de 55 % permet une réorientation institutionnelle ; un courant à 60 % face à un pouvoir instable peut déclencher une guerre civile.</p>${Object.keys(IDEO).map(k=>`<div><div class="row between"><span>${IDEO[k]}</span><strong>${Math.round(c.parties[k])} %</strong></div>${bar(c.parties[k],PARTYC[k])}<div class="row" style="margin:6px 0 9px">${btn('Campagne / 60 PP','politicalCampaign',{ideology:k},'small',c.politicalCooldown>S.day)}${k!==c.ideology&&c.parties[k]>=55?btn('Réorienter / 100 PP','confirmReform',{ideology:k},'small danger'):''}</div></div>`).join('')}</div>`;
+};
+panelExtras16('politics',()=>{
+  const c=nation(),slots=CATALOG.advisorSlots||{};
+  return `<div class="sectionlabel">Conseillers et état-major</div>${Object.entries(slots).map(([slot,[label,max]])=>{
+    const hired=c.advisors16?.[slot]||[],options=(CATALOG.advisors||[]).filter(a=>a.slot===slot&&!hired.includes(a.id)&&(!a.ideology||a.ideology.includes(c.ideology)));
+    return `<div class="card stack"><div class="row between"><strong>${esc(label)}</strong>${tag(hired.length+' / '+max)}</div>
+      ${hired.map(id=>{const a=advisorDef16(id);return `<div class="row between"><span>${esc(a?.name||id)}<small style="display:block">${esc(effectText16(a?.effect))}</small></span>${btn('Renvoyer','dismissAdvisor',{id},'small ghost')}</div>`;}).join('')}
+      <select id="advisor-${slot}">${options.map(a=>`<option value="${a.id}">${esc(a.name)} / ${a.cost} PP / ${esc(effectText16(a.effect))}</option>`).join('')}</select>
+      ${btn(hired.length>=max?'Remplacer le plus ancien':'Nommer','hireAdvisor16',{slot},'small',!options.length)}</div>`;
+  }).join('')}<p class="note">Chaque poste accorde ses bonus tant que le titulaire reste en fonction. Remplacer un conseiller ne rembourse pas son coût.</p>`;
+});
+PANELS16.decisions=function(){
+  const c=nation(),cats=CATALOG.decisionCategories||{},used=c.decisions16||{};
+  const reason=d=>{const r=d.requires||{},atWar=S.wars.some(w=>w.a===S.player||w.b===S.player),u=used[d.id];
+    if(r.country&&!r.country.includes(S.player))return null;
+    if(r.ideology&&!r.ideology.includes(c.ideology))return 'Régime incompatible.';
+    if(r.notIdeology?.includes(c.ideology))return 'Régime incompatible.';
+    if(r.war&&!atWar)return 'Exige une guerre en cours.';if(r.peace&&atWar)return 'Impossible en guerre.';
+    if(r.tension&&S.tension<r.tension&&!atWar)return 'Tension mondiale : '+r.tension+' % requis.';
+    if(r.tech&&!c.tech.includes(r.tech))return 'Technologie : '+techName16(r.tech)+'.';
+    if(r.spirit&&!(c.spirits16||[]).some(s=>s.id===r.spirit))return 'Condition nationale absente.';
+    if(r.faction&&c.faction==='none')return 'Exige une faction.';
+    if(r.overseas&&!owned().some(p=>p.overseas))return 'Aucun territoire d’outre-mer.';
+    if(d.once&&u)return 'Déjà prise.';
+    if(u&&d.cooldown&&u.day+d.cooldown>S.day)return 'Disponible dans '+(u.day+d.cooldown-S.day)+' jours.';
+    if(c.pp<d.cost)return 'Il faut '+d.cost+' PP.';return '';};
+  return panelHeader('Décisions','Mesures ponctuelles de gouvernement : économie, défense, politique et projets nationaux.')+
+    Object.entries(cats).map(([cat,label])=>{const list=(CATALOG.decisions||[]).filter(d=>d.category===cat).map(d=>[d,reason(d)]).filter(([,r])=>r!==null);
+      return list.length?`<div class="sectionlabel">${esc(label)}</div><div class="stack">${list.map(([d,r])=>{const sp=d.spirit?spiritDef16(d.spirit):null;return `<div class="card"><div class="row between"><strong>${esc(d.name)}</strong>${tag(d.cost+' PP',r?'':'gold')}</div><p class="note" style="margin:6px 0">${esc(d.desc)}</p>${Object.keys(d.effect||{}).length?`<small style="display:block">${esc(effectText16(d.effect))}</small>`:''}${sp?`<small style="display:block" class="gold">${esc(sp.name)}${d.days?' ('+d.days+' j)':''} : ${esc(effectText16(sp.effect))}</small>`:''}${d.cooldown?`<small style="display:block">Renouvelable après ${d.cooldown} jours</small>`:d.once?'<small style="display:block">Une seule fois</small>':''}<div style="margin-top:8px">${btn(r||'Prendre la décision','takeDecision',{id:d.id},'small wide',!!r)}</div></div>`;}).join('')}</div>`:'';}).join('');
+};
+direct.add('takeDecision');direct.add('dismissAdvisor');
+ACTIONS16.push(async(action,p)=>{
+  if(action==='hireAdvisor16'){const id=$('advisor-'+p.slot).value;await cmd('hireAdvisor',{id});renderPanel(true);toast('Conseiller nommé.');return true;}
+  return false;
+});
+renderRail();

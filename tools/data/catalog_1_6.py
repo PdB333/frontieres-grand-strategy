@@ -516,5 +516,158 @@ catalog['releasables'] = [
     rel('PAK', 'Pakistan', ['Pakistan'], 'authoritarian', '#5f8a5b'),
 ]
 
+# --- Government: advisors, national spirits, decisions -------------------------------
+catalog['advisorSlots'] = {'political': ['Conseiller politique', 3], 'army': ['Chef d’état-major de l’armée', 1],
+                           'navy': ['Chef d’état-major de la marine', 1], 'air': ['Chef d’état-major de l’air', 1],
+                           'command': ['Haut commandement', 3], 'theorist': ['Théoricien', 1]}
+
+def adv(aid, name, slot, cost, effect, ideology=None):
+    entry = {'id': aid, 'name': name, 'slot': slot, 'cost': cost, 'effect': effect}
+    if ideology:
+        entry['ideology'] = ideology
+    return entry
+
+catalog['advisors'] = [
+    adv('industrialist', 'Grand industriel', 'political', 100, {'construction': .1}),
+    adv('economist', 'Économiste réformateur', 'political', 90, {'production': .05, 'consumer': -.02}),
+    adv('scientist', 'Directeur de la recherche', 'political', 100, {'research': .08}),
+    adv('propagandist', 'Ministre de l’information', 'political', 80, {'supportGrowth': .4}),
+    adv('diplomat', 'Diplomate chevronné', 'political', 80, {'ppGain': .12}),
+    adv('logistician', 'Intendant général', 'political', 90, {'supply': .1}),
+    adv('spymaster', 'Chef du renseignement', 'political', 90, {'intel': .15}),
+    adv('prospector', 'Directeur des mines', 'political', 80, {'resources': .08}),
+    adv('reconciler', 'Médiateur social', 'political', 80, {'stabilityGrowth': .4}, ['democratic', 'authoritarian']),
+    adv('commissar', 'Commissaire politique', 'political', 80, {'stabilityGrowth': .3, 'organization': .03}, ['communist']),
+    adv('party_chief', 'Chef du parti unique', 'political', 80, {'supportGrowth': .3, 'ppGain': .05}, ['fascist']),
+    adv('army_offense', 'Chef d’état-major offensif', 'army', 120, {'attack': .08}),
+    adv('army_defense', 'Chef d’état-major défensif', 'army', 120, {'defense': .08}),
+    adv('army_org', 'Chef d’état-major organisateur', 'army', 120, {'organization': .1}),
+    adv('army_mobile', 'Maître de la manœuvre', 'army', 120, {'speed': .06, 'breakthrough': .06}),
+    adv('navy_fleet', 'Amiral d’escadre', 'navy', 110, {'navy': .1}),
+    adv('navy_raider', 'Amiral de la guerre de course', 'navy', 110, {'raiding': .2}),
+    adv('navy_convoy', 'Amiral des convois', 'navy', 110, {'convoy': .25}),
+    adv('navy_mines', 'Spécialiste de la guerre des mines', 'navy', 100, {'mines': .4}),
+    adv('air_fighter', 'Chef de la chasse', 'air', 110, {'air': .1}),
+    adv('air_bomber', 'Chef du bombardement', 'air', 110, {'bombing': .12}),
+    adv('air_defense', 'Chef de la défense aérienne', 'air', 100, {'airDefense': .25}),
+    adv('air_airborne', 'Chef des troupes aéroportées', 'air', 100, {'paradrop': .25}),
+    adv('hc_infantry', 'Expert de l’infanterie', 'command', 90, {'defense': .04, 'attack': .03}),
+    adv('hc_armor', 'Expert des blindés', 'command', 90, {'armor': .1, 'breakthrough': .04}),
+    adv('hc_artillery', 'Expert de l’artillerie', 'command', 90, {'attack': .05}),
+    adv('hc_planner', 'Planificateur', 'command', 90, {'planning': .1}),
+    adv('hc_amphibious', 'Expert des opérations amphibies', 'command', 90, {'invasion': .2}),
+    adv('hc_climate', 'Expert des climats extrêmes', 'command', 90, {'attrition': .25}),
+    adv('hc_engineer', 'Inspecteur du génie', 'command', 90, {'entrench': .2, 'defense': .02}),
+    adv('theorist_army', 'Théoricien de la guerre terrestre', 'theorist', 90, {'research': .03, 'planning': .04}),
+    adv('theorist_navy', 'Théoricien naval', 'theorist', 90, {'research': .02, 'navy': .05}),
+    adv('theorist_air', 'Théoricien de l’aviation', 'theorist', 90, {'research': .02, 'air': .05}),
+]
+
+def spirit(sid, name, desc, effect):
+    return {'id': sid, 'name': name, 'desc': desc, 'effect': effect}
+
+catalog['spirits'] = [
+    spirit('isolation', 'Isolationnisme', 'L’opinion refuse tout engagement extérieur.', {'consumer': .05, 'stabilityGrowth': .2, 'supportGrowth': -.3}),
+    spirit('maginot', 'Mentalité défensive', 'Les fortifications rassurent plus que les plans d’offensive.', {'defense': .1, 'attack': -.05, 'entrench': .2}),
+    spirit('divided', 'Société divisée', 'Grèves et affrontements politiques minent le gouvernement.', {'stabilityGrowth': -.3}),
+    spirit('empire', 'Ressources impériales', 'Les routes de l’empire acheminent matières premières et convois.', {'resources': .1, 'convoy': .15}),
+    spirit('purges', 'Purges de l’armée', 'L’encadrement militaire est décimé par la répression.', {'organization': -.15, 'planning': -.1}),
+    spirit('plans', 'Planification industrielle', 'Les plans quinquennaux concentrent l’investissement.', {'production': .05, 'construction': .1}),
+    spirit('rearmament', 'Réarmement accéléré', 'L’industrie est orientée vers l’armement.', {'production': .08, 'consumer': -.03}),
+    spirit('colonial', 'Ambitions coloniales', 'Le régime cherche des victoires outre-mer.', {'attack': .03}),
+    spirit('zaibatsu', 'Conglomérats industriels', 'Les grands groupes dominent l’économie.', {'production': .05}),
+    spirit('rivalry', 'Rivalité armée-marine', 'Deux états-majors se disputent les crédits.', {'research': -.05}),
+    spirit('warlords', 'Seigneurs de la guerre', 'L’autorité centrale reste contestée dans les provinces.', {'stabilityGrowth': -.3, 'organization': -.1, 'recruitment': .2}),
+    spirit('rationalization', 'Rationalisation industrielle', 'Normes et méthodes modernes dans les ateliers.', {'production': .08}),
+    spirit('export_drive', 'Campagne d’exportation', 'Les entreprises sont incitées à vendre à l’étranger.', {'construction': .04}),
+    spirit('prospecting', 'Prospection minière', 'Des géologues ouvrent de nouveaux gisements.', {'resources': .1}),
+    spirit('officer_schools', 'Écoles d’officiers', 'Une nouvelle génération de cadres est formée.', {'organization': .05}),
+    spirit('winter_gear', 'Équipement d’hiver', 'Vêtements et lubrifiants adaptés au grand froid.', {'attrition': .25}),
+    spirit('emergency', 'Production d’urgence', 'Les usines tournent jour et nuit.', {'production': .12}),
+    spirit('scorched', 'Terre brûlée', 'Rien ne doit tomber intact aux mains de l’ennemi.', {'defense': .05}),
+    spirit('social_reforms', 'Réformes sociales', 'Congés et protections apaisent le pays.', {'consumer': .02, 'stabilityGrowth': .2}),
+    spirit('cult', 'Culte de la personnalité', 'Le chef incarne la nation.', {'ppGain': .15, 'stabilityGrowth': .2, 'research': -.03}),
+    spirit('purged_army', 'Armée épurée', 'La loyauté prime sur la compétence.', {'organization': -.1}),
+    spirit('free_press', 'Presse libre', 'Le débat public stimule les idées.', {'research': .03}),
+    spirit('national_union', 'Union nationale', 'Les partis font bloc derrière le gouvernement.', {'supportGrowth': .3}),
+    spirit('arms_race', 'Course aux armements', 'Chaque puissance surveille l’arsenal des autres.', {'production': .05}),
+    spirit('foreign_advisers', 'Conseillers étrangers', 'Des officiers alliés forment l’état-major.', {'planning': .05}),
+    spirit('popular_front', 'Front populaire', 'Les réformes sociales l’emportent sur la production.', {'stabilityGrowth': .3, 'production': -.05}),
+    spirit('four_year', 'Plan de quatre ans', 'Autarcie, carburants synthétiques et grands travaux.', {'production': .05, 'resources': .1, 'construction': .05}),
+    spirit('arsenal', 'Arsenal des démocraties', 'L’industrie civile se convertit massivement.', {'production': .1}),
+    spirit('mare_nostrum', 'Mare Nostrum', 'La marine domine la Méditerranée.', {'navy': .08}),
+    spirit('burma_road', 'Route d’approvisionnement', 'Une route lointaine maintient l’aide étrangère.', {'supply': .1, 'resources': .05}),
+    spirit('united_front', 'Front uni', 'Les factions rivales combattent l’envahisseur ensemble.', {'stabilityGrowth': .2, 'organization': .05}),
+]
+catalog['startSpirits'] = {
+    '1936': {'USA': ['isolation'], 'FRA': ['maginot', 'divided'], 'GBR': ['empire'], 'SOV': ['purges', 'plans'],
+             'GER': ['rearmament'], 'ITA': ['colonial'], 'JPN': ['zaibatsu', 'rivalry'], 'CHI': ['warlords']},
+    '1939': {'USA': ['isolation'], 'FRA': ['maginot'], 'GBR': ['empire'], 'SOV': ['purged_army', 'plans'],
+             'GER': ['rearmament', 'four_year'], 'ITA': ['colonial'], 'JPN': ['zaibatsu', 'rivalry'], 'CHI': ['united_front']},
+}
+
+def dec(did, name, category, cost, desc, requires=None, effect=None, spirit_id=None, days=None, cooldown=0, once=False,
+        special=None, remove=None):
+    entry = {'id': did, 'name': name, 'category': category, 'cost': cost, 'desc': desc, 'requires': requires or {},
+             'effect': effect or {}, 'cooldown': cooldown, 'once': once}
+    if spirit_id:
+        entry['spirit'] = spirit_id
+        entry['days'] = days
+    if special:
+        entry['special'] = special
+    if remove:
+        entry['removeSpirit'] = remove
+    return entry
+
+catalog['decisionCategories'] = {'economy': 'Économie', 'military': 'Armée et défense', 'politics': 'Politique intérieure',
+                                 'foreign': 'Affaires étrangères', 'national': 'Décisions nationales'}
+catalog['decisions'] = [
+    dec('war_bonds', 'Emprunt de guerre', 'economy', 40, 'Un emprunt patriotique finance l’effort de guerre.', {'war': True}, {'support': 4}, cooldown=180, special={'treasury': 300}),
+    dec('gold_reserves', 'Mobiliser les réserves d’or', 'economy', 30, 'Les réserves de la banque centrale paient les importations.', {}, {}, once=True, special={'treasury': 600}),
+    dec('factory_conversion', 'Reconversion d’usines civiles', 'economy', 70, 'Deux usines civiles passent à la production militaire.', {'war': True}, cooldown=365, special={'convert': 2}),
+    dec('rationalize', 'Rationalisation industrielle', 'economy', 80, 'Six mois de méthodes modernes dans les ateliers.', {}, spirit_id='rationalization', days=180, cooldown=365),
+    dec('export_drive', 'Campagne d’exportation', 'economy', 40, 'Le commerce extérieur finance les chantiers.', {'peace': True}, spirit_id='export_drive', days=120, cooldown=240),
+    dec('prospecting', 'Prospection minière', 'economy', 50, 'Une année d’exploration géologique.', {}, spirit_id='prospecting', days=365, cooldown=540),
+    dec('public_works', 'Grands travaux d’infrastructure', 'economy', 60, 'Routes et voies ferrées dans cinq provinces.', {}, {'stability': 2}, cooldown=365, special={'infra': 5}),
+    dec('synthetic_program', 'Programme de carburant synthétique', 'economy', 70, 'Une raffinerie synthétique dans l’État de la capitale.', {'tech': 'synthetic1'}, once=True, special={'refinery': 1}),
+    dec('mobilize_reserves', 'Rappel des réservistes', 'military', 50, 'Les classes de réserve rejoignent les dépôts.', {'tension': 60}, cooldown=180, special={'manpower': .2}),
+    dec('officer_training', 'Écoles d’officiers', 'military', 50, 'Former les cadres de l’armée de demain.', {}, {'xp': 25}, 'officer_schools', 180, cooldown=365),
+    dec('war_exercises', 'Grandes manœuvres', 'military', 40, 'Des exercices à grande échelle aguerrissent l’armée.', {'peace': True}, {'xp': 20, 'stability': -1}, cooldown=180),
+    dec('winter_gear', 'Équipement d’hiver', 'military', 40, 'Préparer l’armée aux campagnes hivernales.', {}, spirit_id='winter_gear', days=365, cooldown=400),
+    dec('border_forts', 'Fortifier la frontière', 'military', 60, 'Des ouvrages défensifs face aux voisins menaçants.', {'tension': 30}, cooldown=365, special={'forts': 6}),
+    dec('coastal_defense', 'Défense côtière', 'military', 50, 'Batteries et blockhaus sur quatre côtes exposées.', {}, cooldown=365, special={'coastal': 4}),
+    dec('air_defense_program', 'Défense passive', 'military', 50, 'Batteries antiaériennes autour des grandes villes.', {}, cooldown=365, special={'aa': 4}),
+    dec('emergency_production', 'Production d’urgence', 'military', 60, 'Deux mois de production à marche forcée.', {'war': True}, {'stability': -3}, 'emergency', 60, cooldown=150),
+    dec('scorched_earth', 'Terre brûlée', 'military', 40, 'Détruire les installations au contact de l’ennemi.', {'war': True}, spirit_id='scorched', days=120, cooldown=365, special={'scorch': True}),
+    dec('militia_call', 'Levée des milices', 'military', 30, 'Quatre brigades de garnison défendent la capitale.', {'war': True}, cooldown=365, special={'militia': 4}),
+    dec('propaganda', 'Campagne de propagande', 'politics', 40, 'Affiches, radio et cinéma mobilisent l’opinion.', {}, {'support': 8}, cooldown=60),
+    dec('sacred_union', 'Union sacrée', 'politics', 60, 'La nation se rassemble face au danger.', {'war': True}, {'stability': 10, 'support': 10}, cooldown=365),
+    dec('crackdown', 'Répression des opposants', 'politics', 50, 'Arrestations et censure étouffent l’opposition.', {'notIdeology': ['democratic']}, {'stability': 6}, cooldown=120, special={'unrest': -10, 'party': 5}),
+    dec('reforms', 'Réformes sociales', 'politics', 50, 'Congés payés et protections sociales.', {'ideology': ['democratic']}, {'stability': 5}, 'social_reforms', 365, cooldown=400, special={'legitimacy': 5}),
+    dec('personality_cult', 'Culte de la personnalité', 'politics', 80, 'Le chef devient l’incarnation de l’État.', {'ideology': ['fascist', 'communist']}, spirit_id='cult', once=True),
+    dec('army_purge', 'Épuration de l’armée', 'politics', 50, 'La fidélité politique avant tout.', {'ideology': ['fascist', 'communist']}, {'stability': 5}, 'purged_army', 365, once=True),
+    dec('free_press', 'Liberté de la presse', 'politics', 30, 'Garantir l’indépendance des journaux.', {'ideology': ['democratic']}, {'stability': 2}, 'free_press', once=True),
+    dec('national_union', 'Gouvernement d’union nationale', 'politics', 70, 'Tous les partis entrent au gouvernement.', {'war': True, 'ideology': ['democratic']}, spirit_id='national_union', once=True),
+    dec('international_conference', 'Conférence internationale', 'foreign', 60, 'Une conférence pour apaiser les tensions.', {'peace': True, 'ideology': ['democratic']}, {'tension': -5}, cooldown=180),
+    dec('arms_race', 'Course aux armements', 'foreign', 40, 'Annoncer un grand programme d’armement.', {}, {'tension': 3}, 'arms_race', 180, cooldown=365),
+    dec('colonial_recruitment', 'Recrutement colonial', 'foreign', 50, 'Des régiments levés outre-mer.', {'overseas': True}, cooldown=365, special={'colonial': True}),
+    dec('foreign_advisers', 'Conseillers militaires étrangers', 'foreign', 40, 'Des officiers alliés forment votre état-major.', {'faction': True}, {'xp': 15}, 'foreign_advisers', 180, cooldown=365),
+    dec('maginot_extension', 'Prolonger la ligne fortifiée', 'national', 80, 'Étendre les ouvrages le long de la frontière nord-est.', {'country': ['FRA'], 'tension': 20}, once=True, special={'forts': 10, 'fortLevel': 2}),
+    dec('popular_front', 'Réformes du Front populaire', 'national', 60, 'Semaine de quarante heures et conventions collectives.', {'country': ['FRA'], 'peace': True, 'ideology': ['democratic']}, {'stability': 8}, 'popular_front', 365, once=True, remove=['divided']),
+    dec('four_year_plan', 'Plan de quatre ans', 'national', 100, 'Préparer l’économie à la guerre en quatre ans.', {'country': ['GER']}, spirit_id='four_year', once=True),
+    dec('westwall', 'Mur de l’Ouest', 'national', 80, 'Fortifier la frontière occidentale.', {'country': ['GER']}, once=True, special={'forts': 8, 'fortLevel': 2, 'facing': ['FRA', 'BEL', 'HOL', 'LUX']}),
+    dec('imperial_conference', 'Conférence impériale', 'national', 60, 'Resserrer les liens avec les dominions.', {'country': ['GBR']}, once=True, special={'dominions': True}),
+    dec('radar_chain', 'Chaîne de radars côtiers', 'national', 60, 'Un réseau de stations de détection sur la côte.', {'country': ['GBR'], 'tech': 'radar1'}, once=True, special={'radar': 4}),
+    dec('five_year_plan', 'Troisième plan quinquennal', 'national', 100, 'Trois combinats civils et trois arsenaux.', {'country': ['SOV']}, once=True, special={'build': {'civ': 3, 'mil': 3}}),
+    dec('evacuate_industry', 'Évacuation industrielle vers l’Est', 'national', 80, 'Démonter les usines de l’ouest et les remonter loin du front.', {'country': ['SOV'], 'war': True}, once=True, special={'evacuate': 8}),
+    dec('end_isolation', 'Fin de l’isolationnisme', 'national', 100, 'L’opinion accepte l’engagement international.', {'country': ['USA'], 'tension': 50, 'spirit': 'isolation'}, {'support': 15}, once=True, remove=['isolation']),
+    dec('arsenal_of_democracy', 'Arsenal des démocraties', 'national', 120, 'Convertir l’industrie civile en arsenal.', {'country': ['USA'], 'tension': 40}, spirit_id='arsenal', once=True),
+    dec('mare_nostrum', 'Mare Nostrum', 'national', 80, 'Faire de la Méditerranée une mer italienne.', {'country': ['ITA']}, spirit_id='mare_nostrum', once=True),
+    dec('zaibatsu_mobilization', 'Mobilisation des conglomérats', 'national', 80, 'Les zaibatsu construisent trois arsenaux.', {'country': ['JPN']}, once=True, special={'build': {'mil': 3}}),
+    dec('united_front', 'Front uni', 'national', 60, 'Suspendre la guerre civile face à l’invasion.', {'country': ['CHI'], 'war': True}, {'stability': 10}, 'united_front', once=True, remove=['warlords']),
+    dec('supply_road', 'Route d’approvisionnement', 'national', 50, 'Ouvrir une route vers les ports alliés.', {'country': ['CHI'], 'war': True}, spirit_id='burma_road', once=True),
+    dec('central_industrial_region', 'Région industrielle centrale', 'national', 80, 'Un pôle industriel à l’abri des frontières.', {'country': ['POL']}, once=True, special={'build': {'civ': 2, 'mil': 2}}),
+]
+
 CATALOG.write_text(json.dumps(catalog, separators=(',', ':'), ensure_ascii=False), encoding='utf-8')
 print('catalog keys', sorted(catalog))

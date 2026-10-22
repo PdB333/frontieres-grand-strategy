@@ -17,7 +17,7 @@ function installSystems16(Engine,H){
   const RESOURCES=['steel','oil','rubber','aluminium','tungsten','chromium'];
   const NEW_PROVINCE_KEYS=['refinery','aa','coastalFort'];
   // Bonus keys added in 1.6. Older saves receive them at 0 during migration.
-  const NEW_BONUS=['buildingSlots','recruitment','ppGain','consumer','organization','airDefense','invasion','paradrop','reliability','attrition','breakthrough','entrench','mines','convoy','naval','casualties','resources'];
+  const NEW_BONUS=['buildingSlots','recruitment','ppGain','consumer','organization','airDefense','invasion','paradrop','reliability','attrition','breakthrough','entrench','mines','convoy','naval','casualties','resources','stabilityGrowth','supportGrowth'];
   Engine.RESOURCES16=RESOURCES;
   Engine.NEW_BONUS16=NEW_BONUS;
   const law=(catalog,kind,id)=>catalog.laws?.[kind]?.find(l=>l.id===id)||catalog.laws?.[kind]?.[0]||{};
@@ -181,6 +181,9 @@ function installSystems16(Engine,H){
       for(const k of RESOURCES)if(c.stats)c.stats[k]??=0;
       c.designs??=[];c.lines??={};c.modernize??={};c.eqStats??={};
       s.mines16??={};s.invasions16??=[];s.seaControl16??={};s.airControl16??={};
+      c.spirits16??=[];c.advisors16??={};c.decisions16??={};
+      if(c.advisor){const map={economy:['construction',.12,'industrialist'],science:['research',.10,'scientist'],logistics:['supply',.12,'logistician']}[c.advisor];
+        if(map&&this.catalog.advisors){c.bonus[map[0]]-=map[1];c.advisor=null;c.advisors16.political??=[];if(!c.advisors16.political.includes(map[2])){c.advisors16.political.push(map[2]);this.applyBonus16(c,this.catalog.advisors.find(a=>a.id===map[2]).effect,1);}}}
       for(const key in this.catalog.equipment){c.stock[key]??=0;c.allocation[key]??=0;c.efficiency[key]??=.45;}
       for(const t of [...c.templates,...c.training.map(x=>x.template)])if(t.bat&&t.inf===undefined)Object.assign(t,Engine.legacyFields16(t.bat,t.sup||[]));
     }
@@ -196,6 +199,7 @@ function installSystems16(Engine,H){
       }
       s.stateExtra=this.computeStateExtra();
       this.startingEquipment16();
+      this.startGovernment16();
     }
     s.release=RELEASE;
   };
@@ -1632,6 +1636,139 @@ function installSystems16(Engine,H){
     for(const u of state.units)if(u.lent16)assert(state.countries[u.lent16.home]&&['volunteer','expedition'].includes(u.lent16.kind),'Division prêtée invalide.');
     const conf=state.conference16;
     if(conf){assert(Array.isArray(conf.losers)&&Array.isArray(conf.participants)&&Array.isArray(conf.states),'Conférence invalide.');for(const r of conf.states)assert(Array.isArray(r.provinces)&&r.provinces.every(pid=>this.prov[pid]),'État de conférence invalide.');}
+  });
+
+  // ---------------------------------------------------------------------------
+  // Government: advisors by office, national spirits and decisions.
+  // ---------------------------------------------------------------------------
+  Engine.prototype.applyBonus16=function(c,effect,sign=1){
+    for(const [k,v] of Object.entries(effect||{}))if(k in c.bonus)c.bonus[k]=clamp(c.bonus[k]+sign*v,-.5,5);
+  };
+  Engine.prototype.hasSpirit16=function(c,id){return (c.spirits16||[]).some(s=>s.id===id);};
+  Engine.prototype.addSpirit16=function(id,spiritId,days=null){
+    const c=this.nation(id),def=(this.catalog.spirits||[]).find(s=>s.id===spiritId);if(!c||!def)return;
+    c.spirits16??=[];const existing=c.spirits16.find(s=>s.id===spiritId);
+    if(existing){existing.until=days?Math.max(existing.until??0,this.s.day+days):null;return;}
+    c.spirits16.push({id:spiritId,until:days?this.s.day+days:null});this.applyBonus16(c,def.effect,1);
+    if(id===this.s.player)this.log('Esprit national : '+def.name+'.','event');
+  };
+  Engine.prototype.removeSpirit16=function(id,spiritId){
+    const c=this.nation(id),def=(this.catalog.spirits||[]).find(s=>s.id===spiritId);if(!c||!def||!this.hasSpirit16(c,spiritId))return;
+    c.spirits16=c.spirits16.filter(s=>s.id!==spiritId);this.applyBonus16(c,def.effect,-1);
+  };
+  Engine.onDay16(function(){
+    for(const id of this.active()){
+      const c=this.nation(id);
+      for(const s of [...(c.spirits16||[])])if(s.until!==null&&s.until<=this.s.day)this.removeSpirit16(id,s.id);
+      if(c.bonus.stabilityGrowth)c.stability=clamp(c.stability+c.bonus.stabilityGrowth*.05,0,100);
+      if(c.bonus.supportGrowth)c.support=clamp(c.support+c.bonus.supportGrowth*.05,0,100);
+    }
+  });
+  const ADVISOR_SLOTS=()=>CATALOG.advisorSlots||{};
+  Engine.prototype.hireAdvisor16=function(id,advisorId,replace=null){
+    const c=this.nation(id),a=(this.catalog.advisors||[]).find(x=>x.id===advisorId);assert(a,'Conseiller inconnu.');
+    assert(!a.ideology||a.ideology.includes(c.ideology),'Ce conseiller ne sert pas ce régime.');
+    c.advisors16??={};const list=c.advisors16[a.slot]??=[];assert(!list.includes(advisorId),'Conseiller déjà nommé.');
+    const max=ADVISOR_SLOTS()[a.slot]?.[1]||1;
+    if(list.length>=max){const old=replace&&list.includes(replace)?replace:list[0];this.dismissAdvisor16(id,old);}
+    c.advisors16[a.slot].push(advisorId);this.applyBonus16(c,a.effect,1);
+  };
+  Engine.prototype.dismissAdvisor16=function(id,advisorId){
+    const c=this.nation(id),a=(this.catalog.advisors||[]).find(x=>x.id===advisorId);if(!a||!c.advisors16?.[a.slot]?.includes(advisorId))return;
+    c.advisors16[a.slot]=c.advisors16[a.slot].filter(x=>x!==advisorId);this.applyBonus16(c,a.effect,-1);
+  };
+  Engine.command16('hireAdvisor',function(p,id,c){
+    const a=(this.catalog.advisors||[]).find(x=>x.id===p.id);assert(a,'Conseiller inconnu.');pp(c,a.cost);
+    this.hireAdvisor16(id,p.id,p.replace||null);c.pp-=a.cost;
+  });
+  Engine.command16('dismissAdvisor',function(p,id){this.dismissAdvisor16(id,p.id);});
+  // 1.5 single council: mapped to the matching political advisor.
+  Engine.command16('advisor',function(p,id,c){
+    const map={economy:'industrialist',science:'scientist',logistics:'logistician'};
+    for(const old of Object.values(map))this.dismissAdvisor16(id,old);
+    if(p.kind){assert(map[p.kind],'Conseil inconnu.');pp(c,80);this.hireAdvisor16(id,map[p.kind]);c.pp-=80;}
+    c.advisor=null;
+  });
+  Engine.prototype.decisionReason16=function(id,d){
+    const c=this.nation(id),r=d.requires||{},used=c.decisions16?.[d.id],atWar=this.enemies(id).length>0;
+    if(r.country&&!r.country.includes(id))return 'Réservée à d’autres pays.';
+    if(r.ideology&&!r.ideology.includes(c.ideology))return 'Régime incompatible.';
+    if(r.notIdeology?.includes(c.ideology))return 'Régime incompatible.';
+    if(r.war&&!atWar)return 'Exige une guerre en cours.';
+    if(r.peace&&atWar)return 'Impossible en temps de guerre.';
+    if(r.tension&&this.s.tension<r.tension&&!atWar)return 'Tension mondiale insuffisante ('+r.tension+' %).';
+    if(r.tech&&!c.tech.includes(r.tech))return 'Technologie requise : '+(this.tech(r.tech)?.name||r.tech)+'.';
+    if(r.spirit&&!this.hasSpirit16(c,r.spirit))return 'Condition nationale absente.';
+    if(r.faction&&c.faction==='none')return 'Exige une faction.';
+    if(r.overseas&&!this.ownedToday16(id).some(p=>p.overseas))return 'Aucun territoire d’outre-mer.';
+    if(d.once&&used)return 'Décision déjà prise.';
+    if(used&&d.cooldown&&used.day+d.cooldown>this.s.day)return 'Disponible dans '+(used.day+d.cooldown-this.s.day)+' jours.';
+    if(c.pp<d.cost)return 'Il faut '+d.cost+' points politiques.';
+    return '';
+  };
+  Engine.prototype.decisionSpecial16=function(id,sp){
+    const c=this.nation(id),s=this.s,owned=this.owned(id),byVp=(a,b)=>b.vp-a.vp||a.id-b.id;
+    if(sp.treasury&&c.macro)c.macro.treasury+=sp.treasury;
+    if(sp.manpower)c.manpower+=c.identity.manpower*sp.manpower;
+    if(sp.unrest&&c.politics)c.politics.unrest=clamp(c.politics.unrest+sp.unrest,0,100);
+    if(sp.legitimacy&&c.politics)c.politics.legitimacy=clamp(c.politics.legitimacy+sp.legitimacy,0,100);
+    if(sp.party){c.parties[c.ideology]+=sp.party;const t=sum(Object.values(c.parties));for(const k in c.parties)c.parties[k]*=100/t;}
+    if(sp.convert){let n=sp.convert;for(const p of owned.filter(p=>s.provinces[p.id].civ>0).sort((a,b)=>s.provinces[b.id].civ-s.provinces[a.id].civ)){while(n>0&&s.provinces[p.id].civ>0){s.provinces[p.id].civ--;s.provinces[p.id].mil++;n--;}if(!n)break;}}
+    if(sp.infra)for(const p of owned.filter(p=>s.provinces[p.id].infra<5).sort(byVp).slice(0,sp.infra))s.provinces[p.id].infra++;
+    if(sp.refinery){const cap=this.cap(id);s.provinces[cap].refinery++;const sid=this.stateId(cap);s.stateExtra[sid]=Math.max(s.stateExtra[sid],this.stateUsed(sid)-this.states16.list[sid].slots);}
+    if(sp.forts){
+      const facing=sp.facing?new Set(sp.facing):null;
+      const border=owned.filter(p=>p.neighbors.some(n=>{const k=s.provinces[n].ctrl;return k!==id&&!this.allies(id,k)&&(!facing||facing.has(k));})).filter(p=>s.provinces[p.id].fort<5).sort(byVp);
+      for(const p of border.slice(0,sp.forts))s.provinces[p.id].fort=Math.min(5,s.provinces[p.id].fort+(sp.fortLevel||1));
+    }
+    if(sp.coastal)for(const p of owned.filter(p=>p.coast&&s.provinces[p.id].coastalFort<5).sort(byVp).slice(0,sp.coastal))s.provinces[p.id].coastalFort++;
+    if(sp.aa)for(const p of owned.filter(p=>s.provinces[p.id].aa<5).sort(byVp).slice(0,sp.aa))s.provinces[p.id].aa++;
+    if(sp.radar)for(const p of owned.filter(p=>p.coast&&s.provinces[p.id].radar<3).sort((a,b)=>distance(a,this.prov[this.cap(id)])-distance(b,this.prov[this.cap(id)])).slice(0,sp.radar))s.provinces[p.id].radar++;
+    if(sp.scorch)for(const p of owned)if(p.neighbors.some(n=>this.war(id,s.provinces[n].ctrl)))s.provinces[p.id].damage=clamp(s.provinces[p.id].damage+.3,0,.85);
+    if(sp.militia){const t=c.templates.find(t=>t.id==='garrison')||c.templates[0],a=this.s.armies.find(a=>a.owner===id);for(let i=0;i<sp.militia;i++){const u=this.spawn(id,this.cap(id),t,60);u.strength=.7;if(a)u.army=a.id;}}
+    if(sp.colonial)c.manpower+=owned.filter(p=>p.overseas).length*2000;
+    if(sp.dominions)for(const k of ['CAN','AST','NZL','SAF','RAJ']){const d=this.nation(k);if(!d?.alive)continue;c.relations[k]=clamp((c.relations[k]||0)+30,-100,100);if(c.faction!=='none'&&['none','Commonwealth'].includes(d.faction))d.faction=c.faction;}
+    if(sp.build)for(const [kind,n] of Object.entries(sp.build)){
+      const sites=owned.filter(p=>this.isCore(id,p.id)).sort(byVp);
+      for(let i=0;i<n&&sites.length;i++){const p=sites[i%Math.min(sites.length,6)];s.provinces[p.id][kind]++;const sid=this.stateId(p.id);s.stateExtra[sid]=Math.max(s.stateExtra[sid],this.stateUsed(sid)-this.states16.list[sid].slots);}
+    }
+    if(sp.evacuate){
+      let n=sp.evacuate;const east=owned.filter(p=>p.x>55&&this.isCore(id,p.id)).sort(byVp);
+      if(east.length)for(const p of owned.filter(p=>p.x<40).sort((a,b)=>(s.provinces[b.id].civ+s.provinces[b.id].mil)-(s.provinces[a.id].civ+s.provinces[a.id].mil))){
+        for(const kind of ['mil','civ'])while(n>0&&s.provinces[p.id][kind]>0){s.provinces[p.id][kind]--;const to=east[n%east.length];s.provinces[to.id][kind]++;const sid=this.stateId(to.id);s.stateExtra[sid]=Math.max(s.stateExtra[sid],this.stateUsed(sid)-this.states16.list[sid].slots);n--;}
+        if(!n)break;
+      }
+    }
+  };
+  Engine.prototype.takeDecision16=function(id,decisionId){
+    const c=this.nation(id),d=(this.catalog.decisions||[]).find(x=>x.id===decisionId);assert(d,'Décision inconnue.');
+    const reason=this.decisionReason16(id,d);assert(!reason,reason);
+    c.pp-=d.cost;c.decisions16??={};c.decisions16[d.id]={day:this.s.day,uses:(c.decisions16[d.id]?.uses||0)+1};
+    this.effect(id,d.effect||{});
+    if(d.spirit)this.addSpirit16(id,d.spirit,d.days||null);
+    for(const r of d.removeSpirit||[])this.removeSpirit16(id,r);
+    if(d.special)this.decisionSpecial16(id,d.special);
+    if(id===this.s.player)this.log('Décision : '+d.name+'.','success');
+    this.updateStats();
+  };
+  Engine.command16('takeDecision',function(p,id){this.takeDecision16(id,p.id);});
+  // Focus trees may grant or remove spirits and advisors-like modifiers.
+  Engine.prototype.focusCompleted16=function(id,f){
+    for(const s of f.spirits||[])this.addSpirit16(id,s,f.spiritDays||null);
+    for(const s of f.removeSpirits||[])this.removeSpirit16(id,s);
+    if(f.decision)this.nation(id).decisions16=this.nation(id).decisions16||{};
+  };
+  Engine.prototype.startGovernment16=function(){
+    const scenario=this.s.historyState?.scenario||'1936';
+    for(const [id,list] of Object.entries(this.catalog.startSpirits?.[scenario]||{}))if(this.nation(id)?.alive)for(const sp of list)this.addSpirit16(id,sp,sp==='purges'?1100:null);
+  };
+  Engine.invariant16(function(state){
+    const spirits=new Set((this.catalog.spirits||[]).map(s=>s.id)),advisors=new Map((this.catalog.advisors||[]).map(a=>[a.id,a]));
+    for(const c of Object.values(state.countries)){
+      assert(Array.isArray(c.spirits16)&&c.spirits16.every(s=>spirits.has(s.id)&&(s.until===null||Number.isInteger(s.until))),'Esprit national invalide.');
+      assert(c.advisors16&&Object.entries(c.advisors16).every(([slot,list])=>Array.isArray(list)&&list.length<=(this.catalog.advisorSlots?.[slot]?.[1]||1)&&list.every(a=>advisors.get(a)?.slot===slot)),'Conseillers invalides.');
+      assert(c.decisions16&&typeof c.decisions16==='object','Décisions invalides.');
+    }
   });
 
   // ---------------------------------------------------------------------------
