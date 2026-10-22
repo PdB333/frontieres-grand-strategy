@@ -249,8 +249,8 @@ PANELS16.research=function(){
     <div class="stack">${c.research.map(r=>{const t=technologies().find(t=>t.id===r.id);return `<div class="card"><div class="row between"><h4 style="font-size:12px">${esc(t.name)}</h4>${btn('×','cancelResearch',{id:r.id},'small ghost')}</div><div style="margin:8px 0">${bar(r.progress/t.days*100)}</div><small>${Math.floor(r.progress)} / ${t.days} points</small></div>`;}).join('')||'<div class="empty">Vos équipes attendent un programme de recherche.</div>'}</div>
     <div class="sectionlabel">Domaine technologique</div><select id="tech-group">${Object.entries(TECHGROUPS).map(([id,n])=>`<option value="${id}" ${techGroup===id?'selected':''}>${esc(n)}</option>`).join('')}</select>
     <div class="stack" style="margin-top:13px">${technologies().filter(t=>t.group===techGroup).sort((a,b)=>a.year-b.year||a.name.localeCompare(b.name,'fr')).map(t=>{
-      const done=c.tech.includes(t.id),running=c.research.some(r=>r.id===t.id),ready=t.req.every(r=>c.tech.includes(r)),year=1936+S.day/365.25;
-      return `<div class="card tech-card ${done?'done':''}"><div class="row between"><h4>${esc(t.name)}</h4>${tag(done?'ACQUIS':String(t.year),done?'good':'')}</div><p class="note" style="margin:7px 0">${effectText(t.effect)}</p>${(t.unlock||[]).length?`<small style="display:block" class="gold">${t.unlock.map(u=>esc(unlockText(u))).join(' / ')}</small>`:''}<small>${t.days} points${t.year>year?' / en avance sur son temps':''}</small>${t.req.length?`<small style="display:block">Prérequis : ${t.req.map(k=>esc(technologies().find(t=>t.id===k)?.name||k)).join(', ')}</small>`:''}<div style="margin-top:9px">${btn(done?'Acquis':running?'Recherche en cours':ready?'Lancer la recherche':icon('lock')+' Verrouillé','research',{id:t.id},'small wide',done||running||!ready||c.research.length>=c.slots)}</div></div>`;
+      const done=c.tech.includes(t.id),running=c.research.some(r=>r.id===t.id),excluded=(t.excl||[]).some(k=>c.tech.includes(k)||c.research.some(r=>r.id===k)),ready=t.req.every(r=>c.tech.includes(r))&&!excluded,year=1936+S.day/365.25;
+      return `<div class="card tech-card ${done?'done':''}"><div class="row between"><h4>${esc(t.name)}</h4>${tag(done?'ACQUIS':String(t.year),done?'good':'')}</div><p class="note" style="margin:7px 0">${effectText(t.effect)}</p>${(t.unlock||[]).length?`<small style="display:block" class="gold">${t.unlock.map(u=>esc(unlockText(u))).join(' / ')}</small>`:''}<small>${t.days} points${t.year>year?' / en avance sur son temps':''}</small>${t.req.length?`<small style="display:block">Prérequis : ${t.req.map(k=>esc(technologies().find(t=>t.id===k)?.name||k)).join(', ')}</small>`:''}${t.excl?.length?`<small style="display:block">Voie exclusive de : ${t.excl.map(k=>esc(technologies().find(t=>t.id===k)?.name||k)).join(', ')}</small>`:''}<div style="margin-top:9px">${btn(done?'Acquis':running?'Recherche en cours':excluded?icon('lock')+' Voie écartée':ready?'Lancer la recherche':icon('lock')+' Verrouillé','research',{id:t.id},'small wide',done||running||!ready||c.research.length>=c.slots)}</div></div>`;
     }).join('')}</div><p class="note" style="margin-top:14px">Une technologie future subit une pénalité de recherche. Annuler un programme perd sa progression.</p>`;
 };
 ['modernize','productionModel','templateDelete','designDelete'].forEach(a=>direct.add(a));
@@ -538,7 +538,7 @@ ACTIONS16.push(async(action,p)=>{
 TABS.decisions=['check','Décisions'];
 const spiritDef16=id=>(CATALOG.spirits||[]).find(s=>s.id===id);
 const advisorDef16=id=>(CATALOG.advisors||[]).find(a=>a.id===id);
-const effectText16=e=>{const labels={stabilityGrowth:'stabilité / jour',supportGrowth:'soutien / jour',consumer:'biens de consommation',organization:'organisation',airDefense:'défense antiaérienne',invasion:'débarquements',paradrop:'aeroporté',reliability:'fiabilité',attrition:'résistance à l’attrition',breakthrough:'percée',entrench:'retranchement',mines:'guerre des mines',convoy:'escorte des convois',resources:'extraction',ppGain:'pouvoir politique',recruitment:'incorporation',buildingSlots:'emplacements'};
+const effectText16=e=>{const labels={stabilityGrowth:'stabilité / jour',supportGrowth:'soutien / jour',consumer:'biens de consommation',organization:'organisation',airDefense:'défense antiaérienne',invasion:'débarquements',paradrop:'aéroporté',reliability:'fiabilité',surrender:'seuil de capitulation',casualties:'blessés récupérés',attrition:'résistance à l’attrition',breakthrough:'percée',entrench:'retranchement',mines:'guerre des mines',convoy:'escorte des convois',resources:'extraction',ppGain:'pouvoir politique',recruitment:'incorporation',buildingSlots:'emplacements'};
   return Object.entries(e||{}).map(([k,v])=>labels[k]?`${v>=0?'+':''}${Math.round(v*100)} % ${labels[k]}`:effectText({[k]:v})).join(' / ');};
 NATION_EXTRA16.push(()=>{
   const c=nation(),list=c.spirits16||[];
@@ -583,4 +583,80 @@ ACTIONS16.push(async(action,p)=>{
   if(action==='hireAdvisor16'){const id=$('advisor-'+p.slot).value;await cmd('hireAdvisor',{id});renderPanel(true);toast('Conseiller nommé.');return true;}
   return false;
 });
+
+/* ---- Content: doctrines, focus trees and dynamic events ---- */
+{const modGroup=TECHGROUPS.mod;delete TECHGROUPS.mod;Object.assign(TECHGROUPS,{doctrine:'Doctrines terrestres',naval_doctrine:'Doctrines navales',air_doctrine:'Doctrines aériennes',electronics:'Électronique'});TECHGROUPS.mod=modGroup;}
+const IDEO_PATH16={democratic:'démocratique',fascist:'fasciste',communist:'communiste',authoritarian:'autoritaire'};
+const focusName16=id=>focusTree().find(f=>f.id===id)?.name||id;
+const asList16=v=>v==null?[]:Array.isArray(v)?v:[v];
+function focusBlock16(c,f){
+  const r=f.requires||{},atWar=S.wars.some(w=>w.a===S.player||w.b===S.player);
+  if(c.focusDone.includes(f.id))return 'Achevée.';
+  if(!f.req.every(k=>c.focusDone.includes(k)))return 'Prérequis manquants.';
+  if(f.reqAny?.length&&!f.reqAny.some(k=>c.focusDone.includes(k)))return 'Prérequis manquants.';
+  if(asList16(f.exclusive).some(k=>c.focusDone.includes(k)))return 'Branche exclue par vos choix.';
+  if(r.ideology&&!r.ideology.includes(c.ideology))return 'Régime incompatible.';
+  if(r.war&&!atWar)return 'Exige une guerre en cours.';
+  if(r.peace&&atWar)return 'Impossible en guerre.';
+  if(r.tension&&S.tension<r.tension&&!atWar)return 'Tension mondiale : '+r.tension+' % requis.';
+  if(r.year&&1936+S.day/365.25<r.year)return 'Disponible en '+r.year+'.';
+  return '';
+}
+function specialText16(sp){
+  if(!sp)return [];
+  const out=[];
+  if(sp.infra)out.push('+1 infrastructure dans '+sp.infra+' provinces');
+  if(sp.refinery)out.push('+'+sp.refinery+' raffinerie synthétique');
+  if(sp.forts)out.push('Fortifications sur '+sp.forts+' provinces frontalières');
+  if(sp.coastal)out.push('Forts côtiers sur '+sp.coastal+' provinces');
+  if(sp.aa)out.push('Défense antiaérienne dans '+sp.aa+' villes');
+  if(sp.build)out.push('Construit : '+Object.entries(sp.build).map(([k,n])=>n+' '+(CATALOG.buildings[k]?.name||k)).join(', '));
+  if(sp.militia)out.push(sp.militia+' divisions de milice');
+  if(sp.scorch)out.push('Destruction des installations proches du front');
+  if(sp.manpower)out.push('Rappel de réservistes');
+  return out;
+}
+function extrasText16(x){
+  const out=[];
+  for(const id of [...asList16(x.spirits),...asList16(x.spirit)]){const d=spiritDef16(id);if(d)out.push('Esprit « '+d.name+' »'+(x.spiritDays?' ('+x.spiritDays+' j)':'')+' : '+effectText16(d.effect));}
+  if(x.removeSpirit)out.push('Retire « '+(spiritDef16(x.removeSpirit)?.name||x.removeSpirit)+' »');
+  out.push(...specialText16(x.special));
+  if(x.govern)out.push('Le régime devient '+IDEO_PATH16[x.govern]);
+  if(x.partyShift)out.push(Object.entries(x.partyShift).map(([k,v])=>(v>0?'+':'')+v+' % '+(IDEO[k]||k)).join(', '));
+  if(x.faction)out.push('Rejoint la faction de '+asList16(x.faction.with).map(countryName).join(' ou ')+(x.faction.name?' (sinon fonde « '+x.faction.name+' »)':''));
+  if(x.invite)out.push('Invite dans la faction : '+asList16(x.invite.list).map(countryName).join(', '));
+  if(x.relations)out.push('Relations : '+Object.entries(x.relations).map(([k,v])=>countryName(k)+' +'+v).join(', '));
+  if(x.guarantee)out.push(x.guarantee==='neighbours'?'Garantit l’indépendance des petits voisins':'Garantit : '+asList16(x.guarantee).map(countryName).join(', '));
+  if(x.claims)out.push(x.claims==='weakest'?'But de guerre contre le voisin le plus faible':'Buts de guerre : '+asList16(x.claims).map(countryName).join(', '));
+  for(const b of asList16(x.researchBonus))out.push('+'+Math.round(b.value*100)+' % de vitesse pour '+(b.uses||1)+' recherche(s) : '+(TECHGROUPS[b.group]||b.group));
+  if(x.orgLoss)out.push('-'+Math.round(x.orgLoss*100)+' % d’organisation des divisions');
+  return out;
+}
+const focusIcon16=f=>f.path?'people':/^c16_(plan|survey|roads|synthetic|power|metals|basin|civilian|armament|labs|reserves)/.test(f.id)?'industry':/^c16_(ministry|intelligence|attaches|trade|propaganda)/.test(f.id)?'diplomacy':/^c16_/.test(f.id)?'army':f.id.includes('industry')||f.id==='arsenals'?'industry':f.id==='air'?'plane':f.id==='navy'?'anchor':'focus';
+showTree=function(){
+  if(!S)return;pauseGame();const tree=focusTree(),c=nation(),maxRow=Math.max(...tree.map(f=>f.row)),columns=Math.max(...tree.map(f=>f.col))+1,width=210,gap=50,rowh=109,rowgap=32;
+  const W=columns*width+(columns-1)*gap,H=(maxRow+1)*(rowh+rowgap)-rowgap;
+  const link=(r,f,dashed)=>{const parent=tree.find(x=>x.id===r);if(!parent)return '';const x1=parent.col*(width+gap)+width/2,y1=parent.row*(rowh+rowgap)+rowh,x2=f.col*(width+gap)+width/2,y2=f.row*(rowh+rowgap);return `<path d="M${x1},${y1} V${y1+16} H${x2} V${y2}" stroke="${c.focusDone.includes(r)?'#bca978':'#4d625b'}" stroke-width="1.5" fill="none"${dashed?' stroke-dasharray="5 4"':''}/>`;};
+  const links=tree.flatMap(f=>[...f.req.map(r=>link(r,f,false)),...(f.reqAny||[]).map(r=>link(r,f,true))]).join('');
+  modal(`${modalHead('Priorités de '+countryName(S.player),'GOUVERNEMENT / ARBRE NATIONAL')}<p class="note" style="margin-bottom:15px">${c.focusDone.length}/${tree.length} programmes achevés. Un programme actif à la fois. Les traits pointillés signalent un prérequis alternatif ; les voies politiques s’excluent mutuellement.</p><div class="focus-wrapper"><div class="focus-grid" style="grid-template-columns:repeat(${columns},${width}px);width:${W}px;height:${H}px"><svg class="focus-lines" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${links}</svg>${tree.map(f=>{const done=c.focusDone.includes(f.id),running=c.focus?.id===f.id,block=done||running?'':focusBlock16(c,f),excluded=asList16(f.exclusive).some(k=>c.focusDone.includes(k));return `<button class="focus-node ${done?'done':running?'running':block?'locked':''}" style="grid-column:${f.col+1};grid-row:${f.row+1}${excluded?';opacity:.3':''}" data-a="focusDetail" data-p="${encodeURIComponent(JSON.stringify({id:f.id}))}">${icon(done?'check':block?'lock':focusIcon16(f))}<span>${esc(f.name)}</span><small>${done?'ACHEVÉ':running?'EN COURS':excluded?'EXCLU':f.days+' JOURS'}${f.path?' / '+IDEO_PATH16[f.path].toUpperCase():''}</small></button>`;}).join('')}</div></div>`,'focusTree','wide');
+};
+showFocusDetail=function(id){
+  const f=focusTree().find(f=>f.id===id),c=nation();if(!f)return;const block=focusBlock16(c,f),extras=extrasText16(f),r=f.requires||{};
+  const conditions=[r.ideology?'régime '+r.ideology.map(k=>IDEO_PATH16[k]).join(' ou '):'',r.war?'en guerre':'',r.peace?'en paix':'',r.tension?'tension '+r.tension+' %':'',r.year?'à partir de '+r.year:''].filter(Boolean);
+  modal(`${modalHead(f.name,'PRIORITÉ NATIONALE'+(f.path?' / VOIE '+IDEO_PATH16[f.path].toUpperCase():''))}<div class="card"><div class="eyebrow">EFFETS À L’ACHÈVEMENT</div><p style="margin-top:12px">${Object.keys(f.effect||{}).length?esc(effectText16(f.effect)):''}</p>${extras.map(t=>`<small style="display:block;margin-top:6px" class="gold">${esc(t)}</small>`).join('')}</div><p class="note" style="margin:15px 0">Durée : ${f.days} jours.${f.req.length?' Prérequis : '+f.req.map(k=>esc(focusName16(k))).join(', ')+'.':''}${f.reqAny?.length?' L’une de : '+f.reqAny.map(k=>esc(focusName16(k))).join(', ')+'.':''}${asList16(f.exclusive).length?' Exclut : '+asList16(f.exclusive).map(k=>esc(focusName16(k))).join(', ')+'.':''}${conditions.length?' Conditions : '+esc(conditions.join(', '))+'.':''}${block&&!c.focusDone.includes(f.id)?' <strong>'+esc(block)+'</strong>':''}</p><div class="row">${btn('Activer ce programme','activateFocus',{id},'primary',!!block||!!c.focus)}${btn('Retour à l’arbre','focusTree')}</div>`,'focusDetail','narrow');
+};
+PANELS16.focus=function(){
+  const tree=focusTree(),c=nation(),f=c.focus?tree.find(f=>f.id===c.focus.id):null;
+  return panelHeader('Priorités nationales',CATALOG.focus[S.player]?'Un arbre propre à votre nation.':'Un arbre commun pour les puissances secondaires.')+`
+    <div class="focus-current"><div class="eyebrow">${f?'PROGRAMME EN COURS':'NOUVELLE ORIENTATION'}</div><h3>${f?esc(f.name):'Fixer les priorités de l’État'}</h3><p class="note">${f?esc([effectText16(f.effect),...extrasText16(f)].filter(Boolean).join(' / ')):'Industrie, défense, diplomatie, régime : chaque branche ouvre de nouveaux choix.'}</p>${f?bar(c.focus.progress/f.days*100)+`<small>${c.focus.progress}/${f.days} jours</small>`:''}</div>
+    <div style="margin:15px 0">${btn('Afficher l’arbre complet '+icon('arrow'),'focusTree',{},'primary wide')}</div>
+    <div class="sectionlabel">Programmes accessibles</div><div class="stack">${tree.filter(f=>!focusBlock16(c,f)&&c.focus?.id!==f.id).map(f=>`<div class="card"><h3 style="font-size:19px">${esc(f.name)}</h3>${f.path?tag('VOIE '+IDEO_PATH16[f.path].toUpperCase(),'gold'):''}<p class="note" style="margin:7px 0">${esc([effectText16(f.effect),...extrasText16(f)].filter(Boolean).join(' / '))}</p><small>${f.days} jours</small><div style="margin-top:10px">${btn('Activer','focus',{id:f.id},'small wide',!!c.focus)}</div></div>`).join('')||'<div class="empty">Achevez le programme en cours pour ouvrir de nouvelles branches.</div>'}</div>
+    <div class="sectionlabel">Programmes achevés / ${c.focusDone.length}</div><div class="stack">${c.focusDone.map(id=>`<div class="card row">${icon('check')}<span>${esc(focusName16(id))}</span></div>`).join('')}</div>
+    ${(c.researchBonus16||[]).length?`<div class="sectionlabel">Bonus de recherche</div><div class="card stack">${c.researchBonus16.map(b=>`<small>+${Math.round(b.value*100)} % / ${esc(TECHGROUPS[b.group]||b.group)} / ${b.uses} recherche(s)</small>`).join('')}</div>`:''}`;
+};
+const showEvent15=showEvent;
+showEvent=function(){
+  const e=S.pending?.event;if(!e?.dyn16)return showEvent15();
+  modal(`<div class="row between"><div class="eyebrow">DÉPÊCHE / ${dateText(S.day)}</div>${tag('DÉCISION REQUISE','gold')}</div><div class="event-title">${esc(e.title)}</div><div class="event-paper"><p>${esc(e.text)}</p></div><div class="event-choices">${e.choices.map((choice,index)=>btn(`<span>${esc(choice.text)}<small style="display:block;margin-top:5px">${esc([effectText16(choice.effect||{}),...extrasText16(choice)].filter(Boolean).join(' / '))}</small></span>${icon('arrow')}`,'event',{index})).join('')}</div><p class="note" style="margin-top:18px">La campagne est suspendue jusqu’à votre décision.</p>`,'event','narrow');
+};
 renderRail();

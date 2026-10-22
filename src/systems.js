@@ -553,8 +553,15 @@ function installSystems16(Engine,H){
     if(hit&&hit.day===this.s.day&&hit.owner===u.owner&&hit.state===this.s)return hit.stats;
     const c=this.nation(u.owner),{bat,sup}=Engine.normalizeTemplate16(u.template);
     const stats=divisionStats(bat,sup,b=>c?.eqStats?.[Object.keys(b.eq)[0]]);
+    if(c?.bonus.reliability)stats.reliability+=c.bonus.reliability;
     unitCache.set(u.template,{day:this.s.day,owner:u.owner,state:this.s,stats});
     return stats;
+  };
+  // Medical doctrines return part of the wounded to the manpower pool.
+  const loss15=Engine.prototype.loss;
+  Engine.prototype.loss=function(u,strength,org){
+    const before=u.strength;loss15.call(this,u,strength,org);
+    const c=this.nation(u.owner);if(c?.bonus.casualties>0&&before>u.strength)c.manpower+=(before-u.strength)*this.unitStats16(u).men*Math.min(.5,c.bonus.casualties);
   };
   Engine.prototype.unlocked16=function(c,item){return !item?.tech||c.tech.includes(item.tech);};
   Engine.prototype.buildTemplate16=function(c,p,id){
@@ -1873,10 +1880,170 @@ function installSystems16(Engine,H){
   };
   Engine.command16('takeDecision',function(p,id){this.takeDecision16(id,p.id);});
   // Focus trees may grant or remove spirits and advisors-like modifiers.
+  // ---------------------------------------------------------------------------
+  // National focus trees: OR prerequisites, multi-way exclusive branches,
+  // conditions, political paths, alliances, claims and research bonuses.
+  // ---------------------------------------------------------------------------
+  const asList=v=>v==null?[]:Array.isArray(v)?v:[v];
+  Engine.prototype.focusBlock16=function(id,f){
+    const c=this.nation(id),r=f.requires||{},atWar=this.enemies(id).length>0;
+    if(c.focusDone.includes(f.id))return 'Priorité déjà achevée.';
+    if(!f.req.every(k=>c.focusDone.includes(k)))return 'Les priorités précédentes doivent être achevées.';
+    if(f.reqAny?.length&&!f.reqAny.some(k=>c.focusDone.includes(k)))return 'L’une des priorités précédentes doit être achevée.';
+    if(asList(f.exclusive).some(k=>c.focusDone.includes(k)))return 'Branche exclue par vos choix.';
+    if(r.ideology&&!r.ideology.includes(c.ideology))return 'Régime incompatible.';
+    if(r.war&&!atWar)return 'Exige une guerre en cours.';
+    if(r.peace&&atWar)return 'Impossible en temps de guerre.';
+    if(r.tension&&this.s.tension<r.tension&&!atWar)return 'Tension mondiale insuffisante ('+r.tension+' %).';
+    if(r.year&&1936+this.s.day/365.25<r.year)return 'Disponible à partir de '+r.year+'.';
+    return '';
+  };
+  Engine.prototype.focusStart=function(id,key){
+    const c=this.nation(id),f=this.focus(id,key);assert(f,'Priorité inconnue.');assert(!c.focus,'Une priorité est déjà en cours.');
+    const reason=this.focusBlock16(id,f);assert(!reason,reason);
+    c.focus={id:key,progress:0};
+  };
+  const GOVERNMENTS={democratic:'Gouvernement provisoire',fascist:'Directoire national',communist:'Comité central',authoritarian:'Conseil militaire'};
+  Engine.prototype.governChange16=function(id,ideology){
+    const c=this.nation(id);if(!(ideology in c.parties))return;
+    const rest=sum(Object.entries(c.parties).filter(([k])=>k!==ideology).map(([,v])=>v));
+    const share=Math.max(c.parties[ideology],55);
+    for(const k in c.parties)c.parties[k]=k===ideology?share:rest>0?c.parties[k]*(100-share)/rest:(100-share)/(Object.keys(c.parties).length-1);
+    if(c.ideology===ideology){c.stability=clamp(c.stability+5,0,100);return;}
+    c.ideology=ideology;c.stability=clamp(c.stability-10,0,100);
+    c.identity.leader=GOVERNMENTS[ideology]||c.identity.leader;c.identity.wiki=c.identity.leader;c.identity.portraitKey=null;c.identity.role='Chef de l’État / trajectoire uchronique';
+    this.log('Changement de régime : '+this.info(id).name+' suit désormais une trajectoire '+({democratic:'démocratique',fascist:'fasciste',communist:'communiste',authoritarian:'autoritaire'}[ideology]||ideology)+'.','event');
+  };
+  Engine.prototype.joinFaction16=function(id,spec){
+    const c=this.nation(id);if(c.subject)return;
+    const lead=asList(spec.with).find(k=>k!==id&&this.nation(k)?.alive&&!this.war(id,k)&&!this.nation(k).subject);
+    if(lead){const l=this.nation(lead);if(l.faction==='none')l.faction=spec.name||'Pacte '+lead;c.faction=l.faction;}
+    else if(spec.name&&c.faction==='none')c.faction=spec.name;
+    else return;
+    this.log(this.info(id).name+' rejoint la faction '+c.faction+'.','event');
+  };
+  Engine.prototype.neighbours16=function(id){
+    return [...new Set(this.ownedToday16(id).flatMap(p=>p.neighbors.map(n=>this.s.provinces[n].ctrl)))].filter(k=>k!==id&&this.nation(k)?.alive).sort();
+  };
   Engine.prototype.focusCompleted16=function(id,f){
+    const c=this.nation(id);
     for(const s of f.spirits||[])this.addSpirit16(id,s,f.spiritDays||null);
     for(const s of f.removeSpirits||[])this.removeSpirit16(id,s);
-    if(f.decision)this.nation(id).decisions16=this.nation(id).decisions16||{};
+    this.choiceExtras16(id,f);
+  };
+  // Extra effects shared by focuses and dynamic event choices.
+  Engine.prototype.choiceExtras16=function(id,x){
+    const c=this.nation(id);if(!c)return;
+    if(x.spirit)this.addSpirit16(id,x.spirit,x.spiritDays||null);
+    if(x.removeSpirit)this.removeSpirit16(id,x.removeSpirit);
+    if(x.special)this.decisionSpecial16(id,x.special);
+    if(x.govern)this.governChange16(id,x.govern);
+    if(x.faction)this.joinFaction16(id,x.faction);
+    for(const b of asList(x.researchBonus))this.addResearchBonus16(id,b);
+    if(x.relations)for(const [k,v] of Object.entries(x.relations))if(this.nation(k)?.alive&&k!==id){c.relations[k]=clamp((c.relations[k]||0)+v,-100,100);this.nation(k).relations[id]=clamp((this.nation(k).relations[id]||0)+v,-100,100);}
+    if(x.guarantee){
+      const list=x.guarantee==='neighbours'?this.neighbours16(id).filter(k=>!this.allies(id,k)&&this.units(k).length<this.units(id).length):asList(x.guarantee);
+      for(const k of list)if(this.nation(k)?.alive&&k!==id&&!c.guarantees.includes(k)&&!this.war(id,k))c.guarantees.push(k);
+    }
+    if(x.claims){
+      const list=x.claims==='weakest'?this.neighbours16(id).filter(k=>!this.allies(id,k)&&this.nation(k).subject!==id).sort((a,b)=>this.units(a).length-this.units(b).length||a.localeCompare(b)).slice(0,1):asList(x.claims);
+      for(const k of list)if(this.nation(k)?.alive&&k!==id&&!c.justifications.some(j=>j.target===k))c.justifications.push({target:k,progress:60,days:60,goal:'conquest'});
+    }
+    if(x.orgLoss)for(const u of this.units(id))u.org=Math.max(0,u.org*(1-x.orgLoss));
+    if(x.partyShift){for(const [k,v] of Object.entries(x.partyShift))if(k in c.parties)c.parties[k]=Math.max(1,c.parties[k]+v);const t=sum(Object.values(c.parties));for(const k in c.parties)c.parties[k]*=100/t;}
+    if(x.invite){
+      const spec=x.invite;
+      for(const k of asList(spec.list)){const n=this.nation(k);if(!n?.alive||k===id||n.faction!=='none'||n.subject||this.war(id,k)||(spec.ideology&&n.ideology!==c.ideology))continue;if(c.faction==='none')c.faction=spec.name||'Pacte '+id;n.faction=c.faction;this.log(this.info(k).name+' rejoint la faction '+c.faction+'.','event');}
+    }
+  };
+  // Research bonuses: a speed multiplier on the next techs of a group.
+  Engine.prototype.addResearchBonus16=function(id,b){
+    const c=this.nation(id);if(!b?.group||!(b.value>0))return;
+    c.researchBonus16??=[];c.researchBonus16.push({group:b.group,value:clamp(b.value,0,3),uses:clamp(Math.round(b.uses||1),1,5)});
+    if(c.researchBonus16.length>12)c.researchBonus16.shift();
+  };
+  Engine.prototype.researchBoost16=function(c,t){let v=0;for(const b of c.researchBonus16||[])if(b.group===t.group&&b.uses>0)v=Math.max(v,b.value);return 1+v;};
+  Engine.prototype.techUnlocked16=function(id,t){
+    const c=this.nation(id);if(!c.researchBonus16?.length)return;
+    const b=c.researchBonus16.filter(b=>b.group===t.group).sort((a,b)=>b.value-a.value)[0];
+    if(b)b.uses--;c.researchBonus16=c.researchBonus16.filter(b=>b.uses>0);
+  };
+  // Doctrine branches exclude each other.
+  const researchStart15=Engine.prototype.researchStart;
+  Engine.prototype.researchStart=function(id,key){
+    const c=this.nation(id),t=this.tech(key);
+    if(t?.excl)assert(!t.excl.some(k=>c.tech.includes(k)||c.research.some(r=>r.id===k)),'Doctrine incompatible avec la voie déjà choisie.');
+    return researchStart15.call(this,id,key);
+  };
+  Engine.prototype.techExcluded16=function(c,t){return !!t.excl?.some(k=>c.tech.includes(k)||c.research.some(r=>r.id===k));};
+  // AI: the doctrine root matching the country or its army profile.
+  Engine.prototype.preferredRoot16=function(id,t){
+    const prof=this.aiProfile16(id),set=[t,...t.excl.map(k=>this.tech(k)).filter(Boolean)];
+    const pick=set.find(x=>x.ai?.includes(id))||set.find(x=>x.ai?.includes(prof.army))||set.find(x=>x.ai?.includes('default'))||set[0];
+    return pick.id===t.id;
+  };
+  Engine.invariant16(function(state){
+    for(const c of Object.values(state.countries))for(const b of c.researchBonus16||[])assert(typeof b.group==='string'&&finite(b.value,0,3)&&Number.isInteger(b.uses)&&b.uses>=1&&b.uses<=5,'Bonus de recherche invalide.');
+    for(const [k,v] of Object.entries(state.events16||{}))assert(/^[A-Z][A-Z0-9]{2}:[a-z0-9_]+$/.test(k)&&Number.isInteger(v),'Événement dynamique invalide.');
+  });
+
+  // ---------------------------------------------------------------------------
+  // Dynamic events: catalog.events16 entries fire when their conditions hold,
+  // after a mean time to happen; each country is checked every five days.
+  // ---------------------------------------------------------------------------
+  Engine.prototype.eventCondition16=function(id,k={}){
+    const c=this.nation(id),atWar=this.enemies(id).length>0,year=1936+this.s.day/365.25;
+    if(k.countries&&!k.countries.includes(id))return false;
+    if(k.major&&!MAJORS.includes(id))return false;
+    if(k.war===true&&!atWar||k.war===false&&atWar)return false;
+    if(k.ideology&&!k.ideology.includes(c.ideology))return false;
+    if(k.notIdeology?.includes(c.ideology))return false;
+    if(k.stabilityBelow!=null&&c.stability>=k.stabilityBelow)return false;
+    if(k.stabilityAbove!=null&&c.stability<=k.stabilityAbove)return false;
+    if(k.tensionAbove!=null&&this.s.tension<=k.tensionAbove)return false;
+    if(k.yearMin&&year<k.yearMin)return false;
+    if(k.yearMax&&year>=k.yearMax+1)return false;
+    if(k.months&&!k.months.includes(monthOf(this.s.day)))return false;
+    if(k.hasSpirit&&!this.hasSpirit16(c,k.hasSpirit))return false;
+    if(k.notSpirit&&this.hasSpirit16(c,k.notSpirit))return false;
+    if(k.tech&&!c.tech.includes(k.tech))return false;
+    if(k.fuelBelow!=null&&c.stock.fuel>=k.fuelBelow)return false;
+    if(k.faction===true&&c.faction==='none'||k.faction===false&&c.faction!=='none')return false;
+    if(k.coast&&!this.ownedToday16(id).some(p=>p.coast))return false;
+    if(k.overseas&&!this.ownedToday16(id).some(p=>p.overseas))return false;
+    if(k.losing&&!((c.stats.coreShare??1)<.85))return false;
+    if(k.warDays&&!this.s.wars.some(w=>(w.a===id||w.b===id)&&this.s.day-(w.start??this.s.day)>=k.warDays))return false;
+    if(k.winning&&!this.ownedToday16(id).some(p=>this.war(id,this.s.provinces[p.id].own)))return false;
+    if(k.neighbourWar&&!this.neighbours16(id).some(n=>this.enemies(n).length))return false;
+    return true;
+  };
+  Engine.onDay16(function(){
+    const list=this.catalog.events16;if(!list?.length)return;
+    const seen=this.s.events16??={},ids=this.active();
+    for(let i=0;i<ids.length;i++){
+      const id=ids[i],code=id.charCodeAt(0)*961+id.charCodeAt(1)*31+id.charCodeAt(2);
+      if((this.s.day+code)%5)continue;
+      if(this.nation(id).capitulated16)continue;
+      for(let j=0;j<list.length;j++){
+        const ev=list[j],key=id+':'+ev.id,last=seen[key];
+        if(last!=null&&(ev.once||this.s.day-last<(ev.cooldown||365)))continue;
+        if(unit01(this.s.day*7919+j*104729+code*31337)>=5/(ev.mtth||365))continue;
+        if(!this.eventCondition16(id,ev.conditions))continue;
+        seen[key]=this.s.day;this.fireEvent16(id,ev);break;
+      }
+    }
+  });
+  Engine.prototype.fireEvent16=function(id,ev){
+    const event={id:'d16_'+ev.id+'_'+this.s.day,dyn16:ev.id,title:ev.title,text:ev.text,choices:clone(ev.choices)};
+    if(id===this.s.player){this.s.eventQueue.push({country:id,event});return;}
+    let best=0;ev.choices.forEach((ch,k)=>{if((ch.ai??1)>(ev.choices[best].ai??1))best=k;});
+    const ch=ev.choices[best];this.effect(id,ch.effect||{});this.choiceExtras16(id,ch);
+  };
+  const eventChoice16=Engine.prototype.eventChoice;
+  Engine.prototype.eventChoice=function(country,event,index){
+    const result=eventChoice16.call(this,country,event,index),ch=event.choices?.[index];
+    if(ch&&event.dyn16)this.choiceExtras16(country,ch);
+    return result;
   };
   // Pre-1936 research: majors start with a few technologies and the matching
   // equipment generation in part of their stocks.
@@ -1971,7 +2138,7 @@ function installSystems16(Engine,H){
   Engine.prototype.aiResearch16=function(id){
     const c=this.nation(id),prof=this.aiProfile16(id),year=1936+this.s.day/365.25,order=prof.research||[];
     while(c.research.length<c.slots){
-      const options=this.catalog.techs.filter(t=>!c.tech.includes(t.id)&&!c.research.some(r=>r.id===t.id)&&t.req.every(r=>c.tech.includes(r))&&t.year<=year+.6);
+      const options=this.catalog.techs.filter(t=>!c.tech.includes(t.id)&&!c.research.some(r=>r.id===t.id)&&t.req.every(r=>c.tech.includes(r))&&t.year<=year+.6&&!this.techExcluded16(c,t)&&(!t.excl||this.preferredRoot16(id,t)));
       if(!options.length)break;
       options.sort((a,b)=>{const ga=order.indexOf(a.group),gb=order.indexOf(b.group);return (a.year-b.year)*2+((ga<0?9:ga)-(gb<0?9:gb))||a.id.localeCompare(b.id);});
       this.researchStart(id,options[0].id);
@@ -1979,10 +2146,13 @@ function installSystems16(Engine,H){
   };
   Engine.prototype.aiFocus16=function(id){
     const c=this.nation(id);if(c.focus)return;
-    const prof=this.aiProfile16(id),options=this.tree(id).filter(f=>!c.focusDone.includes(f.id)&&f.req.every(r=>c.focusDone.includes(r))&&(!f.exclusive||!c.focusDone.includes(f.exclusive))&&(!f.ideology||f.ideology.includes(c.ideology)));
+    const prof=this.aiProfile16(id),options=this.tree(id).filter(f=>!this.focusBlock16(id,f)&&(!f.ideology||f.ideology.includes(c.ideology)));
     if(!options.length)return;
-    const score=f=>{const e=f.effect||{};return (e.civ||e.mil||e.production||e.construction?3:0)+(e.research||e.slots?2:0)+(e.attack||e.defense||e.xp?1.5:0)+((e.tension||0)>0?prof.aggression*2-.8:0)-f.days/200;};
+    // Countries keep their regime: the matching political path is preferred,
+    // the others are avoided.
+    const score=f=>{const e=f.effect||{};return (e.civ||e.mil||e.production||e.construction||f.special?.build?3:0)+(e.research||e.slots||f.researchBonus?2:0)+(e.attack||e.defense||e.xp?1.5:0)+((e.tension||0)>0||f.claims?prof.aggression*2-.8:0)+(f.path?(f.path===c.ideology?2.5:-20):0)-f.days/200;};
     options.sort((a,b)=>score(b)-score(a)||a.id.localeCompare(b.id));
+    if(score(options[0])<-10)return;
     this.focusStart(id,options[0].id);
   };
   Engine.prototype.aiLaws16=function(id){
@@ -2049,7 +2219,15 @@ function installSystems16(Engine,H){
       for(let h=0;h<list.length;h++)for(const n of this.prov[list[h]].neighbors)if(set.has(n)&&!seen.has(n)){seen.add(n);list.push(n);}
       sectors.push(list.map(i=>this.prov[i]));
     }
-    return sectors;
+    // Fragments of a few provinces join the nearest large sector, so that a
+    // broken border does not scatter the army into token detachments.
+    sectors.sort((a,b)=>b.length-a.length||a[0].id-b[0].id);
+    const merged=[];
+    for(const sector of sectors){
+      const host=sector.length<4&&merged.find(m=>m.length>=4&&m.some(p=>sector.some(q=>distance(p,q)<500)));
+      if(host)host.push(...sector);else merged.push(sector);
+    }
+    return merged;
   };
   Engine.prototype.aiFronts16=function(id){
     const c=this.nation(id),prof=this.aiProfile16(id);
@@ -2234,7 +2412,8 @@ function installSystems16(Engine,H){
       const near=new Set(this.ownedToday16(id).flatMap(p=>p.neighbors.map(n=>this.s.provinces[n].ctrl)));
       const threatened=[...near].some(k=>k!==id&&this.nation(k)?.alive&&this.aiProfile16(k).aggression>=.5&&this.nation(k).ideology!==c.ideology);
       for(const [name,f] of factions){
-        if(f.ideology!==c.ideology||!threatened&&f.ideology==='democratic')continue;
+        // Only factions whose leader is close enough to matter.
+        if(f.ideology!==c.ideology||!threatened&&f.ideology==='democratic'||distance(this.prov[this.cap(id)],this.prov[this.cap(f.leader)])>3500)continue;
         if(unit01(hash32(id.charCodeAt(0)*131+id.charCodeAt(1)*17+this.s.day))<.15){c.faction=name;this.log(this.info(id).name+' rejoint la faction '+name+'.','event');break;}
       }
     }

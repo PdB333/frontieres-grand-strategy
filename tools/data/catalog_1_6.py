@@ -599,8 +599,8 @@ catalog['spirits'] = [
     spirit('burma_road', 'Route d’approvisionnement', 'Une route lointaine maintient l’aide étrangère.', {'supply': .1, 'resources': .05}),
     spirit('united_front', 'Front uni', 'Les factions rivales combattent l’envahisseur ensemble.', {'stabilityGrowth': .2, 'organization': .05, 'surrender': .1}),
     spirit('strategic_depth', 'Profondeur stratégique', 'L’immensité du territoire permet d’échanger l’espace contre le temps.', {'surrender': .2, 'attrition': .1, 'supply': .1}),
-    spirit('civil_war', 'Guerre civile', 'Le pays se déchire : milices improvisées, cadres divisés, nul ne veut capituler.', {'attack': -.2, 'organization': -.1, 'surrender': .25, 'production': -.1}),
-    spirit('africa_army', 'Armée d’Afrique', 'Les troupes coloniales aguerries forment le noyau du camp insurgé.', {'attack': .12, 'organization': .1}),
+    spirit('civil_war', 'Guerre civile', 'Le pays se déchire : milices improvisées, cadres divisés, nul ne veut capituler.', {'attack': -.3, 'breakthrough': -.2, 'defense': .1, 'organization': -.05, 'surrender': .3, 'production': -.1}),
+    spirit('africa_army', 'Armée d’Afrique', 'Les troupes coloniales aguerries forment le noyau du camp insurgé.', {'attack': .06, 'organization': .05}),
     spirit('sisu', 'Sisu', 'Skieurs, forêts et lacs gelés : chaque position se défend jusqu’au bout.', {'defense': .12, 'attrition': .3, 'surrender': .1}),
     spirit('national_redoubt', 'Réduit national', 'Le relief et une armée de milice préparée de longue date protègent le pays.', {'defense': .1, 'entrench': .2, 'surrender': .05}),
 ]

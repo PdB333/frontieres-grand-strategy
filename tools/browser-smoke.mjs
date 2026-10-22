@@ -73,6 +73,8 @@ try {
     await page.waitForTimeout(50);
   }
   await page.evaluate(() => window.Frontieres.selectProvince(window.Frontieres.state().countries[window.Frontieres.state().player].identity.capital));
+  // Modal views built from catalogue content: focus tree and a focus detail.
+  await page.evaluate(() => { window.showTree(); window.showFocusDetail('pol_root'); window.showTree(); });
   console.log(`ok   ${tabs.length} panels and every map mode rendered`);
 
   const state = await page.evaluate(() => ({day: window.Frontieres.state().day, player: window.Frontieres.state().player}));
