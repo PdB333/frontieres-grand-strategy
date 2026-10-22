@@ -1217,7 +1217,7 @@ function createEngineClass() {
         assert(!c.focus||this.focus(id,c.focus.id)&&finite(c.focus.progress),'Priorit\u00e9 inconnue.');
         for(const b of c.build)assert(this.prov[b.pid]&&this.catalog.buildings[b.kind]&&finite(b.progress)&&finite(b.cost,1),'Chantier invalide.');
       }
-      for(const w of state.wings)assert(ids.has(w.owner)&&this.prov[w.base]&&['fighters','bombers'].includes(w.kind)&&finite(w.size)&&this.world.zones.some(z=>z.id===w.zone),'Escadre invalide.');
+      for(const w of state.wings)assert(ids.has(w.owner)&&this.prov[w.base]&&(['fighters','bombers'].includes(w.kind)||this.catalog.equipment[w.kind]?.domain==='air')&&finite(w.size)&&this.world.zones.some(z=>z.id===w.zone),'Escadre invalide.');
       for(const f of state.fleets)assert(ids.has(f.owner)&&this.prov[f.base]&&finite(f.ships?.destroyers)&&finite(f.ships?.submarines)&&this.world.seas.some(z=>z.id===f.zone),'Flotte invalide.');
       for(const w of state.wars)assert(ids.has(w.a)&&ids.has(w.b)&&w.a!==w.b,'Guerre invalide.');
       assert(Array.isArray(state.combatLedger)&&state.combatLedger.length<=160,'Journal tactique invalide.');
@@ -1817,7 +1817,7 @@ function createEngineClass() {
         return {type,target:action.target};
       }
       if(type==='equipment'){
-        const goods=['rifles','artillery','supportEq','trucks','tanks','fighters','bombers','destroyers','submarines','cruisers','battleships','carriers','convoys','fuel'];
+        const goods=['rifles','artillery','supportEq','trucks','tanks','fighters','bombers','destroyers','submarines','cruisers','battleships','carriers','convoys','fuel','antiTank','antiAir','rocketArtillery','mechanized','armoredCars','lightTanks','heavyTanks','cas','strategicBombers','navalBombers','transportPlanes'];
         assert(action.country===undefined||action.country==='event'||ids.has(action.country),'Destinataire materiel inconnu.');
         assert(goods.includes(action.key),'Type de materiel inconnu.');
         assert(Number.isInteger(action.amount)&&action.amount>=-200000&&action.amount<=200000,'Quantite de materiel invalide.');

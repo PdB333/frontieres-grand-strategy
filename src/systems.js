@@ -177,6 +177,7 @@ function installSystems16(Engine,H){
       for(const k of NEW_BONUS)c.bonus[k]??=0;
       for(const k of RESOURCES)if(c.stats)c.stats[k]??=0;
       c.designs??=[];c.lines??={};c.modernize??={};c.eqStats??={};
+      s.mines16??={};s.invasions16??=[];s.seaControl16??={};s.airControl16??={};
       for(const key in this.catalog.equipment){c.stock[key]??=0;c.allocation[key]??=0;c.efficiency[key]??=.45;}
       for(const t of [...c.templates,...c.training.map(x=>x.template)])if(t.bat&&t.inf===undefined)Object.assign(t,Engine.legacyFields16(t.bat,t.sup||[]));
     }
@@ -385,6 +386,10 @@ function installSystems16(Engine,H){
     }
     return this.s;
   };
+
+  const dayHooks=[];
+  Engine.onDay16=fn=>dayHooks.push(fn);
+  Engine.prototype.day16=function(){for(const h of dayHooks)h.call(this);};
 
   // ---------------------------------------------------------------------------
   // Commands
@@ -679,7 +684,8 @@ function installSystems16(Engine,H){
       attack*=(1+(terr.attack||0))*ctx.weather.attack*(1+(army?army.planning*.2:0)+c.bonus.planning);
       if(st.recon)attack*=1.05;if(st.tank&&st.motor)attack*=1.06;
       if(tactic==='spearhead')attack*=1.16;if(tactic==='elastic')attack*=.88;
-      if(u.landing16)attack*=.4+.6*(st.special?.amphibious||0)*(1+c.bonus.invasion);
+      if(u.landing16?.airborne)attack*=.75*(1+c.bonus.paradrop);
+      else if(u.landing16)attack*=(.4+.6*(st.special?.amphibious||0))*(1+c.bonus.invasion);
       else if(this.strait16(u.pid,pid))attack*=.55;
       else{const river=this.riverAttackFactor(u,pid);if(river<1)attack*=Math.min(1,river+(st.mods?.river||0)*.4);}
       defense=attack;
@@ -811,7 +817,7 @@ function installSystems16(Engine,H){
     const c=this.nation(attackPool[0].owner);
     for(const u of attackPool){if(A.front.includes(u)){u.xp+=.003;c.xp+=.09;this.nation(u.owner).stock.fuel=Math.max(0,this.nation(u.owner).stock.fuel-(u.template.tank*4+u.template.motor*1.5));}}
     for(const u of defendPool)if(D.front.includes(u)){u.xp+=.003;this.nation(u.owner).xp+=.08;}
-    for(const u of attackPool)if(withdrawn.has(u.id)){u.path=[];u.landing16=null;u.retreatUntil=this.s.day+1;}
+    for(const u of attackPool)if(withdrawn.has(u.id)){if(u.landing16?.airborne)this.loss(u,.35,0);u.path=[];u.landing16=null;u.retreatUntil=this.s.day+1;}
     for(const u of defendPool)if(retreated.has(u.id))this.retreat(u);
     const remainingD=defendPool.filter(u=>u.pid===pid&&u.strength>.04&&!retreated.has(u.id));
     const remainingA=attackPool.filter(u=>u.strength>.04&&!withdrawn.has(u.id)&&u.path[0]===pid);
@@ -823,7 +829,7 @@ function installSystems16(Engine,H){
     this.recordCombat({pid,a,b,outcome,attackers:attackPool.length,defenders:defendPool.length,lossesA,lossesD,river:attackPool.some(u=>this.riverAttackFactor(u,pid)<1),terrain:this.prov[pid].terrain,ap,dp});
     this.warContribution16?.(a,b,lossesD,lossesA);
     if(outcome==='breakthrough'){for(const u of remainingA)u.landing16=null;this.capture(pid,remainingA);return null;}
-    if(outcome==='repulsed'){for(const u of attackPool)if(u.landing16){u.landing16=null;u.path=[];}return null;}
+    if(outcome==='repulsed'){for(const u of attackPool)if(u.landing16){if(u.landing16.airborne)this.loss(u,.35,0);u.landing16=null;u.path=[];}return null;}
     const startDay=old?.start??this.s.day;
     return {id:old?.id??this.s.uid++,pid,a,b,start:startDay,hours:(old?.hours||0)+24,
       attackers:A.front.map(u=>u.id),defenders:D.front.map(u=>u.id),reserveA:A.reserve.filter(u=>remainingA.includes(u)).map(u=>u.id),reserveD:D.reserve.filter(u=>remainingD.includes(u)).map(u=>u.id),
@@ -883,6 +889,287 @@ function installSystems16(Engine,H){
       for(const pid of [...a.plan16.offensive,...a.plan16.fallback])assert(Number.isInteger(pid)&&this.prov[pid],'Point de plan invalide.');
     }
     for(const b of state.battles)assert(Number.isInteger(b.pid)&&this.prov[b.pid]&&Array.isArray(b.attackers)&&Array.isArray(b.defenders),'Bataille invalide.');
+  });
+
+  // ---------------------------------------------------------------------------
+  // Navy: missions, detection, sea control, mines and naval invasions.
+  // ---------------------------------------------------------------------------
+  const FLEET_MISSIONS=['port','patrol','strike','escort','raid','mines','sweep','invasion'];
+  const MISSION_POWER={patrol:1,strike:1.25,escort:1.1,raid:.7,mines:.8,sweep:.8,invasion:1};
+  Engine.FLEET_MISSIONS16=FLEET_MISSIONS;
+  const shipQuality=(c,k)=>(sv(c.eqStats?.[k],'attack')+sv(c.eqStats?.[k],'hp'))/2;
+  Engine.prototype.fleetRating=function(f){
+    const ships=f.ships,c=this.nation(f.owner);if(!c)return 0;
+    const screens=(ships.destroyers||0)+(ships.cruisers||0)*1.5,capitals=(ships.battleships||0)+(ships.carriers||0),screening=clamp(screens/Math.max(1,capitals*3),.3,1);
+    const planes=c.stock.fighters+c.stock.navalBombers*1.3+this.s.wings.filter(w=>w.owner===f.owner&&['fighters','navalBombers'].includes(w.kind)).reduce((n,w)=>n+w.size,0);
+    const airReady=c.stock.fuel>50?clamp(planes/Math.max(1,(ships.carriers||0)*65),.25,1)*sv(c.eqStats?.navalBombers,'naval'):.2;
+    return ((ships.destroyers||0)*2*shipQuality(c,'destroyers')+(ships.submarines||0)*1.2*shipQuality(c,'submarines')+(ships.cruisers||0)*5*shipQuality(c,'cruisers')+((ships.battleships||0)*13*shipQuality(c,'battleships')+(ships.carriers||0)*15*airReady*shipQuality(c,'carriers'))*screening)*f.strength;
+  };
+  // Share of sea control held by the side of "id" in a zone (1 when uncontested).
+  Engine.prototype.seaShare16=function(id,zone){
+    const ctl=this.s.seaControl16?.[zone];if(!ctl)return 1;
+    let friend=0,enemy=0;
+    for(const [k,v] of Object.entries(ctl)){if(this.allies(id,k))friend+=v;else if(this.war(id,k))enemy+=v;}
+    return enemy<=0?1:friend/(friend+enemy);
+  };
+  Engine.prototype.seaAllowed=function(id,edge,target){
+    const c=this.nation(id);if(c.stock.convoys<10||c.stock.fuel<10)return false;
+    if(!this.access(id,target)&&!this.war(id,target))return false;
+    if(this.war(id,target))for(const z of edge.zones||[])if(this.seaShare16(id,z)<.5)return false;
+    return true;
+  };
+  Engine.prototype.navalStep=function(){
+    const s=this.s;s.navalReports=[];s.mines16??={};
+    const zones=new Map();
+    for(const f of s.fleets){
+      if(f.eta>0){f.eta--;continue;}
+      const c=this.nation(f.owner);if(!c?.alive)continue;
+      if(f.mission==='port'){f.strength=clamp(f.strength+.012*(1+c.stats.dock*.01),0,1);continue;}
+      const ships=sum(Object.values(f.ships));c.stock.fuel=Math.max(0,c.stock.fuel-ships*.4);
+      if(c.stock.fuel<1||ships<.5)continue;
+      if(!zones.has(f.zone))zones.set(f.zone,[]);zones.get(f.zone).push(f);
+    }
+    const control={};
+    for(const [zone,fleets] of zones){
+      const weather=this.seaWeather(zone),mines=s.mines16[zone]??={};
+      for(const f of fleets){
+        const c=this.nation(f.owner),layers=(f.ships.destroyers||0)+(f.ships.cruisers||0);
+        if(f.mission==='mines')mines[f.owner]=Math.min(1000,(mines[f.owner]||0)+layers*.8*(1+c.bonus.mines));
+        if(f.mission==='sweep')for(const k of Object.keys(mines))if(this.war(f.owner,k))mines[k]=Math.max(0,mines[k]-(f.ships.destroyers||0)*1.2*(1+c.bonus.mines));
+        const hostile=sum(Object.entries(mines).filter(([k])=>this.war(f.owner,k)).map(([,v])=>v));
+        if(hostile>0)this.fleetLoss(f,sum(Object.values(f.ships))*hostile/1000*.004);
+        (control[zone]??={})[f.owner]=(control[zone][f.owner]||0)+this.fleetRating(f)*(f.mission==='raid'&&!f.ships.destroyers&&!f.ships.cruisers?.3:1);
+      }
+      for(const [k,v] of Object.entries(mines))if(v<.5)delete mines[k];
+      // Engagements need detection: patrols spot, strike forces engage.
+      for(const f of fleets)for(const e of fleets){
+        if(e.id<=f.id||!this.war(f.owner,e.owner))continue;
+        const cf=this.nation(f.owner),ce=this.nation(e.owner);
+        const spot=(x,y,cx)=>{
+          const patrol=x.mission==='patrol'?.35:x.mission==='strike'?.2:.12,surface=sum(['destroyers','cruisers','battleships','carriers'].map(k=>y.ships[k]||0));
+          const stealth=surface?1:sv(this.nation(y.owner).eqStats?.submarines,'stealth')*2;
+          return clamp((patrol+(x.ships.destroyers||0)*.02*sv(cx.eqStats?.destroyers,'detection'))*weather.naval/stealth,0,.95);
+        };
+        const detected=this.random()<spot(f,e,cf)||this.random()<spot(e,f,ce);
+        if(!detected)continue;
+        const power=this.fleetRating(f)*(1+cf.bonus.navy+cf.bonus.naval)*(MISSION_POWER[f.mission]||1)*weather.naval;
+        const enemy=this.fleetRating(e)*(1+ce.bonus.navy+ce.bonus.naval)*(MISSION_POWER[e.mission]||1)*weather.naval;
+        if(power<=0||enemy<=0)continue;
+        const hit=.006+this.random()*.01,shipsF=sum(Object.values(f.ships)),shipsE=sum(Object.values(e.ships));
+        const lossF=Math.min(shipsF,enemy/Math.max(1,power)*hit*shipsF),lossE=Math.min(shipsE,power/Math.max(1,enemy)*hit*shipsE);
+        this.fleetLoss(f,lossF);this.fleetLoss(e,lossE);
+        f.strength=clamp(f.strength-.01,.1,1);e.strength=clamp(e.strength-.01,.1,1);
+        if(f.owner===s.player||e.owner===s.player)s.navalReports.push({zone,a:f.owner,b:e.owner,lossA:lossF,lossB:lossE});
+      }
+      for(const f of fleets){
+        const c=this.nation(f.owner);
+        if(f.mission==='raid')for(const target of this.enemies(f.owner)){
+          const raiding=this.navalPower(f.owner,f.zone,'raid')*(1+c.bonus.raiding)*sv(c.eqStats?.submarines,'stealth');
+          const escort=this.navalPower(target,f.zone,'escort')*(1+this.nation(target).bonus.convoy);
+          const victim=this.nation(target);if(!victim)continue;
+          const sunk=Math.max(0,raiding-escort)*.025*weather.naval;
+          victim.stock.convoys=Math.max(0,victim.stock.convoys-sunk);
+          if(escort>0&&f.ships.submarines){const asw=escort*.002*sv(this.nation(target).eqStats?.destroyers,'subAttack');f.ships.submarines=Math.max(0,f.ships.submarines-asw);c.lostShips+=asw;}
+        }
+        if(f.strength<.25)f.mission='port';
+      }
+    }
+    // Naval aviation over the zone also counts toward control.
+    for(const [key,value] of Object.entries(this.navalAir16||{})){const [zone,id]=key.split('|');(control[zone]??={})[id]=(control[zone][id]||0)+value;}
+    s.seaControl16=Object.fromEntries(Object.entries(control).map(([z,v])=>[z,Object.fromEntries(Object.entries(v).map(([k,n])=>[k,+n.toFixed(2)]))]));
+  };
+  Engine.command16('fleetMission',function(p,id,c){
+    const f=this.s.fleets.find(f=>f.id===p.id&&f.owner===id);assert(f,'Flotte inconnue.');
+    assert(this.world.seas.some(z=>z.id===p.zone),'Région maritime inconnue.');assert(FLEET_MISSIONS.includes(p.mission),'Mission navale inconnue.');
+    if(p.mission==='mines'||p.mission==='sweep')assert((f.ships.destroyers||0)+(f.ships.cruisers||0)>0,'Il faut des destroyers ou des croiseurs.');
+    if(f.zone!==p.zone){f.eta=5;f.zone=p.zone;}f.mission=p.mission;
+  });
+  // Naval invasions: preparation in a port, then a landing once the sea
+  // zones are under control and the weather allows it.
+  Engine.command16('invasion',function(p,id,c){
+    assert(Array.isArray(p.ids)&&p.ids.length>=1&&p.ids.length<=12,'Choisissez de 1 à 12 divisions.');
+    const units=[...new Set(p.ids)].map(uid=>this.s.units.find(u=>u.id===uid&&u.owner===id));
+    assert(units.every(Boolean),'Une division ne vous appartient pas.');
+    const from=units[0].pid;assert(units.every(u=>u.pid===from),'Les divisions doivent être réunies dans le même port.');
+    assert(this.s.provinces[from].port>0&&this.access(id,this.s.provinces[from].ctrl),'Le départ exige un port ami.');
+    const target=this.prov[p.target],ctrl=this.s.provinces[p.target]?.ctrl;
+    assert(target?.coast,'La cible doit être une province côtière.');assert(this.war(id,ctrl),'La cible doit appartenir à un pays en guerre avec vous.');
+    const range=1800*(1+c.bonus.invasion*2);assert(distance(this.prov[from],target)<=range,'Cible hors de portée ('+Math.round(range)+' km).');
+    assert(c.stock.convoys>=10*units.length,'Il faut 10 convois par division.');
+    assert(!(this.s.invasions16||[]).some(i=>i.units.some(uid=>p.ids.includes(uid))),'Une division est déjà affectée à un débarquement.');
+    const zones=[...new Set([this.prov[from].seaZone,target.seaZone].filter(Boolean))];
+    this.s.invasions16??=[];
+    const inv={id:this.s.uid++,owner:id,units:units.map(u=>u.id),from,to:p.target,zones,progress:0,days:Math.max(6,12+2*units.length-Math.round(10*c.bonus.invasion)),status:'preparing'};
+    for(const u of units){u.path=[];const a=this.s.armies.find(a=>a.id===u.army);if(a)a.auto=false;}
+    this.s.invasions16.push(inv);return inv.id;
+  });
+  Engine.command16('cancelInvasion',function(p,id){
+    const inv=(this.s.invasions16||[]).find(i=>i.id===p.id&&i.owner===id);assert(inv,'Débarquement inconnu.');
+    for(const uid of inv.units){const u=this.s.units.find(u=>u.id===uid);if(u?.landing16){u.landing16=null;u.path=[];}}
+    this.s.invasions16=this.s.invasions16.filter(i=>i!==inv);
+  });
+  Engine.onDay16(function(){this.invasionStep16();});
+  Engine.prototype.invasionStep16=function(){
+    const list=this.s.invasions16||[];if(!list.length)return;
+    for(const inv of [...list]){
+      const c=this.nation(inv.owner);
+      inv.units=inv.units.filter(uid=>{const u=this.s.units.find(u=>u.id===uid);return u&&(u.pid===inv.from||u.pid===inv.to);});
+      if(!c?.alive||!inv.units.length||!this.war(inv.owner,this.s.provinces[inv.to].ctrl)&&inv.status!=='landing'){this.s.invasions16=this.s.invasions16.filter(i=>i!==inv);continue;}
+      const units=inv.units.map(uid=>this.s.units.find(u=>u.id===uid));
+      if(inv.status==='landing'){
+        if(units.every(u=>!u.landing16)){
+          const landed=units.some(u=>u.pid===inv.to);
+          if(inv.owner===this.s.player)this.log(landed?'Débarquement réussi à '+this.prov[inv.to].name+'.':'Le débarquement à '+this.prov[inv.to].name+' a été repoussé.',landed?'success':'war');
+          if(!landed)for(const u of units)this.loss(u,.15,20);
+          this.s.invasions16=this.s.invasions16.filter(i=>i!==inv);
+        }
+        continue;
+      }
+      inv.progress=Math.min(inv.days,inv.progress+1);
+      if(inv.progress<inv.days)continue;
+      const blocked=inv.zones.find(z=>this.seaShare16(inv.owner,z)<.5),gale=inv.zones.find(z=>!this.seaWeather(z).invasion);
+      if(blocked||gale){if(inv.status!=='waiting'&&inv.owner===this.s.player)this.log('Débarquement en attente : '+(blocked?'maîtrise navale insuffisante':'tempête en mer')+'.','event');inv.status='waiting';continue;}
+      if(c.stock.convoys<10*units.length){inv.status='waiting';continue;}
+      c.stock.convoys-=2*units.length;inv.status='landing';
+      for(const u of units){u.landing16={to:inv.to,amphibious:true,from:inv.from};u.path=[inv.to];u.progress=0;}
+    }
+  };
+
+  // ---------------------------------------------------------------------------
+  // Air war: six aircraft roles, air superiority per zone, anti-air defence,
+  // strategic and naval bombing, air supply, paradrops and carrier aviation.
+  // ---------------------------------------------------------------------------
+  const AIR_MISSIONS={
+    fighters:['reserve','superiority','intercept','escort'],
+    cas:['reserve','support'],
+    bombers:['reserve','support','strategic','logistics','portStrike'],
+    strategicBombers:['reserve','strategic'],
+    navalBombers:['reserve','navalStrike','portStrike'],
+    transportPlanes:['reserve','airSupply'],
+  };
+  const AIR_RANGE={fighters:1600,cas:1200,bombers:2300,strategicBombers:3500,navalBombers:2500,transportPlanes:2200};
+  const SEA_MISSIONS=['navalStrike','portStrike'];
+  Engine.AIR_MISSIONS16=AIR_MISSIONS;
+  Engine.prototype.airStep=function(){
+    const s=this.s;s.airReports=[];this.airSupport={};this.airPenalty16={};this.navalAir16={};this.airSupply16={};
+    const groups={},aaByZone={};
+    for(const p of this.prov){const q=s.provinces[p.id];if(q.aa)(aaByZone[p.zone]??={})[q.ctrl]=(aaByZone[p.zone][q.ctrl]||0)+q.aa;}
+    for(const w of s.wings){
+      if(w.size<1||w.mission==='reserve'||!this.nation(w.owner)?.alive)continue;
+      const base=s.provinces[w.base],c=this.nation(w.owner),stats=c.eqStats?.[w.kind];
+      if(!this.access(w.owner,base.ctrl)||!base.airbase||c.stock.fuel<1)continue;
+      const naval=SEA_MISSIONS.includes(w.mission)&&w.seaZone;
+      const target=naval?this.world.seas.find(z=>z.id===w.seaZone):null;
+      const centreProv=naval?null:(this._zoneCentre16??={})[w.zone]??=(()=>{const ps=this.prov.filter(p=>p.zone===w.zone);return ps[Math.floor(ps.length/2)];})();
+      const centre=naval?{x:target.x,y:target.y}:centreProv;if(!centre)continue;
+      const reach=clamp(AIR_RANGE[w.kind]*sv(stats,'range')/Math.max(1,distance(this.prov[w.base],centre)),0,1);
+      const parked=sum(s.wings.filter(x=>x.base===w.base).map(x=>x.size)),capacity=clamp(base.airbase*250/Math.max(1,parked),0,1);
+      const radar=naval?0:sum(this.prov.filter(p=>p.zone===w.zone&&this.allies(w.owner,s.provinces[p.id].ctrl)).map(p=>s.provinces[p.id].radar));
+      const weatherAir=naval?this.seaWeather(w.seaZone).air:this.weather(w.base).air;
+      w.efficiency=reach*capacity*(.3+.7*base.supply)*(1-base.damage);
+      const effective=w.size*w.efficiency*weatherAir*(1+c.bonus.air)*(1+Math.min(.25,radar*.035));
+      c.stock.fuel=Math.max(0,c.stock.fuel-effective*.04);
+      const key=naval?'sea:'+w.seaZone:w.zone;(groups[key]??=[]).push({w,effective,c,stats});
+    }
+    for(const [key,list] of Object.entries(groups)){
+      const naval=key.startsWith('sea:'),zone=naval?key.slice(4):key;
+      const fighterPower=g=>g.w.kind==='fighters'&&['superiority','intercept','escort'].includes(g.w.mission)?g.effective*sv(g.stats,'air')*(g.w.mission==='intercept'?1.25:1):0;
+      const sides=new Map();
+      for(const g of list){const side=[...sides.keys()].find(k=>this.allies(k,g.w.owner))||g.w.owner;if(!sides.has(side))sides.set(side,{fighters:0,bombers:0,members:[]});const sd=sides.get(side);sd.fighters+=fighterPower(g);sd.members.push(g);if(g.w.kind!=='fighters')sd.bombers+=g.effective;}
+      for(const [side,sd] of sides){
+        const enemyF=sum([...sides.entries()].filter(([k])=>this.war(side,k)).map(([,v])=>v.fighters));
+        const control=(sd.fighters+25)/(sd.fighters+enemyF+50),escort=sum(sd.members.filter(g=>g.w.mission==='escort').map(g=>g.effective));
+        const aa=naval?0:sum(Object.entries(aaByZone[zone]||{}).filter(([k])=>this.war(side,k)).map(([k,v])=>v*(1+(this.nation(k)?.bonus.airDefense||0))));
+        for(const g of sd.members){
+          const {w,c,stats,effective}=g;
+          (s.airControl16??={})[zone]??={};s.airControl16[zone][w.owner]=+control.toFixed(3);
+          const fragile=w.kind==='fighters'?.002:(escort>effective*.4?.0025:.004);
+          let losses=Math.min(w.size,enemyF*fragile*(1-control*.4)/sv(stats,'defense'));
+          if(w.kind!=='fighters'&&aa)losses+=Math.min(w.size-losses,effective*aa*.00025);
+          w.size-=losses;c.lostPlanes+=losses;
+          const ground=effective*sv(stats,'ground')*(1+c.bonus.bombing);
+          if(!naval){
+            if(w.kind==='fighters')this.airSupport[w.owner+'_'+zone]=(this.airSupport[w.owner+'_'+zone]||0)+effective/5000*control;
+            if(w.mission==='support')this.airSupport[w.owner+'_'+zone]=(this.airSupport[w.owner+'_'+zone]||0)+ground/(w.kind==='cas'?1100:1400)*control;
+            if(w.mission==='strategic'||w.mission==='logistics'){
+              const targets=this.prov.filter(p=>p.zone===zone&&this.war(w.owner,s.provinces[p.id].ctrl)&&(w.mission==='logistics'||s.provinces[p.id].civ+s.provinces[p.id].mil+s.provinces[p.id].dock>0||s.provinces[p.id].refinery>0));
+              if(targets.length){const t=targets[Math.floor(this.random()*targets.length)],st=s.provinces[t.id];const shield=1/(1+st.aa*.25);st.damage=clamp(st.damage+ground/(w.kind==='strategicBombers'?7000:12000)*control*shield,0,.85);if(w.mission==='logistics')st.supply*=.85;}
+            }
+            if(w.mission==='airSupply')this.airSupply16[w.owner+'_'+zone]=(this.airSupply16[w.owner+'_'+zone]||0)+effective;
+          }else{
+            this.navalAir16[zone+'|'+w.owner]=(this.navalAir16[zone+'|'+w.owner]||0)+effective*sv(stats,'naval')/40*(w.kind==='fighters'?.3:1);
+            const fleets=s.fleets.filter(f=>this.war(w.owner,f.owner)&&(w.mission==='navalStrike'?f.zone===zone&&f.mission!=='port'&&f.eta<=0:this.prov[f.base]?.seaZone===zone&&f.mission==='port'));
+            if(fleets.length&&w.kind!=='fighters'){
+              const f=fleets[Math.floor(this.random()*fleets.length)],fc=this.nation(f.owner);
+              const flak=1+sum(['destroyers','cruisers','battleships','carriers'].map(k=>(f.ships[k]||0)*sv(fc.eqStats?.[k],'air')))*.04;
+              const sunk=effective*sv(stats,'naval')/3000*control/flak*(w.mission==='portStrike'?1.4:1);
+              this.fleetLoss(f,sunk);f.strength=clamp(f.strength-sunk*.05,.1,1);
+              w.size=Math.max(0,w.size-Math.min(w.size,(flak-1)*effective*.0008));
+            }
+          }
+          if(w.owner===s.player)s.airReports.push({zone:naval?'sea:'+zone:zone,wing:w.id,effective:Math.round(effective),control,losses});
+        }
+        // A side without air cover fights at a disadvantage on the ground.
+        if(!naval)for(const id of this.active())if(this.allies(side,id)){
+          const enemyControl=1-control;if(enemyControl>.6)this.airPenalty16[id+'_'+zone]=1-(enemyControl-.6)*.4;
+        }
+      }
+    }
+    // Air supply keeps encircled divisions alive.
+    for(const [key,value] of Object.entries(this.airSupply16)){
+      const cut=key.lastIndexOf('_'),id=key.slice(0,cut),zone=key.slice(cut+1);
+      const pocket=s.units.filter(u=>u.owner===id&&u.pocketed&&this.prov[u.pid].zone===zone);
+      for(const u of pocket)u.supply=Math.max(u.supply,Math.min(.55,value/(pocket.length*45)));
+    }
+  };
+  const combatProfile15=Engine.prototype.combatProfile16;
+  Engine.prototype.combatProfile16=function(u,pid,offense,ctx){
+    const p=combatProfile15.call(this,u,pid,offense,ctx),penalty=this.airPenalty16?.[u.owner+'_'+this.prov[pid].zone]??1;
+    if(penalty<1)for(const k of ['soft','hard','defense','breakthrough'])p[k]*=penalty;
+    return p;
+  };
+  Engine.command16('airCreate',function(p,id,c){
+    assert(AIR_MISSIONS[p.kind],'Type d’appareil inconnu.');assert(Number.isInteger(p.size)&&p.size>=10&&p.size<=500,'Taille : 10 à 500 appareils.');
+    const st=this.s.provinces[p.base];assert(st?.ctrl===id&&st.airbase>0,'Base aérienne nationale requise.');assert(c.stock[p.kind]>=p.size,'Appareils en réserve insuffisants.');
+    c.stock[p.kind]-=p.size;
+    const names={fighters:'Escadre de chasse',cas:'Escadre d’appui',bombers:'Escadre de bombardement',strategicBombers:'Escadre de bombardement lourd',navalBombers:'Escadre de bombardement naval',transportPlanes:'Escadre de transport'};
+    this.s.wings.push({id:this.s.uid++,owner:id,name:names[p.kind],kind:p.kind,size:p.size,base:p.base,zone:this.prov[p.base].zone,mission:'reserve',xp:0});
+  });
+  Engine.command16('airMission',function(p,id,c){
+    const w=this.s.wings.find(w=>w.id===p.id&&w.owner===id);assert(w,'Escadre inconnue.');
+    assert((AIR_MISSIONS[w.kind]||[]).includes(p.mission),'Mission incompatible avec ces appareils.');
+    if(SEA_MISSIONS.includes(p.mission)){assert(this.world.seas.some(z=>z.id===p.seaZone),'Région maritime inconnue.');w.seaZone=p.seaZone;}
+    else{assert(this.world.zones.some(z=>z.id===p.zone),'Région aérienne inconnue.');w.zone=p.zone;}
+    w.mission=p.mission;
+  });
+  // Paradrop: airborne divisions jump from an air base onto an enemy province.
+  Engine.command16('paradrop',function(p,id,c){
+    assert(Array.isArray(p.ids)&&p.ids.length>=1&&p.ids.length<=6,'Choisissez de 1 à 6 divisions aeroportées.');
+    const units=[...new Set(p.ids)].map(uid=>this.s.units.find(u=>u.id===uid&&u.owner===id));
+    assert(units.every(Boolean),'Une division ne vous appartient pas.');
+    assert(units.every(u=>this.unitStats16(u).special?.paradrop),'Seules les divisions entièrement parachutistes peuvent sauter.');
+    assert(units.every(u=>this.s.provinces[u.pid].airbase>0&&this.access(id,this.s.provinces[u.pid].ctrl)),'Les parachutistes partent d’une base aérienne amie.');
+    const target=this.prov[p.target],ctrl=this.s.provinces[p.target]?.ctrl;assert(target&&this.war(id,ctrl),'La cible doit être une province ennemie.');
+    const range=800*sv(c.eqStats?.transportPlanes,'range')*(1+c.bonus.paradrop);
+    assert(units.every(u=>distance(this.prov[u.pid],target)<=range),'Cible hors de portée ('+Math.round(range)+' km).');
+    assert(c.stock.transportPlanes>=15*units.length,'Il faut 15 avions de transport par division.');
+    const control=this.s.airControl16?.[target.zone]?.[id]??.5;
+    c.stock.transportPlanes-=Math.ceil(units.length*15*(control<.35?.3:.05));
+    for(const u of units){
+      if(control<.35)this.loss(u,.2,0);
+      u.landing16={to:p.target,airborne:true,from:u.pid};u.path=[p.target];u.org=u.org*.85;
+      const a=this.s.armies.find(a=>a.id===u.army);if(a)a.auto=false;
+    }
+    if(id===this.s.player)this.log('Opération aeroportée sur '+target.name+' : '+units.length+' division(s).','war');
+  });
+  Engine.invariant16(function(state){
+    for(const w of state.wings){
+      assert(!w.mission||w.mission==='reserve'||(AIR_MISSIONS[w.kind]||['reserve','superiority','intercept','support','strategic','logistics']).includes(w.mission),'Mission aérienne invalide.');
+      if(w.seaZone!==undefined)assert(this.world.seas.some(z=>z.id===w.seaZone),'Zone maritime d’escadre invalide.');
+    }
+    for(const f of state.fleets)assert(FLEET_MISSIONS.includes(f.mission),'Mission navale invalide.');
+    for(const inv of state.invasions16||[])assert(Number.isInteger(inv.id)&&this.prov[inv.from]&&this.prov[inv.to]&&Array.isArray(inv.units)&&['preparing','waiting','landing'].includes(inv.status),'Débarquement invalide.');
+    for(const [zone,m] of Object.entries(state.mines16||{}))for(const v of Object.values(m))assert(finite(v,0,1000),'Champ de mines invalide.');
   });
 
   // ---------------------------------------------------------------------------

@@ -382,3 +382,80 @@ ACTIONS16.push(async(action,p)=>{
   }
   return false;
 });
+
+/* ---- Air war and navy ---- */
+const AIR_KINDS16={fighters:'Chasse',cas:'Appui rapproché',bombers:'Bombardement tactique',strategicBombers:'Bombardement stratégique',navalBombers:'Bombardement naval',transportPlanes:'Transport'};
+const AIR_MISSION_LABELS16={reserve:'Au sol / réserve',superiority:'Supériorité aérienne',intercept:'Interception',escort:'Escorte des bombardiers',support:'Appui au sol',strategic:'Bombardement stratégique',logistics:'Interdiction logistique',navalStrike:'Attaque navale',portStrike:'Attaque des ports',airSupply:'Ravitaillement aérien'};
+const AIR_MISSIONS16={fighters:['reserve','superiority','intercept','escort'],cas:['reserve','support'],bombers:['reserve','support','strategic','logistics','portStrike'],strategicBombers:['reserve','strategic'],navalBombers:['reserve','navalStrike','portStrike'],transportPlanes:['reserve','airSupply']};
+const FLEET_MISSION_LABELS16={port:'Au port / réparation',patrol:'Patrouille (détection)',strike:'Flotte d’attaque',escort:'Escorte des convois',raid:'Guerre de course',mines:'Pose de mines',sweep:'Déminage',invasion:'Couverture de débarquement'};
+const seaName16=id=>WORLD.seas.find(z=>z.id===id)?.name||id;
+const zoneName16=id=>WORLD.zones.find(z=>z.id===id)?.name||id;
+const sideShare16=(table,id)=>{if(!table)return null;let f=0,e=0;for(const [k,v] of Object.entries(table)){if(allied(id,k))f+=v;else if(war(id,k))e+=v;}return e<=0?(f>0?1:null):f/(f+e);};
+PANELS16.air=function(){
+  const c=nation(),wings=S.wings.filter(w=>w.owner===S.player),bases=owned().filter(p=>S.provinces[p.id].airbase>0);
+  const paras=ownUnits().filter(u=>selected.has(u.id)&&Rules.templateStats(u.template).special?.paradrop);
+  const zones=Object.entries(S.airControl16||{}).filter(([,t])=>t[S.player]!==undefined);
+  return panelHeader('Opérations aériennes',`${Math.floor(total(wings.map(w=>w.size)))} appareils déployés / ${num(c.lostPlanes)} pertes`)+`
+    <div class="grid3">${Object.entries(AIR_KINDS16).map(([k,label])=>`<div class="card stat">${num(c.stock[k])}<small>${esc(label.toUpperCase())}</small></div>`).join('')}</div>
+    ${zones.length?`<div class="sectionlabel">Maîtrise du ciel</div><div class="card">${zones.map(([z,t])=>`<div>${metric(esc(zoneName16(z)),Math.round(t[S.player]*100)+' %',t[S.player]>=.6?'good':t[S.player]<.4?'bad':'')}${bar(t[S.player]*100,t[S.player]>=.5?'#91ba9e':'#c98070')}</div>`).join('')}</div>`:''}
+    <div class="sectionlabel">Escadres</div><div class="stack">${wings.map(w=>{const naval=['navalStrike','portStrike'].includes(w.mission);return `<div class="card mission-card"><div class="row between"><h4>${esc(w.name)}</h4><span class="gold mono">${num(w.size)}</span></div><small>${esc(AIR_KINDS16[w.kind]||w.kind)} / ${esc(pname(w.base))} / eff. ${percent(w.efficiency??1)} / ${esc(AIR_MISSION_LABELS16[w.mission]||w.mission)}${naval&&w.seaZone?' / '+esc(seaName16(w.seaZone)):''}</small>
+      ${field('Mission',`<select id="air-mission-${w.id}">${(AIR_MISSIONS16[w.kind]||['reserve']).map(k=>`<option value="${k}" ${w.mission===k?'selected':''}>${esc(AIR_MISSION_LABELS16[k])}</option>`).join('')}</select>`)}
+      ${field('Région aérienne (missions terrestres)',`<select id="air-zone-${w.id}">${zoneOptions(w.zone)}</select>`)}
+      ${['navalBombers','bombers'].includes(w.kind)?field('Zone maritime (missions navales)',`<select id="air-sea-${w.id}">${zoneOptions(w.seaZone||WORLD.seas[0].id,true)}</select>`):''}
+      <div class="row wrap">${btn('Appliquer','airMission16',{id:w.id},'small primary')}${btn('+ 50 appareils','airReinforce',{id:w.id},'small',c.stock[w.kind]<1)}${btn(w.autoReinforce?'Renfort auto. : OUI':'Renfort auto. : NON','airAutoReinforce',{id:w.id,value:!w.autoReinforce},'small')}</div>
+      <div style="margin-top:9px">${selectProvinces('rebase-'+w.id,w.base,p=>S.provinces[p.id].airbase>0)}${btn('Transférer vers cette base','airRebaseForm',{id:w.id},'small')}</div></div>`;}).join('')||'<div class="empty">Aucune escadre déployée.</div>'}</div>
+    <div class="sectionlabel">Former une escadre</div><div class="card stack"><select id="air-type">${Object.entries(AIR_KINDS16).map(([k,label])=>`<option value="${k}">${esc(label)} / ${num(c.stock[k])} en réserve</option>`).join('')}</select>${selectProvinces('air-base',bases[0]?.id,p=>S.provinces[p.id].airbase>0)}<div class="row between"><span class="note">Nombre d’appareils</span><input type="number" id="air-size" min="10" max="500" value="50"></div>${btn('Déployer l’escadre','airCreateForm',{},'primary small',!bases.length)}</div>
+    <div class="sectionlabel">Opérations aéroportées</div><div class="card stack"><p class="note">Sélectionnez des divisions entièrement parachutistes stationnées sur une base aérienne, puis désignez la province ennemie. Portée de base : 800 km ; 15 avions de transport par division. Sans maîtrise du ciel, les pertes sont lourdes.</p>${metric('Divisions parachutistes sélectionnées',paras.length)}${btn('Choisir la zone de saut','paradropTool16',{},'small',!paras.length)}</div>
+    <p class="note" style="margin-top:13px">La chasse dispute le ciel ; sans couverture, les troupes au sol combattent avec une pénalité. La DCA (bâtiments et bataillons) abat les bombardiers et protège les usines. Les avions embarqués et navals décident souvent de la maîtrise des mers.</p>`;
+};
+PANELS16.navy=function(){
+  const c=nation(),fleets=S.fleets.filter(f=>f.owner===S.player),ports=owned().filter(p=>S.provinces[p.id].port>0);
+  const sel=ownUnits().filter(u=>selected.has(u.id)),samePort=sel.length&&sel.every(u=>u.pid===sel[0].pid)&&S.provinces[sel[0].pid].port>0;
+  const control=Object.keys(S.seaControl16||{}).map(z=>[z,sideShare16(S.seaControl16[z],S.player)]).filter(([,v])=>v!==null);
+  const minesFor=z=>{const m=S.mines16?.[z]||{};return {own:total(Object.entries(m).filter(([k])=>allied(S.player,k)).map(([,v])=>v)),enemy:total(Object.entries(m).filter(([k])=>war(S.player,k)).map(([,v])=>v))};};
+  return panelHeader('Commandement naval',`${num(total(fleets.map(f=>total(Object.values(f.ships)))))} navires déployés / ${num(c.stock.convoys)} convois`)+`
+    <div class="grid3">${Object.entries(SHIP_LABELS).map(([k,label])=>`<div class="card stat">${num(c.stock[k])}<small>${esc(label.toUpperCase())} EN RÉSERVE</small></div>`).join('')}<div class="card stat">${num(c.stock.convoys)}<small>CONVOIS</small></div></div>
+    ${control.length?`<div class="sectionlabel">Maîtrise des mers</div><div class="card">${control.map(([z,v])=>{const m=minesFor(z);return `<div>${metric(esc(seaName16(z)),Math.round(v*100)+' %'+(m.own||m.enemy?' / mines '+Math.round(m.own)+' : '+Math.round(m.enemy):''),v>=.5?'good':'bad')}${bar(v*100,v>=.5?'#95b6aa':'#c98070')}</div>`;}).join('')}</div>`:''}
+    <div class="sectionlabel">Groupes navals</div><div class="stack">${fleets.map(f=>`<div class="card mission-card"><div class="row between"><h4>${esc(f.name)}</h4>${tag(f.eta>0?'TRANSIT '+f.eta+' J':f.mission==='port'?'AU PORT':'EN MISSION')}</div><div class="ship-breakdown">${Object.entries(SHIP_LABELS).map(([k,label])=>`<span class="ship-chip">${Math.floor(f.ships[k]||0)} ${label}</span>`).join('')}</div><div style="margin:8px 0">${bar(f.strength*100,'#95b6aa')}</div><small>${esc(seaName16(f.zone))} / ${esc(FLEET_MISSION_LABELS16[f.mission]||f.mission)}</small>
+      ${field('Région maritime',`<select id="naval-zone-${f.id}">${zoneOptions(f.zone,true)}</select>`)}${field('Mission',`<select id="naval-mission-${f.id}">${Object.entries(FLEET_MISSION_LABELS16).map(([k,label])=>`<option value="${k}" ${f.mission===k?'selected':''}>${esc(label)}</option>`).join('')}</select>`)}${btn('Donner l’ordre','fleetMissionForm',{id:f.id},'primary small wide')}
+      ${f.mission==='port'?`<div class="row wrap" style="margin-top:8px">${Object.entries(SHIP_LABELS).filter(([k])=>c.stock[k]>=1).map(([k,label])=>btn('+1 '+label,'fleetReinforce',{id:f.id,kind:k},'small')).join('')}</div>`:''}</div>`).join('')||'<div class="empty">Aucun groupe naval déployé.</div>'}</div>
+    <div class="sectionlabel">Former un groupe naval</div><div class="card stack"><input id="fleet-name" value="Groupe naval" maxlength="60" aria-label="Nom de la flotte">${selectProvinces('fleet-base',ports[0]?.id,p=>S.provinces[p.id].port>0)}<div class="row between"><span class="note">Destroyers</span><input id="fleet-dd" type="number" min="0" max="100" value="2"></div><div class="row between"><span class="note">Sous-marins</span><input id="fleet-ss" type="number" min="0" max="100" value="0"></div>${['cruisers','battleships','carriers'].map(k=>`<div class="row between"><span class="note">${SHIP_LABELS[k]} / ${Math.floor(c.stock[k])} en réserve</span><input id="fleet-${SHIP_FIELDS[k]}" type="number" min="0" max="100" value="0"></div>`).join('')}${btn('Former le groupe','fleetCreateForm',{},'primary small',!ports.length)}</div>
+    <div class="sectionlabel">Invasions navales</div><div class="card stack"><p class="note">Réunissez jusqu’à 12 divisions dans un port ami, sélectionnez-les, puis désignez une province côtière ennemie. La préparation dure 12 jours et plus ; le débarquement n’a lieu qu’avec la maîtrise des zones traversées et sans tempête. Les forts côtiers et l’absence de troupes de marine pénalisent l’assaut.</p>${metric('Divisions sélectionnées dans un même port',samePort?sel.length:0)}${btn('Choisir la plage de débarquement','invasionTool16',{},'small',!samePort)}</div>
+    <div class="stack" style="margin-top:9px">${(S.invasions16||[]).filter(i=>i.owner===S.player).map(i=>`<div class="card"><div class="row between"><strong>${esc(pname(i.from))} → ${esc(pname(i.to))}</strong>${tag({preparing:'PRÉPARATION',waiting:'EN ATTENTE',landing:'ASSAUT'}[i.status]||i.status,i.status==='landing'?'bad':'')}</div><small>${i.units.length} division(s) / ${i.zones.map(seaName16).join(', ')}</small><div style="margin:7px 0">${bar(i.progress/i.days*100)}</div><small>${i.progress} / ${i.days} jours</small><div style="margin-top:7px">${btn('Annuler','cancelInvasion',{id:i.id},'small ghost')}</div></div>`).join('')}</div>
+    <p class="note" style="margin-top:12px">Les patrouilles détectent l’ennemi ; les flottes d’attaque engagent ce qui est repéré. Les sous-marins sont discrets mais les destroyers équipés de sonar les traquent. Les mines usent les flottes et convois ennemis de la zone.</p>`;
+};
+const colorOfAir15=colorOf;
+colorOf=function(p){
+  if(mapMode==='air'&&S){const share=S.airControl16?.[p.zone]?.[S.player];if(share!==undefined)return `hsl(${Math.round(share*110)},32%,${34+share*14}%)`;}
+  return colorOfAir15(p);
+};
+DRAW16.push((ctx,zoom)=>{
+  if(!S||mapMode!=='navy')return;
+  for(const sea of WORLD.seas){
+    const share=sideShare16(S.seaControl16?.[sea.id],S.player),p=project(sea.x,sea.y);
+    if(share===null)continue;
+    ctx.fillStyle=`hsla(${Math.round(share*110)},45%,55%,.35)`;ctx.beginPath();ctx.arc(p.x,p.y,24/zoom,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#f2ecd2';ctx.font=`600 ${10/zoom}px system-ui`;ctx.fillText(Math.round(share*100)+' %',p.x,p.y+14/zoom);
+  }
+});
+direct.add('cancelInvasion');
+function beginTargetTool16(kind){
+  closeModal();operationTool={kind,points:[]};document.body.classList.remove('panel-open');
+  const tool=$('operation-toolbar');tool.hidden=false;
+  tool.innerHTML=`<span>${kind==='invasion'?'DÉBARQUEMENT / Cliquez une province côtière ennemie':'PARACHUTAGE / Cliquez la province ennemie visée'}</span>${btn('Annuler','cancelOperation',{},'small')}`;
+}
+window.addEventListener('pointerup',ev=>{
+  if(!operationTool||!['invasion','paradrop'].includes(operationTool.kind)||ev.target!==canvas||!drag||drag.moved||ev.button!==0)return;
+  const r=canvas.getBoundingClientRect(),id=pointAt(ev.clientX-r.left,ev.clientY-r.top);
+  ev.stopImmediatePropagation();drag=null;if(id===null)return;
+  const kind=operationTool.kind,ids=[...selected];endOperationTool();
+  cmd(kind,{ids,target:id}).then(()=>{toast(kind==='invasion'?'Débarquement en préparation : '+pname(id)+'.':'Parachutage lancé sur '+pname(id)+'.');renderPanel(true);}).catch(()=>{});
+},true);
+ACTIONS16.push(async(action,p)=>{
+  switch(action){
+    case 'airMission16':{const mission=$('air-mission-'+p.id).value;await cmd('airMission',{id:p.id,mission,zone:$('air-zone-'+p.id).value,seaZone:$('air-sea-'+p.id)?.value});toast('Mission aérienne affectée.');renderPanel(true);return true;}
+    case 'invasionTool16':beginTargetTool16('invasion');return true;
+    case 'paradropTool16':beginTargetTool16('paradrop');return true;
+  }
+  return false;
+});
