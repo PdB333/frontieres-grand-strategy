@@ -85,13 +85,13 @@ catalog['laws'] = {
         {'id': 'total', 'name': 'Mobilisation totale', 'consumer': .1, 'production': .25, 'construction': .2, 'cost': 120, 'war': True, 'stability': -10},
     ],
     'conscription': [
-        {'id': 'disarmed', 'name': 'Nation désarmée', 'pool': .4, 'recruit': .4, 'cost': 40},
-        {'id': 'volunteer', 'name': 'Armée de volontaires', 'pool': 1, 'recruit': 1, 'cost': 40},
-        {'id': 'limited', 'name': 'Service limité', 'pool': 1.35, 'recruit': 1.3, 'cost': 80},
-        {'id': 'extensive', 'name': 'Service étendu', 'pool': 1.7, 'recruit': 1.6, 'cost': 80, 'production': -.03},
-        {'id': 'service', 'name': 'Service obligatoire', 'pool': 2.05, 'recruit': 1.9, 'cost': 80, 'production': -.06, 'tension': 25},
-        {'id': 'all_adults', 'name': 'Service de tous les adultes', 'pool': 2.6, 'recruit': 2.3, 'cost': 120, 'production': -.1, 'war': True, 'stability': -6},
-        {'id': 'scraping', 'name': 'Levée en masse', 'pool': 3.2, 'recruit': 2.8, 'cost': 150, 'production': -.18, 'war': True, 'stability': -12},
+        {'id': 'disarmed', 'name': 'Nation désarmée', 'pool': .4, 'share': 0.01, 'recruit': .4, 'cost': 40},
+        {'id': 'volunteer', 'name': 'Armée de volontaires', 'pool': 1, 'share': 0.015, 'recruit': 1, 'cost': 40},
+        {'id': 'limited', 'name': 'Service limité', 'pool': 1.35, 'share': 0.025, 'recruit': 1.3, 'cost': 80},
+        {'id': 'extensive', 'name': 'Service étendu', 'pool': 1.7, 'share': 0.04, 'recruit': 1.6, 'cost': 80, 'production': -.03},
+        {'id': 'service', 'name': 'Service obligatoire', 'pool': 2.05, 'share': 0.07, 'recruit': 1.9, 'cost': 80, 'production': -.06, 'tension': 25},
+        {'id': 'all_adults', 'name': 'Service de tous les adultes', 'pool': 2.6, 'share': 0.11, 'recruit': 2.3, 'cost': 120, 'production': -.1, 'war': True, 'stability': -6},
+        {'id': 'scraping', 'name': 'Levée en masse', 'pool': 3.2, 'share': 0.15, 'recruit': 2.8, 'cost': 150, 'production': -.18, 'war': True, 'stability': -12},
     ],
     'trade': [
         {'id': 'free', 'name': 'Libre-échange', 'export': .8, 'production': .1, 'construction': .1, 'research': .05, 'cost': 60},
@@ -460,6 +460,10 @@ UNLOCKS = {
 for t in catalog['techs']:
     if t['id'] in UNLOCKS:
         t['unlock'] = UNLOCKS[t['id']]
+# Industrial construction techniques also open new building slots.
+for t in catalog['techs']:
+    if t['id'] in ('construction1', 'construction2', 'construction3'):
+        t['effect']['buildingSlots'] = .15
 
 # --- Releasable nations ---------------------------------------------------------------
 # Territory = provinces whose "administration" matches (optionally only from listed owners).
@@ -598,10 +602,16 @@ catalog['spirits'] = [
     spirit('mare_nostrum', 'Mare Nostrum', 'La marine domine la Méditerranée.', {'navy': .08}),
     spirit('burma_road', 'Route d’approvisionnement', 'Une route lointaine maintient l’aide étrangère.', {'supply': .1, 'resources': .05}),
     spirit('united_front', 'Front uni', 'Les factions rivales combattent l’envahisseur ensemble.', {'stabilityGrowth': .2, 'organization': .05, 'surrender': .1}),
-    spirit('strategic_depth', 'Profondeur stratégique', 'L’immensité du territoire permet d’échanger l’espace contre le temps.', {'surrender': .2, 'attrition': .1, 'supply': .1}),
+    spirit('strategic_depth', 'Profondeur stratégique', 'L’immensité du territoire permet d’échanger l’espace contre le temps.', {'surrender': .25, 'attrition': .15, 'supply': .1}),
     spirit('civil_war', 'Guerre civile', 'Le pays se déchire : milices improvisées, cadres divisés, nul ne veut capituler.', {'attack': -.3, 'breakthrough': -.2, 'defense': .1, 'organization': -.05, 'surrender': .3, 'production': -.1}),
-    spirit('africa_army', 'Armée d’Afrique', 'Les troupes coloniales aguerries forment le noyau du camp insurgé.', {'attack': .06, 'organization': .05}),
-    spirit('sisu', 'Sisu', 'Skieurs, forêts et lacs gelés : chaque position se défend jusqu’au bout.', {'defense': .12, 'attrition': .3, 'surrender': .1}),
+    spirit('popular_militias', 'Milices populaires', 'Partis et syndicats lèvent leurs propres colonnes ; l’armée régulière se reconstruit lentement.', {'attack': -.1, 'organization': -.1, 'planning': -.1}),
+    spirit('africa_army', 'Armée d’Afrique', 'Les troupes coloniales aguerries forment le noyau du camp insurgé.', {'attack': .15, 'organization': .1, 'defense': .05}),
+    spirit('phoney_war', 'Drôle de guerre', 'L’armée attend derrière ses fortifications : commandement lent, transmissions par estafette, réserves mal placées.', {'attack': -.15, 'defense': -.1, 'planning': -.15, 'organization': -.1}),
+    spirit('sickle_cut', 'Coup de faux', 'Les blindés traversent un massif réputé infranchissable et frappent la charnière du front adverse.', {'breakthrough': .3, 'attack': .15, 'speed': .1}),
+    spirit('surprise_offensive', 'Offensive surprise', 'Des millions d’hommes franchissent la frontière à l’aube, sur toute sa longueur.', {'attack': .1, 'breakthrough': .2, 'speed': .1}),
+    spirit('caught_unprepared', 'Armée prise au dépourvu', 'Unités en cours de réorganisation, aviation détruite au sol, ordres contradictoires.', {'defense': -.1, 'organization': -.1, 'planning': -.15}),
+    spirit('blitz_doctrine', 'École de la manœuvre', 'Radio dans chaque char, aviation d’appui et chefs formés à l’initiative.', {'breakthrough': .2, 'attack': .1, 'planning': .1, 'organization': .05}),
+    spirit('sisu', 'Sisu', 'Skieurs, forêts et lacs gelés : chaque position se défend jusqu’au bout.', {'defense': .15, 'attrition': .3, 'surrender': .25}),
     spirit('national_redoubt', 'Réduit national', 'Le relief et une armée de milice préparée de longue date protègent le pays.', {'defense': .1, 'entrench': .2, 'surrender': .05}),
 ]
 catalog['startSpirits'] = {
@@ -609,8 +619,8 @@ catalog['startSpirits'] = {
              'GER': ['rearmament'], 'ITA': ['colonial'], 'JPN': ['zaibatsu', 'rivalry'], 'CHI': ['warlords', 'strategic_depth'],
              'FIN': ['sisu'], 'SWI': ['national_redoubt'], 'PRC': ['revolutionary_army'], 'SHX': ['warlords'], 'GXC': ['warlords'],
              'YUN': ['warlords'], 'XSM': ['warlords'], 'SIK': ['warlords']},
-    '1939': {'USA': ['isolation'], 'FRA': ['maginot'], 'GBR': ['empire'], 'SOV': ['purged_army', 'plans', 'strategic_depth'],
-             'GER': ['rearmament', 'four_year'], 'ITA': ['colonial'], 'JPN': ['zaibatsu', 'rivalry'], 'CHI': ['united_front', 'strategic_depth'],
+    '1939': {'USA': ['isolation'], 'FRA': ['maginot', 'phoney_war'], 'GBR': ['empire'], 'SOV': ['purged_army', 'plans', 'strategic_depth'],
+             'GER': ['rearmament', 'four_year', 'blitz_doctrine'], 'ITA': ['colonial'], 'JPN': ['zaibatsu', 'rivalry'], 'CHI': ['united_front', 'strategic_depth'],
              'FIN': ['sisu'], 'SWI': ['national_redoubt'], 'PRC': ['revolutionary_army'], 'SHX': ['warlords'], 'GXC': ['warlords'],
              'YUN': ['warlords'], 'XSM': ['warlords'], 'SIK': ['warlords']},
 }
@@ -681,6 +691,20 @@ catalog['decisions'] = [
 
 # --- AI profiles and the 1939 order of battle --------------------------------------
 R_LAND = ['industry', 'infantry', 'logistics', 'air', 'armor', 'doctrine', 'navy']
+# Population in millions around 1936 (colonial empires: metropolis plus a small
+# effective share of their colonies). Conscription laws recruit a share of the
+# population of the controlled territory.
+catalog['population16'] = {
+    'FRA': 48, 'GER': 67, 'GBR': 52, 'SOV': 165, 'USA': 128, 'ITA': 43, 'JPN': 75, 'CHI': 380, 'CAN': 11, 'AST': 6.8,
+    'NZL': 1.6, 'SAF': 9.6, 'RAJ': 300, 'ETH': 10, 'SPA': 25, 'POR': 7.3, 'BEL': 9, 'HOL': 11.5, 'LUX': .3, 'SWI': 4.2,
+    'IRE': 3, 'DEN': 3.7, 'NOR': 2.9, 'SWE': 6.3, 'FIN': 3.7, 'EST': 1.1, 'LAT': 1.95, 'LIT': 2.5, 'POL': 34, 'CZE': 15,
+    'AUS': 6.8, 'HUN': 9, 'ROM': 19, 'BUL': 6.2, 'YUG': 15.4, 'GRE': 7, 'ALB': 1, 'TUR': 16.5, 'IRN': 15, 'AFG': 7,
+    'IRQ': 3.5, 'SAU': 3, 'YEM': 3, 'OMA': .5, 'SIA': 14, 'NEP': 6, 'BHU': .3, 'MON': .75, 'MAN': 34, 'MEX': 18.5,
+    'BRA': 40, 'ARG': 13, 'CHL': 4.7, 'BOL': 3, 'PRU': 7, 'ECU': 2.5, 'COL': 8.7, 'VEN': 3.5, 'URU': 2, 'PAR': 1,
+    'PAN': .6, 'COS': .6, 'NIC': 1, 'HON': 1, 'ELS': 1.6, 'GUA': 2.2, 'CUB': 4.2, 'HAI': 3, 'DOM': 1.6, 'LIB': 1.5,
+    'PHI': 15, 'EGY': 16, 'DNZ': .4, 'TIB': 3, 'PRC': 1.5, 'SHX': 12, 'GXC': 13, 'YUN': 12, 'XSM': 6, 'SIK': 4, 'ICE': .12,
+}
+
 catalog['aiProfiles'] = {
     'default': {'aggression': .2, 'army': 'infantry', 'navy': .1, 'air': .15, 'research': R_LAND},
     'GER': {'aggression': .9, 'army': 'armor', 'navy': .15, 'air': .25, 'research': ['industry', 'armor', 'air', 'infantry', 'doctrine', 'logistics', 'navy']},
@@ -694,7 +718,7 @@ catalog['aiProfiles'] = {
     'POL': {'aggression': .2, 'army': 'infantry', 'navy': .02, 'air': .1, 'research': R_LAND},
 }
 OOB_1939 = {
-    'GER': {'divisions': 76, 'civ': 36, 'mil': 42, 'air': 1100, 'armor': .16},
+    'GER': {'divisions': 100, 'civ': 36, 'mil': 46, 'air': 1100, 'armor': .14},
     'FRA': {'divisions': 50, 'civ': 34, 'mil': 24, 'air': 600, 'armor': .06},
     'GBR': {'divisions': 30, 'civ': 38, 'mil': 26, 'air': 900, 'armor': .05},
     'POL': {'divisions': 34, 'civ': 15, 'mil': 12, 'air': 200},

@@ -657,5 +657,95 @@ catalog['events16'] = [
           ], mtth=500, cooldown=540),
 ]
 
+# --- AI strategic plans ----------------------------------------------------------------------
+# Per country and target: a mode (attack, defend, hold, prepare), a weight on
+# the fronts facing that target and objectives given by coordinates, so that
+# they survive changes to the province map. "historical" plans only apply in
+# historical campaigns; "from"/"until" are dates, "when"/"unless" test wars.
+def obj(name, lon, lat):
+    return {'name': name, 'lon': lon, 'lat': lat}
+
+
+WARSAW, DANZIG = obj('Varsovie', 21.01, 52.23), obj('Dantzig', 18.65, 54.35)
+PARIS, SEDAN, DUNKIRK = obj('Paris', 2.35, 48.86), obj('Sedan', 4.94, 49.70), obj('Dunkerque', 2.38, 51.03)
+BRUSSELS, ROTTERDAM = obj('Bruxelles', 4.35, 50.85), obj('Rotterdam', 4.48, 51.92)
+MINSK, SMOLENSK, MOSCOW = obj('Minsk', 27.56, 53.90), obj('Smolensk', 32.05, 54.78), obj('Moscou', 37.62, 55.75)
+KIEV, LENINGRAD, ROSTOV = obj('Kiev', 30.52, 50.45), obj('Leningrad', 30.31, 59.94), obj('Rostov', 39.72, 47.24)
+BERLIN, KONIGSBERG, VIENNA = obj('Berlin', 13.40, 52.52), obj('Königsberg', 20.51, 54.71), obj('Vienne', 16.37, 48.21)
+catalog['aiPlans16'] = {
+    'GER': [
+        {'target': 'POL', 'mode': 'attack', 'weight': 3, 'objectives': [WARSAW, DANZIG]},
+        {'target': 'FRA', 'mode': 'hold', 'weight': .7, 'historical': True, 'unless': {'war': ['BEL', 'HOL']}},
+        {'target': 'FRA', 'mode': 'attack', 'weight': 1.5, 'objectives': [SEDAN, PARIS, DUNKIRK]},
+        {'target': 'BEL', 'mode': 'attack', 'weight': 3, 'objectives': [BRUSSELS, SEDAN]},
+        {'target': 'HOL', 'mode': 'attack', 'weight': 1.2, 'objectives': [ROTTERDAM]},
+        {'target': 'SOV', 'mode': 'prepare', 'weight': 3, 'historical': True, 'from': '1941-03-15'},
+        {'target': 'SOV', 'mode': 'attack', 'weight': 3, 'objectives': [MINSK, KIEV, LENINGRAD, SMOLENSK, MOSCOW, ROSTOV]},
+        {'target': 'YUG', 'mode': 'attack', 'weight': 1.5, 'objectives': [obj('Belgrade', 20.46, 44.82), obj('Zagreb', 15.98, 45.81)]},
+        {'target': 'GRE', 'mode': 'attack', 'weight': 1.5, 'objectives': [obj('Thessalonique', 22.94, 40.64), obj('Athènes', 23.73, 37.98)]},
+        {'target': 'DEN', 'mode': 'attack', 'weight': 1, 'objectives': [obj('Copenhague', 12.57, 55.68)]},
+        {'target': 'NOR', 'mode': 'attack', 'weight': 1, 'objectives': [obj('Oslo', 10.75, 59.91), obj('Narvik', 17.43, 68.44)]},
+        {'target': 'CZE', 'mode': 'attack', 'weight': 2, 'objectives': [obj('Prague', 14.42, 50.09)]},
+        {'target': 'GBR', 'mode': 'defend', 'weight': 1, 'share': .12, 'historical': True},
+    ],
+    'SOV': [
+        {'target': 'POL', 'mode': 'attack', 'weight': 1.5, 'objectives': [obj('Lwów', 24.03, 49.84), obj('Brest-Litovsk', 23.70, 52.10)]},
+        {'target': 'FIN', 'mode': 'attack', 'weight': 2, 'share': .3, 'limited': True, 'historical': True, 'until': '1941-01-01',
+         'objectives': [obj('Viipuri', 28.73, 60.71), obj('Sortavala', 30.70, 61.70)]},
+        {'target': 'FIN', 'mode': 'attack', 'weight': 2, 'share': .3, 'objectives': [obj('Viipuri', 28.73, 60.71), obj('Helsinki', 24.94, 60.17)]},
+        {'target': 'GER', 'mode': 'defend', 'weight': 2, 'until': '1942-11-01', 'historical': True},
+        {'target': 'GER', 'mode': 'attack', 'weight': 2.5, 'objectives': [KONIGSBERG, WARSAW, BERLIN]},
+        {'target': 'ROM', 'mode': 'attack', 'weight': 1, 'objectives': [obj('Bucarest', 26.10, 44.43)]},
+        {'target': 'JPN', 'mode': 'attack', 'weight': 1.5, 'objectives': [obj('Harbin', 126.63, 45.75), obj('Moukden', 123.43, 41.80)]},
+        {'target': 'MAN', 'mode': 'attack', 'weight': 1.5, 'objectives': [obj('Harbin', 126.63, 45.75), obj('Moukden', 123.43, 41.80)]},
+    ],
+    'JPN': [
+        {'target': 'CHI', 'mode': 'attack', 'weight': 3, 'objectives': [obj('Pékin', 116.40, 39.90), obj('Shanghai', 121.47, 31.23),
+                                                                        obj('Nankin', 118.80, 32.06), obj('Wuhan', 114.30, 30.59), obj('Canton', 113.26, 23.13)]},
+        {'target': 'USA', 'mode': 'attack', 'weight': 1, 'objectives': [obj('Manille', 120.98, 14.60), obj('Guam', 144.79, 13.44)]},
+        {'target': 'GBR', 'mode': 'attack', 'weight': 1, 'objectives': [obj('Hong Kong', 114.17, 22.30), obj('Singapour', 103.82, 1.35), obj('Rangoun', 96.16, 16.84)]},
+        {'target': 'HOL', 'mode': 'attack', 'weight': 1, 'objectives': [obj('Batavia', 106.85, -6.21), obj('Palembang', 104.75, -2.98)]},
+        {'target': 'SOV', 'mode': 'defend', 'weight': 1},
+    ],
+    'ITA': [
+        {'target': 'ETH', 'mode': 'attack', 'weight': 2, 'objectives': [obj('Addis-Abeba', 38.75, 9.03)]},
+        {'target': 'FRA', 'mode': 'attack', 'weight': 1, 'objectives': [obj('Nice', 7.26, 43.70), obj('Marseille', 5.37, 43.30)]},
+        {'target': 'GBR', 'mode': 'attack', 'weight': 1.5, 'objectives': [obj('Alexandrie', 29.92, 31.20), obj('Suez', 32.55, 29.97)]},
+        {'target': 'GRE', 'mode': 'attack', 'weight': 2, 'objectives': [obj('Ioannina', 20.85, 39.66), obj('Athènes', 23.73, 37.98)]},
+        {'target': 'ALB', 'mode': 'attack', 'weight': 2, 'objectives': [obj('Tirana', 19.82, 41.33)]},
+        {'target': 'YUG', 'mode': 'attack', 'weight': 1, 'objectives': [obj('Ljubljana', 14.51, 46.06)]},
+    ],
+    'FRA': [
+        {'target': 'GER', 'mode': 'hold', 'weight': 2, 'historical': True, 'until': '1940-09-01'},
+        {'target': 'GER', 'mode': 'defend', 'weight': 2, 'until': '1943-01-01'},
+        {'target': 'GER', 'mode': 'attack', 'weight': 2, 'objectives': [obj('Sarrebruck', 6.99, 49.24), obj('Francfort', 8.68, 50.11), BERLIN]},
+        {'target': 'ITA', 'mode': 'defend', 'weight': 1},
+    ],
+    'GBR': [
+        {'target': 'GER', 'mode': 'defend', 'weight': 2, 'until': '1943-06-01', 'historical': True, 'share': .35},
+        {'target': 'GER', 'mode': 'attack', 'weight': 2, 'objectives': [obj('Ruhr', 7.10, 51.45), BERLIN]},
+        {'target': 'ITA', 'mode': 'attack', 'weight': 1.5, 'objectives': [obj('Tobrouk', 23.96, 32.08), obj('Tripoli', 13.19, 32.89), obj('Rome', 12.50, 41.90)]},
+        {'target': 'JPN', 'mode': 'defend', 'weight': 1},
+    ],
+    'USA': [
+        {'target': 'JPN', 'mode': 'attack', 'weight': 2, 'objectives': [obj('Manille', 120.98, 14.60), obj('Okinawa', 127.68, 26.21), obj('Kyūshū', 130.70, 32.80)]},
+        {'target': 'GER', 'mode': 'attack', 'weight': 2, 'objectives': [obj('Normandie', -0.37, 49.18), PARIS, BERLIN]},
+        {'target': 'ITA', 'mode': 'attack', 'weight': 1, 'objectives': [obj('Sicile', 14.00, 37.50), obj('Rome', 12.50, 41.90)]},
+    ],
+    'POL': [{'target': 'GER', 'mode': 'defend', 'weight': 2}, {'target': 'SOV', 'mode': 'defend', 'weight': 1}],
+    'CHI': [{'target': 'JPN', 'mode': 'defend', 'weight': 2}, {'target': 'MAN', 'mode': 'defend', 'weight': 1}],
+    'FIN': [{'target': 'SOV', 'mode': 'defend', 'weight': 2}],
+    'CZE': [{'target': 'GER', 'mode': 'defend', 'weight': 2}],
+    'BEL': [{'target': 'GER', 'mode': 'defend', 'weight': 2}],
+    'HOL': [{'target': 'GER', 'mode': 'defend', 'weight': 2}],
+    'YUG': [{'target': 'GER', 'mode': 'defend', 'weight': 1.5}, {'target': 'ITA', 'mode': 'defend', 'weight': 1}],
+    'GRE': [{'target': 'ITA', 'mode': 'defend', 'weight': 1.5}, {'target': 'GER', 'mode': 'defend', 'weight': 1.5}],
+    'NAT': [{'target': 'SPA', 'mode': 'attack', 'weight': 2, 'objectives': [obj('Madrid', -3.70, 40.42), obj('Barcelone', 2.17, 41.39)]}],
+    'SPA': [{'target': 'NAT', 'mode': 'defend', 'weight': 2}],
+}
+for tag, plans in catalog['aiPlans16'].items():
+    for plan in plans:
+        assert plan['mode'] in ('attack', 'defend', 'hold', 'prepare'), (tag, plan)
+
 CATALOG.write_text(json.dumps(catalog, separators=(',', ':'), ensure_ascii=False), encoding='utf-8')
 print('focus', {k: len(v) for k, v in catalog['focus'].items()}, 'techs', len(catalog['techs']), 'events16', len(catalog['events16']))

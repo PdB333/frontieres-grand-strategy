@@ -387,6 +387,8 @@ npm install --no-save playwright && npx playwright install chromium
 node tools/browser-smoke.mjs
 ```
 
+`tools/bench.mjs` is a balance bench: it runs AI-only campaigns with several seeds in parallel and prints when each major power capitulated (`node tools/bench.mjs 1939 1400 1,2,3,4`).
+
 GitHub Actions runs all of these checks on every push and pull request. Historical test fixtures and development ZIP tools are not yet published.
 
 The 1.6 data is produced by three idempotent scripts, run in this order after editing them: `python3 tools/data/world_1_6.py` (terrain, straits, resources, new countries), `python3 tools/data/catalog_1_6.py` (buildings, laws, equipment, battalions, advisors, spirits, decisions, AI profiles) and `python3 tools/data/content_1_6.py` (focus branches, doctrines, events).
