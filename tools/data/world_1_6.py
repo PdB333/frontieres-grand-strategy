@@ -20,6 +20,10 @@ ROOT = Path(__file__).resolve().parents[2]
 WORLD = ROOT / 'data' / 'world.json'
 
 world = json.loads(WORLD.read_text(encoding='utf-8'))
+if world.get('mapId') != 'frontieres-1936-history-v11':
+    # Its output is kept as the 1936 reference of the 1.7 map
+    # (tools/data/legacy/world-1936-v11.json.gz); map_1_7.py builds data/world.json.
+    raise SystemExit('world_1_6.py only applies to the 1.6 map (3,396 provinces); the current map comes from tools/data/map_1_7.py.')
 P = world['provinces']
 
 

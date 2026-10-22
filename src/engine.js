@@ -1302,7 +1302,7 @@ function createEngineClass() {
     save(){this.checkInvariants();return clone(this.s);}
     load(raw) {
       raw=clone(raw);assert(raw&&[2,3,4,5].includes(raw.version),'Version de sauvegarde incompatible.');
-      assert(raw.mapId===this.world.mapId,'La carte 1.1 a change : une sauvegarde 1.0 doit etre ouverte dans la version 1.0.');const migrating=raw.version<5;raw.version=5;
+      assert(raw.mapId===this.world.mapId,'Cette sauvegarde utilise une autre carte : les parties commenc\u00e9es avant la version 1.7 (3 396 provinces) ne peuvent pas \u00eatre ouvertes sur la carte d\u00e9taill\u00e9e.');const migrating=raw.version<5;raw.version=5;
       raw.combatLedger??=[];raw.pocketSummary??={};
       for(const a of raw.armies||[])a.tactic??='balanced';
       for(const u of raw.units||[])u.pocketed??=false;

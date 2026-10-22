@@ -5,7 +5,7 @@
 function installSystems16(Engine,H){
   'use strict';
   const {clone,clamp,sum,assert,finite,distance,hash}=H;
-  const RELEASE='1.6';
+  const RELEASE='1.7';
 
   // ---------------------------------------------------------------------------
   // Shared helpers
@@ -32,13 +32,25 @@ function installSystems16(Engine,H){
   const provinceScore=p=>p.vp>1?p.vp+(p.city?2:0):({desert:.15,mountains:.4,marsh:.3,jungle:.35}[p.terrain]??.6)+(p.city?2:0);
   Engine.deriveStates=function(world,catalog=null){
     let cached=stateCache.get(world);if(cached)return cached;
-    const P=world.provinces,groups=new Map();
-    for(const p of P){const key=p.owner+'|'+String(p.name).split(' / ')[0];if(!groups.has(key))groups.set(key,[]);groups.get(key).push(p.id);}
+    const P=world.provinces,groups=new Map(),named=world.states||[];
+    // The 1.7 map lists its states; added mod provinces are grouped by name.
+    for(const p of P){const key=Number.isInteger(p.state)&&named[p.state]?'#'+p.state:p.owner+'|'+String(p.name).split(' / ')[0];if(!groups.has(key))groups.set(key,[]);groups.get(key).push(p.id);}
     const list=[],of=new Int32Array(P.length).fill(-1);
     const near=(a,b)=>{const dx=(a.x-b.x)*Math.cos((a.y+b.y)*Math.PI/360),dy=a.y-b.y;return dx*dx+dy*dy;};
     const categories=(catalog?.stateCategories||Engine.STATE_CATEGORIES16||[]).slice().sort((a,b)=>a.score-b.score);
     for(const [key,ids] of groups){
-      const owner=key.slice(0,key.indexOf('|')),prefix=key.slice(key.indexOf('|')+1),inGroup=new Set(ids),seen=new Set(),components=[];
+      const listed=key[0]==='#'?named[+key.slice(1)]:null;
+      const owner=listed?P[ids[0]].owner:key.slice(0,key.indexOf('|')),prefix=listed?listed.name:key.slice(key.indexOf('|')+1),inGroup=new Set(ids),seen=new Set(),components=[];
+      if(listed){
+        const capital=ids.reduce((best,id)=>P[id].vp>P[best].vp||(P[id].vp===P[best].vp&&P[id].city&&!P[best].city)?id:best,ids[0]);
+        const score=sum(ids.map(i=>provinceScore(P[i])));
+        let category=categories[0]||{id:'rural',name:'Rural',slots:2};
+        for(const cat of categories)if(score>=cat.score)category=cat;
+        const id=list.length,c={x:sum(ids.map(i=>P[i].x))/ids.length,y:sum(ids.map(i=>P[i].y))/ids.length};
+        list.push({id,name:prefix,owner,provinces:ids,capital,score:+score.toFixed(2),category:category.id,categoryName:category.name,slots:category.slots,coast:ids.some(i=>P[i].coast),x:c.x,y:c.y});
+        for(const pid of ids)of[pid]=id;
+        continue;
+      }
       for(const start of ids){
         if(seen.has(start))continue;
         const comp=[start];seen.add(start);
@@ -225,8 +237,13 @@ function installSystems16(Engine,H){
     const base=Object.fromEntries(RESOURCES.map(k=>[k,this.catalog.resources?.[k]?.base??(k==='steel'?8:1)]));
     for(const c of Object.values(this.s.countries))c.stats={civ:0,mil:0,dock:0,freeCiv:0,...base,resourceFactor:1,divisionCount:0,supply:c.stats?.supply??1,vpHeld:1,coreShare:1,manpowerFactor:1,shortage:{},demand:{},exported:0,tradeIncome:0};
     const held={},totals={},coreHeld={},nonCore={},wars=new Set(this.s.wars.flatMap(w=>[w.a+'|'+w.b,w.b+'|'+w.a]));
-    for(const p of this.prov){
-      const q=this.s.provinces[p.id],c=this.nation(q.ctrl);if(!c)continue;
+    // Most provinces carry no factory, resource or victory point: skip them.
+    if(this._resWorld!==this.world){this._resWorld=this.world;this._resFlag=Uint8Array.from(this.prov,p=>RESOURCES.some(k=>p[k])?1:0);}
+    const resFlag=this._resFlag,S=this.s.provinces;
+    for(let i=0;i<this.prov.length;i++){
+      const p=this.prov[i],q=S[i];
+      if(!p.vp&&!resFlag[i]&&!q.civ&&!q.mil&&!q.dock&&!q.refinery)continue;
+      const c=this.s.countries[q.ctrl];if(!c)continue;
       const atWar=q.ctrl!==p.owner&&wars.has(q.ctrl+'|'+p.owner);
       const occupation=q.ctrl===p.owner?1:.3+q.compliance/200;
       const output=occupation*(1-q.damage)*Math.max(.3,1-q.resistance/150);
@@ -390,13 +407,13 @@ function installSystems16(Engine,H){
     const bonus=new Map(),supplyBonus=k=>{let v=bonus.get(k);if(v===undefined){v=this.nation(k)?.bonus.supply||0;bonus.set(k,v);}return v;};
     const move=new Float64Array(n),denom=new Float64Array(n);
     for(let j=0;j<n;j++){const t=s.provinces[j];move[j]=.07*this.catalog.terrain[P[j].terrain].move;denom[j]=1+t.rail*.25+t.infra*.12;}
-    const done=new Uint8Array(n);
+    const done=new Uint8Array(n),span=this.edgeSpan16();
     while(heapIds.length){
       const i=pop();if(done[i])continue;done[i]=1;
-      const from=s.provinces[i].ctrl,row=permitted[from],extra=supplyBonus(from),vi=values[i];
-      for(const j of P[i].neighbors){
-        if(done[j]||!row?.[s.provinces[j].ctrl])continue;
-        const v=vi-move[j]/(denom[j]+extra);if(v>values[j]&&v>0){values[j]=v;push(j,v);}
+      const from=s.provinces[i].ctrl,row=permitted[from],extra=supplyBonus(from),vi=values[i],nb=P[i].neighbors,sp=span[i];
+      for(let k=0;k<nb.length;k++){
+        const j=nb[k];if(done[j]||!row?.[s.provinces[j].ctrl])continue;
+        const v=vi-move[j]*sp[k]/(denom[j]+extra);if(v>values[j]&&v>0){values[j]=v;push(j,v);}
       }
     }
     for(let i=0;i<n;i++){const q=s.provinces[i];q.supply=clamp(values[i]*(1+q.hub*.08)*(1-q.damage*.4),0,1);}
@@ -471,6 +488,80 @@ function installSystems16(Engine,H){
       if(sid>=0&&added)this.s.stateExtra[sid]=Math.max(this.s.stateExtra[sid],this.stateUsed(sid)-this.states16.list[sid].slots);
     }
     return result;
+  };
+
+  // ---------------------------------------------------------------------------
+  // Hot paths sized for the 1.7 map (about 11,600 provinces).
+  // ---------------------------------------------------------------------------
+  Engine.prototype.owned=function(id){
+    const out=[],S=this.s.provinces,P=this.prov;
+    for(let i=0;i<S.length;i++)if(S[i].ctrl===id)out.push(P[i]);
+    return out;
+  };
+  Engine.prototype.allies=function(a,b){
+    if(a===b)return true;
+    const A=this.s.countries[a],B=this.s.countries[b];
+    return !!(A&&B&&A.faction!=='none'&&A.faction===B.faction);
+  };
+  // Provinces of a country that touch land held by someone else (daily).
+  Engine.prototype.rim16=function(id){
+    if(this._rimDay!==this.s.day||this._rimState!==this.s){this._rimDay=this.s.day;this._rimState=this.s;this._rim=new Map();}
+    let list=this._rim.get(id);if(list)return list;
+    const S=this.s.provinces;list=this.ownedToday16(id).filter(p=>S[p.id].ctrl===id&&p.neighbors.some(n=>S[n].ctrl!==id));
+    this._rim.set(id,list);return list;
+  };
+  // The largest city still held when the capital is lost.
+  Engine.prototype.cap=function(id){
+    const c=this.nation(id),S=this.s.provinces;if(S[c.identity.capital]?.ctrl===id)return c.identity.capital;
+    let best=null;for(const p of this.ownedToday16(id))if(S[p.id].ctrl===id&&(!best||p.vp>best.vp))best=p;
+    if(!best)best=this.owned(id).sort((a,b)=>b.vp-a.vp)[0];
+    return best?.id??c.identity.capital;
+  };
+  // Distances between neighbouring provinces, in units of 100 km: supply
+  // losses and movement times follow the real distance, so ranges in
+  // kilometres do not depend on the size of the provinces.
+  const SPAN_KM=100;
+  Engine.prototype.edgeSpan16=function(){
+    if(this._spanWorld===this.world)return this._span;
+    this._spanWorld=this.world;
+    return this._span=this.prov.map(p=>Float32Array.from(p.neighbors,n=>clamp(distance(p,this.prov[n])/SPAN_KM,.3,1.5)));
+  };
+  Engine.prototype.span16=function(a,b){
+    const k=this.prov[a].neighbors.indexOf(b);
+    return k<0?1:this.edgeSpan16()[a][k];
+  };
+  // Dijkstra with buffers reused between calls and passability cached per
+  // controller; same costs and rules as the 1.0 search.
+  let pathBuffers=null;
+  Engine.prototype.path=function(from,to,id,sea=true){
+    if(from===to)return [];
+    const P=this.prov,S=this.s.provinces,n=P.length;
+    if(!P[to])return null;
+    if(!pathBuffers||pathBuffers.n!==n)pathBuffers={n,dist:new Float64Array(n),prev:new Int32Array(n),stamp:new Uint32Array(n),gen:0};
+    const B=pathBuffers;B.gen=(B.gen+1)>>>0;if(!B.gen){B.stamp.fill(0);B.gen=1;}
+    const gen=B.gen,dist=B.dist,prev=B.prev,stamp=B.stamp,terrain=this.catalog.terrain;
+    const pass=new Map(),passOf=k=>{let v=pass.get(k);if(v===undefined){const w=this.war(id,k);v=this.access(id,k)||w?(w?3:1):0;pass.set(k,v);}return v;};
+    const dmz=id==='GER'&&this.s.historyState?.dmz?.length&&!this.enemies('GER').length?new Set(this.s.historyState.dmz):null;
+    const hv=[],hd=[];
+    const push=(v,d)=>{let i=hv.length;hv.push(v);hd.push(d);while(i>0){const p=(i-1)>>1;if(hd[p]<=d)break;hv[i]=hv[p];hd[i]=hd[p];i=p;}hv[i]=v;hd[i]=d;};
+    const relax=(u,v,cost)=>{const nd=dist[u]+cost;if(stamp[v]!==gen||nd<dist[v]){stamp[v]=gen;dist[v]=nd;prev[v]=u;push(v,nd);}};
+    stamp[from]=gen;dist[from]=0;prev[from]=-1;push(from,0);
+    while(hv.length){
+      const u=hv[0],d=hd[0],lv=hv.pop(),ld=hd.pop();
+      if(hv.length){let i=0;const m=hv.length;while(i*2+1<m){let c=i*2+1;if(c+1<m&&hd[c+1]<hd[c])c++;if(hd[c]>=ld)break;hv[i]=hv[c];hd[i]=hd[c];i=c;}hv[i]=lv;hd[i]=ld;}
+      if(d>dist[u])continue;if(u===to)break;
+      for(const v of P[u].neighbors){
+        if(dmz&&dmz.has(v))continue;const m=passOf(S[v].ctrl);if(!m)continue;
+        relax(u,v,terrain[P[v].terrain].move*m);
+      }
+      if(sea&&S[u].port)for(const e of P[u].sea){
+        const q=S[e.to];if(!q.port||dmz&&dmz.has(e.to)||!passOf(q.ctrl))continue;
+        if(!this.seaAllowed(id,{...e,sea:true},q.ctrl))continue;
+        relax(u,e.to,e.days+2);
+      }
+    }
+    if(stamp[to]!==gen||!Number.isFinite(dist[to]))return null;
+    const result=[];for(let v=to;v!==from;v=prev[v]){if(v<0)return null;result.push(v);}return result.reverse();
   };
 
   // Weather and terrain attrition, applied once per day after combat.
@@ -871,10 +962,13 @@ function installSystems16(Engine,H){
       if(this.war(u.owner,ctrl)){
         if(u.org<12){u.path=[];continue;}
         if(e.sea){u.progress+=speed;if(u.progress<e.days)continue;}
+        // Taking an undefended province means marching through it: fast
+        // divisions exploit a breach faster than infantry.
+        else if(!(this.unitsAt.get(to)||[]).some(d=>d.strength>0&&this.war(u.owner,d.owner))){u.progress+=speed;if(u.progress<this.catalog.terrain[this.prov[to].terrain].move*1.5)continue;}
         if(!attacks.has(to))attacks.set(to,[]);attacks.get(to).push(u);
       }else{
         u.progress+=speed;u.entrench=0;
-        const duration=e.sea?e.days:this.catalog.terrain[this.prov[to].terrain].move*(this.strait16(u.pid,to)?1.5:1);
+        const duration=e.sea?e.days:this.catalog.terrain[this.prov[to].terrain].move*(this.strait16(u.pid,to)?1.5:1)*this.span16(u.pid,to);
         if(u.progress>=duration){u.pid=to;u.path.shift();u.progress=0;if(e.sea)this.nation(u.owner).stock.fuel=Math.max(0,this.nation(u.owner).stock.fuel-40);}
       }
     }
@@ -1019,8 +1113,8 @@ function installSystems16(Engine,H){
       const key=owner+'|'+target;let list=borders.get(key);if(list)return list;
       const set=new Set();
       // Front line: own land and land of allies at war with the target.
-      const held=new Map(),front=k=>{if(!held.has(k))held.set(k,k===owner||!!permitted[owner]?.[k]&&this.war(k,target));return held.get(k);};
-      for(const p of this.ownedToday16(target))for(const n of p.neighbors)if(front(s.provinces[n].ctrl))set.add(n);
+      const held=new Map(),front=k=>{let v=held.get(k);if(v===undefined){v=k===owner||!!permitted[owner]?.[k]&&this.war(k,target);held.set(k,v);}return v;};
+      for(const p of this.rim16(target))for(const n of p.neighbors)if(front(s.provinces[n].ctrl))set.add(n);
       list=[...set].sort((a,b)=>a-b).map(id=>this.prov[id]);borders.set(key,list);return list;
     };
     for(const a of s.armies){
@@ -1046,12 +1140,19 @@ function installSystems16(Engine,H){
       a.invasion=null;s.fronts[a.id]=fronts.map(p=>p.id);
       const key=a.owner+'_'+a.target+'_'+s.fronts[a.id].join(',');
       let field=fields.get(key);
-      if(!field){
+      // The search stops once every division of the army is reached; a
+      // partial field is rebuilt when another army needs more of it.
+      if(!field||field.partial&&troops.some(u=>field.dist[u.pid]===-1)){
         const dist=new Int32Array(this.prov.length).fill(-1),next=new Int32Array(this.prov.length).fill(-1),q=[];
         const seeds=[...fronts].sort((x,y)=>s.provinces[y.id].supply-s.provinces[x.id].supply||x.id-y.id);
         for(const p of seeds){dist[p.id]=0;q.push(p.id);}
-        for(let h=0;h<q.length;h++)for(const n of this.prov[q[h]].neighbors){if(dist[n]!==-1||!permitted[a.owner]?.[s.provinces[n].ctrl])continue;dist[n]=dist[q[h]]+1;next[n]=q[h];q.push(n);}
-        field={dist,next};fields.set(key,field);
+        const wanted=new Set(troops.map(u=>u.pid));for(const p of seeds)wanted.delete(p.id);
+        let partial=false;
+        for(let h=0;h<q.length;h++){
+          if(!wanted.size){partial=true;break;}
+          for(const n of this.prov[q[h]].neighbors){if(dist[n]!==-1||!permitted[a.owner]?.[s.provinces[n].ctrl])continue;dist[n]=dist[q[h]]+1;next[n]=q[h];q.push(n);wanted.delete(n);}
+        }
+        field={dist,next,partial};fields.set(key,field);
       }
       const enemyIds=new Set();for(const p of fronts)for(const n of p.neighbors)if(s.provinces[n].ctrl===a.target)enemyIds.add(n);
       let enemyCount=0;for(const pid of enemyIds)for(const e of this.unitsAt.get(pid)||[])if(this.war(a.owner,e.owner))enemyCount++;
@@ -1395,7 +1496,7 @@ function installSystems16(Engine,H){
   Engine.AIR_MISSIONS16=AIR_MISSIONS;
   Engine.prototype.airStep=function(){
     const s=this.s;s.airReports=[];this.airSupport={};this.airPenalty16={};this.navalAir16={};this.airSupply16={};
-    const groups={},aaByZone={};
+    const groups={},aaByZone={};let radarSites=null;
     for(const p of this.prov){const q=s.provinces[p.id];if(q.aa)(aaByZone[p.zone]??={})[q.ctrl]=(aaByZone[p.zone][q.ctrl]||0)+q.aa;}
     for(const w of s.wings){
       w.size=Math.max(0,Math.round(w.size));
@@ -1408,7 +1509,7 @@ function installSystems16(Engine,H){
       const centre=naval?{x:target.x,y:target.y}:centreProv;if(!centre)continue;
       const reach=clamp(AIR_RANGE[w.kind]*sv(stats,'range')/Math.max(1,distance(this.prov[w.base],centre)),0,1);
       const parked=sum(s.wings.filter(x=>x.base===w.base).map(x=>x.size)),capacity=clamp(base.airbase*250/Math.max(1,parked),0,1);
-      const radar=naval?0:sum(this.prov.filter(p=>p.zone===w.zone&&this.allies(w.owner,s.provinces[p.id].ctrl)).map(p=>s.provinces[p.id].radar));
+      const radar=naval?0:sum((radarSites??=this.prov.filter(p=>s.provinces[p.id].radar>0)).filter(p=>p.zone===w.zone&&this.allies(w.owner,s.provinces[p.id].ctrl)).map(p=>s.provinces[p.id].radar));
       const weatherAir=naval?this.seaWeather(w.seaZone).air:this.weather(w.base).air;
       w.efficiency=reach*capacity*(.3+.7*base.supply)*(1-base.damage);
       const effective=w.size*w.efficiency*weatherAir*(1+c.bonus.air)*(1+Math.min(.25,radar*.035))*(1+(w.aces16||0)*.04);
@@ -1587,6 +1688,8 @@ function installSystems16(Engine,H){
   const civilWar15=Engine.prototype.civilWar;
   Engine.prototype.civilWar=function(id){
     const result=civilWar15.call(this,id);this.regroupLoyalists16(id);
+    // Both sides claim the whole country: surrender is measured over all of it.
+    if(this.nation('NAT')?.alive&&this.war(id,'NAT'))this.nation('NAT').identity.cores=this.prov.filter(p=>p.owner===id).map(p=>p.id);
     if(this.nation('NAT')?.alive&&this.war(id,'NAT')){this.addSpirit16(id,'civil_war');this.addSpirit16(id,'popular_militias',540);this.addSpirit16('NAT','civil_war');this.addSpirit16('NAT','africa_army');}
     return result;
   };
@@ -1652,6 +1755,14 @@ function installSystems16(Engine,H){
   };
   Engine.prototype.capitulate16=function(id){
     const c=this.nation(id),enemies=this.enemies(id),occupier=this.mainOccupier16(id);
+    // A civil war ends with the whole country in the hands of the winner.
+    const winner=this.nation(occupier);
+    if(winner?.alive&&this.hasSpirit16(c,'civil_war')&&this.hasSpirit16(winner,'civil_war')&&this.isCore(occupier,c.identity.capital)){
+      this.annex(occupier,id);
+      this.log(this.info(occupier).name+' remporte la guerre civile.','war');
+      if(id===this.s.player){this.s.outcome={type:'defeat',day:this.s.day,winner:occupier};this.s.paused=true;}
+      this.frontCache={};this.indexUnits();return;
+    }
     const host=this.active().find(o=>o!==id&&this.allies(id,o)&&!this.nation(o).capitulated16&&enemies.some(e=>this.war(o,e))&&this.owned(o).length);
     // A government that fights on in exile keeps the distant possessions the
     // enemy cannot reach by land; the homeland and everything in contact with
@@ -1797,7 +1908,7 @@ function installSystems16(Engine,H){
     for(const loser of conf.losers){
       const rows=conf.states.filter(r=>r.owner===loser&&!r.claimedBy);if(rows.length<4)continue;
       const cost=this.puppetCost16(actor,loser);if(cost>p.points)continue;
-      const value=(p.goal==='puppet'?6:2)+rows.length/4+(c.ideology!==this.nation(loser).ideology?1:0)-cost/40;
+      const value=(p.goal==='puppet'?6:2)+Math.min(3,rows.length/12)+(c.ideology!==this.nation(loser).ideology?1:0)-cost/40;
       if(!best||value>best.value)best={value,action:{type:'puppet',loser}};
     }
     if(c.ideology==='democratic')for(const def of this.catalog.releasables||[]){
@@ -2581,7 +2692,7 @@ function installSystems16(Engine,H){
     sectors.sort((a,b)=>b.length-a.length||a[0].id-b[0].id);
     const merged=[];
     for(const sector of sectors){
-      const host=sector.length<4&&merged.find(m=>m.length>=4&&m.some(p=>sector.some(q=>distance(p,q)<500)));
+      const host=sector.length<8&&merged.find(m=>m.length>=8&&m.some(p=>sector.some(q=>distance(p,q)<500)));
       if(host)host.push(...sector);else merged.push(sector);
     }
     return merged;
@@ -2627,7 +2738,7 @@ function installSystems16(Engine,H){
   Engine.prototype.fallbackLine16=function(id,border){
     const dist=new Map(),layers=[[...border.map(p=>p.id)]],capital=this.cap(id);
     for(const p of border)dist.set(p.id,0);
-    for(let d=1;d<=3;d++){
+    for(let d=1;d<=6;d++){
       const next=[];
       for(const pid of layers[d-1])for(const n of this.prov[pid].neighbors)if(!dist.has(n)&&this.s.provinces[n].ctrl===id){dist.set(n,d);next.push(n);}
       if(!next.length)break;layers.push(next);
@@ -2640,7 +2751,7 @@ function installSystems16(Engine,H){
       const v=value(layers[d],d);
       if(v>=base*1.15&&(!best||v>best.v))best={v,list:layers[d]};
     }
-    return best?best.list.slice(0,120):[];
+    return best?best.list.slice(0,250):[];
   };
   // Weakest enemy province along a sector: the breakthrough point.
   Engine.prototype.breakthrough16=function(id,e,border,goal){
@@ -3063,12 +3174,59 @@ function installSystems16(Engine,H){
   Engine.prototype.newGame=function(...args){
     Engine.useCatalog16(this.baseCatalog);
     const state=newGame15.apply(this,args);
+    if(this.world.states)this.placeIndustry16();
     this.init16(true);this.updateStats();this.computeSupply();this.checkInvariants();return this.s;
+  };
+  // On the 1.7 map, starting factories and dockyards gather in the cities of
+  // the home country, in proportion to their victory points.
+  Engine.prototype.placeIndustry16=function(){
+    const S=this.s.provinces;
+    for(const d of this.world.countries){
+      const c=this.nation(d.id);if(!c)continue;
+      const lands=this.owned(d.id);if(!lands.length)continue;
+      const metro=lands.filter(p=>distance(p,{x:d.lon,y:d.lat})<1600),sites=metro.length?metro:lands;
+      for(const kind of ['civ','mil','dock']){
+        let total=0;for(const p of lands){total+=S[p.id][kind];S[p.id][kind]=0;}
+        const pool=kind==='dock'?(sites.filter(p=>p.port).length?sites.filter(p=>p.port):lands.filter(p=>p.port)):sites;
+        if(!pool.length){if(total)S[this.cap(d.id)][kind]+=total;continue;}
+        const weight=pool.map(p=>1+p.vp+(p.city?2:0)),given=new Array(pool.length).fill(0);
+        for(let i=0;i<total;i++){
+          let best=0;for(let k=1;k<pool.length;k++)if(weight[k]/(1+given[k])>weight[best]/(1+given[best]))best=k;
+          given[best]++;S[pool[best].id][kind]++;
+        }
+      }
+    }
+  };
+  // Compact saves: the province table is stored by columns and the list of
+  // geographic keys is rebuilt from the map, which the fingerprint identifies.
+  Engine.packState16=function(state){
+    const out={...state};delete out.geoKeys;
+    const rows=state.provinces,keys=[...new Set(rows.flatMap(r=>Object.keys(r)))],cols={};
+    for(const k of keys){
+      if(rows.every(r=>Object.prototype.hasOwnProperty.call(r,k))){const v=rows.map(r=>r[k]);cols[k]=v.every(x=>x===v[0])?{all:v[0]}:v;}
+      else{const sparse={};rows.forEach((r,i)=>{if(Object.prototype.hasOwnProperty.call(r,k))sparse[i]=r[k];});cols[k]={sparse};}
+    }
+    out.provinces={packed16:rows.length,cols};return out;
+  };
+  Engine.prototype.unpackState16=function(raw){
+    if(!raw||typeof raw!=='object'||!raw.provinces||Array.isArray(raw.provinces)||!Number.isInteger(raw.provinces.packed16))return raw;
+    const n=raw.provinces.packed16,cols=raw.provinces.cols||{};
+    assert(n===this.prov.length,'Carte incompatible.');
+    const rows=Array.from({length:n},()=>({}));
+    for(const [k,v] of Object.entries(cols)){
+      if(Array.isArray(v)){assert(v.length===n,'Sauvegarde compacte invalide.');for(let i=0;i<n;i++)rows[i][k]=v[i];}
+      else if(v&&'all' in v){for(const r of rows)r[k]=v.all;}
+      else if(v?.sparse)for(const [i,x] of Object.entries(v.sparse)){const j=Number(i);assert(Number.isInteger(j)&&j>=0&&j<n,'Sauvegarde compacte invalide.');rows[j][k]=x;}
+    }
+    raw={...raw,provinces:rows};
+    if(raw.geoKeys===undefined&&raw.geoOrderFingerprint===this.world.geoOrderFingerprint)raw.geoKeys=this.prov.map(p=>p.geoKey);
+    return raw;
   };
   const load15=Engine.prototype.load;
   Engine.prototype.load=function(raw){
     Engine.useCatalog16(this.baseCatalog);
-    if(raw?.release===RELEASE)assert(typeof raw.modManifestHash==='string'&&/^[a-f0-9]{16}$/.test(raw.modManifestHash),'La sauvegarde 1.6 ne contient pas d\'empreinte de mod valide.');
+    raw=this.unpackState16(raw);
+    if(raw?.release===RELEASE)assert(typeof raw.modManifestHash==='string'&&/^[a-f0-9]{16}$/.test(raw.modManifestHash),'La sauvegarde 1.7 ne contient pas d\'empreinte de mod valide.');
     else if(raw&&typeof raw==='object'){
       // Older saves predate the 1.6 equipment types checked by the 1.5 loader.
       raw=clone(raw);

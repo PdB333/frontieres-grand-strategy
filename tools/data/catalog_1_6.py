@@ -603,7 +603,7 @@ catalog['spirits'] = [
     spirit('burma_road', 'Route d’approvisionnement', 'Une route lointaine maintient l’aide étrangère.', {'supply': .1, 'resources': .05}),
     spirit('united_front', 'Front uni', 'Les factions rivales combattent l’envahisseur ensemble.', {'stabilityGrowth': .2, 'organization': .05, 'surrender': .1}),
     spirit('strategic_depth', 'Profondeur stratégique', 'L’immensité du territoire permet d’échanger l’espace contre le temps.', {'surrender': .25, 'attrition': .15, 'supply': .1}),
-    spirit('civil_war', 'Guerre civile', 'Le pays se déchire : milices improvisées, cadres divisés, nul ne veut capituler.', {'attack': -.3, 'breakthrough': -.2, 'defense': .1, 'organization': -.05, 'surrender': .3, 'production': -.1}),
+    spirit('civil_war', 'Guerre civile', 'Le pays se déchire : milices improvisées, cadres divisés, nul ne veut capituler.', {'attack': -.35, 'breakthrough': -.35, 'defense': .3, 'organization': -.05, 'surrender': .3, 'production': -.1}),
     spirit('popular_militias', 'Milices populaires', 'Partis et syndicats lèvent leurs propres colonnes ; l’armée régulière se reconstruit lentement.', {'attack': -.1, 'organization': -.1, 'planning': -.1}),
     spirit('africa_army', 'Armée d’Afrique', 'Les troupes coloniales aguerries forment le noyau du camp insurgé.', {'attack': .15, 'organization': .1, 'defense': .05}),
     spirit('phoney_war', 'Drôle de guerre', 'L’armée attend derrière ses fortifications : commandement lent, transmissions par estafette, réserves mal placées.', {'attack': -.15, 'defense': -.1, 'planning': -.15, 'organization': -.1}),

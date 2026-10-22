@@ -2,7 +2,7 @@
 
 **A single-player grand strategy game for the browser — build a nation, shape history, and command a world at war.**
 
-**Current playable version:** `1.6` &nbsp;|&nbsp; **Project status:** Alpha / actively developed &nbsp;|&nbsp; **Interface:** French &nbsp;|&nbsp; **Documentation:** English &nbsp;|&nbsp; **License:** MIT (original code)
+**Current playable version:** `1.7` &nbsp;|&nbsp; **Project status:** Alpha / actively developed &nbsp;|&nbsp; **Interface:** French &nbsp;|&nbsp; **Documentation:** English &nbsp;|&nbsp; **License:** MIT (original code)
 
 [Play / download `index.html`](./index.html) · [Source code](./src/) · [Game data](./data/) · [Roadmap](#development-roadmap) · [Modding](#modding-and-custom-scenarios) · [Report an issue](https://github.com/PdB333/frontieres-grand-strategy/issues)
 
@@ -50,7 +50,7 @@ The core simulation does **not** require a connection to a game server. Optional
 
 | Category | Included in version 1.6 |
 | --- | --- |
-| World map | **81** starting countries, **3,396** gameplay provinces grouped into **717** states, **8** terrain types, **12** straits |
+| World map | **81** starting countries, **11,592** land provinces cut from the Natural Earth 1:10m regions and grouped into **1,735** states, **8** terrain types, **12** straits |
 | Starting scenarios | **1936** and **1939** historical bookmarks |
 | Campaign engine | Pausable, day-by-day simulation with 5 speed settings, hourly battles and AI-controlled countries |
 | Historical content | **71** historical event/government entries, **82** conditional events (45 of them national), **44** releasable nations |
@@ -66,6 +66,17 @@ The core simulation does **not** require a connection to a game server. Optional
 | Display | Canvas-based interactive map, overlays, minimap, accessibility and performance controls |
 | Online services | **None required for core gameplay** |
 | Multiplayer | **Not planned** |
+
+### What's new in 1.7 — the detailed map
+
+- **11,592 land provinces** instead of 3,396. They are cut from the 4,594 first-level administrative regions of Natural Earth 1:10m (public domain) along the borders of January 1936: the Polish corridor, Danzig, East Prussia, Bessarabia, Ruthenia, the Karelian isthmus, the Chinese regional powers and the colonial empires keep their 1936 owners.
+- **1,735 states** follow the real regions (Bavaria, Silesia, the French departments grouped by area, Russian oblasts…); small regions are grouped and large ones split. Provinces are Voronoi cells of a weighted k-means, centred on the main cities.
+- **Density by theatre:** about 1,700 km² per province in Europe, larger in Russia, much larger in deserts, the tundra, Siberia and the oceans' islands.
+- **Ranges in kilometres:** supply losses and movement times follow the real distance between provinces, so smaller provinces do not shorten supply lines; starting factories gather in the cities.
+- **Warfare on a finer map:** taking an undefended province means marching through it, so armour exploits a breach about twice as fast as infantry; a civil war ends with the winner holding the whole country; the AI no longer prefers puppets just because a country has many states.
+- **Performance:** cached province borders, a faster path search, a daily rim of each country, a cached world view (1–3 ms per frame zoomed out) and compact saves (about half the size, provinces stored by columns).
+- **Content:** national focus trees, events and decisions for 15 secondary powers.
+- 1.6 saves cannot be opened on the new map.
 
 ### What's new in 1.6 — the strategic warfare update
 
@@ -96,10 +107,10 @@ All rules, names and texts are original to Frontières; no file, text, icon or m
 ### 1. Countries, history, and the map
 
 - **81 starting countries** with names, ideologies, industries, military forces, and initial leadership information, including the Chinese regional powers of 1936 (Yan'an communists, Shanxi, Guangxi, Yunnan, the Muslim north-west, Xinjiang) and Iceland.
-- **717 states** derived from the provinces: shared building slots, categories (from wasteland to megalopolis) and core territory.
+- **1,735 states** following the Natural Earth regions: shared building slots, categories (from wasteland to megalopolis) and core territory.
 - **Eight terrain types** (plains, forest, hills, mountains, marsh, jungle, desert, urban), **12 straits** crossable under fire, and seasonal weather (mud, snow, frost, sea storms).
 - **Two historical starts:** January 1936 and late August 1939, with scenario-specific geopolitical adjustments.
-- **3,396 base provinces** with terrain, owners, infrastructure, industry, resources, supply connections, and other gameplay properties.
+- **11,592 land provinces** cut from the Natural Earth 1:10m administrative regions along the 1936 borders, with terrain, owners, infrastructure, industry, resources, supply connections, and other gameplay properties.
 - Interactive, zoomable Canvas map with selectable provinces, countries, units, and army overlays.
 - Multiple map views, including political control, terrain, supply, industry, diplomacy, air zones, and naval areas.
 - An **historical atlas** with timelines, country dossiers, and documentary links.
@@ -179,7 +190,7 @@ The AI splits each border into sectors, sizes an army for each according to the 
 - Sea connections and convoy availability matter for overseas supply.
 - Poor supply affects movement, organization, attack effectiveness, and reinforcement.
 - Isolation and encirclement can make an otherwise strong army collapse.
-- Supply flows from capitals and ports (weighted by convoys and blockades) through accessible territory; version 1.6 settles each province once at its best value, which keeps large wars fast.
+- Supply flows from capitals and ports (weighted by convoys and blockades) through accessible territory; each province is settled once at its best value, and the loss along the way follows the distance in kilometres.
 - Weather and terrain cause attrition; winter gear and doctrines reduce it.
 
 The supply network is a gameplay model, **not** a full historical railroad or transportation simulation.
@@ -264,7 +275,7 @@ There is also an on-screen **Order** action for touch input where right-click is
 
 A central goal of Frontières is to support **original alternate-history worlds** through structured **JSON mods**. The current format is **declarative**: it specifies data and supported actions rather than loading arbitrary JavaScript supplied by a mod.
 
-### Mod features available in 1.6
+### Mod features available in 1.7
 
 | Capability | Status |
 | --- | --- |
@@ -335,7 +346,7 @@ The repository includes [`data/map-demo.json`](./data/map-demo.json), an example
 
 ```text
 frontieres-grand-strategy/
-├── index.html             # Current self-contained playable build (v1.6)
+├── index.html             # Current self-contained playable build (v1.7)
 ├── README.md              # Project overview and roadmap
 ├── LICENSE                # MIT license for original code
 ├── THIRD_PARTY.md         # Geographic data and image credits
@@ -344,7 +355,8 @@ frontieres-grand-strategy/
 │   ├── build.mjs          # Rebuilds index.html from src/ and data/
 │   ├── smoke.mjs          # Headless engine smoke test (Node.js)
 │   ├── browser-smoke.mjs  # Starts a campaign in headless Chromium (Playwright)
-│   └── data/              # Idempotent data passes for 1.6 (world, catalogue, content)
+│   └── data/              # Map generator (1.7) and idempotent data passes (catalogue, content)
+│       └── legacy/        # The 1.6 map, kept as the 1936 reference of the generator
 ├── src/
 │   ├── shell.html         # Page template; build.mjs inlines the files below
 │   ├── engine.js          # Simulation engine source (1.5 rules)
@@ -392,7 +404,7 @@ node tools/browser-smoke.mjs
 
 GitHub Actions runs all of these checks on every push and pull request. Historical test fixtures and development ZIP tools are not yet published.
 
-The 1.6 data is produced by three idempotent scripts, run in this order after editing them: `python3 tools/data/world_1_6.py` (terrain, straits, resources, new countries), `python3 tools/data/catalog_1_6.py` (buildings, laws, equipment, battalions, advisors, spirits, decisions, AI profiles) and `python3 tools/data/content_1_6.py` (focus branches, doctrines, events).
+The map is generated by `python3 -I tools/data/map_1_7.py --ne DIR`, where `DIR` holds `ne_10m_admin_1_states_provinces.geojson` and `ne_10m_populated_places.geojson` from the `geojson/` folder of [natural-earth-vector](https://github.com/nvkelso/natural-earth-vector) (it needs `shapely`, `numpy`; about one minute). The 1936 reference (owners, borders, terrain, cities, ports, resources, regions, straits) is the 1.6 map in `tools/data/legacy/`, itself produced by `tools/data/world_1_6.py`, which only runs on that map. The catalogue comes from two idempotent scripts run in this order: `python3 tools/data/catalog_1_6.py` (buildings, laws, equipment, battalions, advisors, spirits, decisions, AI profiles) and `python3 tools/data/content_1_6.py` (focus trees, doctrines, events, AI plans).
 
 ## Development roadmap
 
@@ -409,11 +421,19 @@ Features listed as **planned** are goals, **not** claims about what the current 
 | `1.3 / 1.3.1` | Domestic politics, budget, taxation, debt, arrears, crises and elections | Completed in development |
 | `1.4 / 1.4.1` | JSON mod workshop, custom countries, conditional events, map extensions and validation | Completed in development |
 | `1.5` | Supply-path and map-rendering optimizations, graphics settings, diagnostic tools | Completed in development |
-| **`1.6`** | States, resources, weather, battalions and designers, hourly battles and plans, air and naval war, peace conferences, politics, AI, content | **Current public snapshot** |
+| `1.6` | States, resources, weather, battalions and designers, hourly battles and plans, air and naval war, peace conferences, politics, AI, content | Completed in development |
+| **`1.7`** | Detailed map: 11,592 provinces from Natural Earth 1:10m regions, national content for 15 secondary powers | **Current public snapshot** |
 
 These are **project development milestones**, not a claim that each version is separately tagged as a GitHub release.
 
-### v1.6 — Strategic Warfare Update (current)
+### v1.7 — Detailed Map (current)
+
+- [x] **Map:** 11,592 provinces and 1,735 states cut from the Natural Earth 1:10m regions along the 1936 borders.
+- [x] **Distances:** supply and movement measured in kilometres.
+- [x] **Performance:** faster path search, cached borders and world view, compact saves.
+- [x] **Content:** national trees, events and decisions for 15 secondary powers.
+
+### v1.6 — Strategic Warfare Update
 
 - [x] **States and economy:** state building slots, six strategic resources, refineries, trade laws, extended economy and conscription laws.
 - [x] **Terrain and weather:** hills, marshes, jungles, straits, mud, snow, frost, storms and attrition.
@@ -426,7 +446,7 @@ These are **project development milestones**, not a claim that each version is s
 - [x] **Strategic AI:** front sectors, doctrine-driven production and research, air and naval missions, invasions, decisions.
 - [x] **Scale:** new starting countries and a faster simulation.
 
-### Next: v1.6.1 — Stability and Campaign Validation
+### Next: v1.7.1 — Stability and Campaign Validation
 
 - [ ] Resolve regressions introduced by the warfare update.
 - [ ] Test long-running 1936–1945 campaigns, including save/export/reload cycles.
@@ -462,13 +482,13 @@ A TNO-scale alternate-history experience is a **future inspiration, not current 
 
 Please read this section before reporting a feature as broken:
 
-1. **Historical accuracy is approximate.** Modern low-resolution base geography is adapted for gameplay; not all country borders, names, military deployments, or leaders are exhaustively researched. The map has 3,396 provinces, far fewer than large commercial games, so one province can stand for a whole region.
+1. **Historical accuracy is approximate.** Modern low-resolution base geography is adapted for gameplay; not all country borders, names, military deployments, or leaders are exhaustively researched. The 11,592 provinces follow modern administrative regions cut along schematic 1936 borders, so a border can be off by a province or two.
 2. **The AI is heuristic.** It manages fronts, production, research, air, navy and invasions, but long campaigns can still diverge strongly from history (a civil war can last seven months or three years depending on the seed).
 3. **Air and naval movement is zone-based.** Ships are tracked individually and air wings count their planes, but fleets and wings operate over sea and air zones rather than moving freely.
 4. **The economy is game-scaled.** GDP, budgets, votes, demographics, and industrial outputs are not real-world historical datasets.
-5. **Modding extends the current world.** It cannot yet replace all 3,396 base provinces with a wholly independent map. Mod effects accept the 1.6 bonus keys (organization, breakthrough, entrench, attrition, surrender…), but mods cannot yet define new battalions, laws, advisors or decisions.
+5. **Modding extends the current world.** It cannot yet replace the 11,592 base provinces with a wholly independent map. Mod effects accept the 1.6 bonus keys (organization, breakthrough, entrench, attrition, surrender…), but mods cannot yet define new battalions, laws, advisors or decisions.
 6. **Content volume is limited.** Focus trees, events and decisions are original and playable, but far less numerous than in commercial games.
-7. **Save compatibility is conditional.** 1.5 saves are migrated on load (new systems start from defaults). Export backups and preserve the original mod data used for each campaign.
+7. **Save compatibility is conditional.** Saves made before 1.7 belong to the old map and cannot be opened; compact 1.7 saves weigh about 2 MB, so the browser's local storage only holds a few of them. Export backups and preserve the original mod data used for each campaign.
 8. **The UI is currently French.** This README is English; full UI localization is a future goal.
 9. **Browser support needs broader testing.** Development testing has focused on Chromium. The original automated environment did not certify real `file://` behavior or persistence across normal user browser sessions.
 10. **Some portraits require Internet access.** Portrait files are generally referenced rather than bundled. Third-party licensing varies.

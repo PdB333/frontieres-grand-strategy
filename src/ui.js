@@ -164,7 +164,7 @@ function onState(perf={}){
   if(!nation(target)?.alive||target===S.player)target=Object.keys(S.countries).find(id=>id!==S.player&&nation(id).alive)||S.player;
   renderTop();renderPanel();renderInspector();renderSelection();renderArmies();dirty=true;
   $('engine-status').innerHTML=`<span class="activity-light"></span>WORKER / ${perf.avgMs!==undefined?perf.avgMs+' ms/j moy. · p95 '+perf.p95Ms+' ms':perf.stepMs!==undefined?perf.stepMs+' ms/j':'EN PAUSE'}`;
-  if(S.day-lastAuto>=20){try{localStorage.setItem('frontieres-v4-autosave',JSON.stringify(S));lastAuto=S.day;}catch(e){if(lastAuto===-1)toast('Autosauvegarde indisponible : exportez une copie JSON.');lastAuto=S.day;}}
+  if(S.day-lastAuto>=20){try{localStorage.setItem('frontieres-v4-autosave',JSON.stringify(Rules.packState16(S)));lastAuto=S.day;}catch(e){if(lastAuto===-1)toast('Autosauvegarde indisponible : exportez une copie JSON.');lastAuto=S.day;}}
   if(S.pending&&seenEvent!==S.pending.event.id){seenEvent=S.pending.event.id;showEvent();}
   if(!S.pending&&modalKind==='event'){$('overlay').style.display='none';modalKind='';seenEvent='';}
   if(S.outcome?.type==='defeat'&&modalKind!=='defeat')showDefeat();
@@ -540,7 +540,7 @@ function showStart(){
   if((CATALOG.bookmarks.find(b=>b.id===startBookmark)?.unavailable||[]).includes(selectedCountry))selectedCountry='FRA';
   const d=previewIdentity(startDefs[selectedCountry]),resume=(()=>{try{return !!(localStorage.getItem('frontieres-v4-autosave')||localStorage.getItem('frontieres-v4-autosave'));}catch{return false;}})();
   pauseGame();modalKind='start';
-  modal(`<div class="start-grid"><section class="start-intro"><div class="start-brand"><span class="badge-square">F</span>FRONTI\u00c8RES</div><div class="eyebrow">UN MONDE \u00c0 LA CROIS\u00c9E DES CHEMINS</div><h1>L\u2019histoire n\u2019est<br>pas encore <em>\u00e9crite.</em></h1><p>Industrialisez votre pays. Organisez vos arm\u00e9es. Tissez vos alliances. Le monde de 1936 entre dans une nouvelle \u00e8re d\u2019incertitude.</p><div class="start-stats"><div class="stat">${startWorld.countries.length}<small>PAYS JOUABLES</small></div><div class="stat">${startWorld.provinces.length.toLocaleString('fr-FR')}<small>PROVINCES</small></div><div class="stat">01<small>MONDE PERSISTANT</small></div></div>${tag('VERSION 1.6 / GRANDE STRATÉGIE','gold')}${mod?.scenario?`<p class="note" style="margin-top:10px;color:var(--gold)">${esc(mod.scenario.title)} · ${dateText(mod.scenario.startDay??(mod.scenario.bookmark==='1939'?1338:0))}. ${esc(mod.scenario.description||'')}</p>`:''}<p class="note" style="margin-top:12px">Jeu original de grande strat\u00e9gie. G\u00e9ographie r\u00e9elle ; provinces, fronti\u00e8res de 1936 et valeurs militaires simplifi\u00e9es. Aucun fichier de Hearts of Iron IV.</p><div style="margin-top:11px">${btn('Ouvrir l\u2019atlas 1936-1945 \u2197','atlas',{},'small ghost')}${btn('Sources et portraits','sources',{},'small ghost')}</div></section>
+  modal(`<div class="start-grid"><section class="start-intro"><div class="start-brand"><span class="badge-square">F</span>FRONTI\u00c8RES</div><div class="eyebrow">UN MONDE \u00c0 LA CROIS\u00c9E DES CHEMINS</div><h1>L\u2019histoire n\u2019est<br>pas encore <em>\u00e9crite.</em></h1><p>Industrialisez votre pays. Organisez vos arm\u00e9es. Tissez vos alliances. Le monde de 1936 entre dans une nouvelle \u00e8re d\u2019incertitude.</p><div class="start-stats"><div class="stat">${startWorld.countries.length}<small>PAYS JOUABLES</small></div><div class="stat">${startWorld.provinces.length.toLocaleString('fr-FR')}<small>PROVINCES</small></div><div class="stat">01<small>MONDE PERSISTANT</small></div></div>${tag('VERSION 1.7 / GRANDE STRATÉGIE','gold')}${mod?.scenario?`<p class="note" style="margin-top:10px;color:var(--gold)">${esc(mod.scenario.title)} · ${dateText(mod.scenario.startDay??(mod.scenario.bookmark==='1939'?1338:0))}. ${esc(mod.scenario.description||'')}</p>`:''}<p class="note" style="margin-top:12px">Jeu original de grande strat\u00e9gie. G\u00e9ographie r\u00e9elle ; provinces, fronti\u00e8res de 1936 et valeurs militaires simplifi\u00e9es. Aucun fichier de Hearts of Iron IV.</p><div style="margin-top:11px">${btn('Ouvrir l\u2019atlas 1936-1945 \u2197','atlas',{},'small ghost')}${btn('Sources et portraits','sources',{},'small ghost')}</div></section>
     <section class="start-right"><div class="eyebrow">NOUVELLE CAMPAGNE</div><h2>Choisissez votre nation</h2><p class="note">Vous dirigez l\u2019\u00c9tat, pas seulement son arm\u00e9e.</p><div class="start-countries">${[...['FRA','GER','GBR','SOV','USA','ITA','JPN','CHI'],...((mod?.newCountries||[]).map(c=>c.id))].map(id=>btn(`<span class="code">${id}</span><strong>${esc(startDefs[id].name)}</strong>`,'chooseCountry',{id},'country-choice '+(selectedCountry===id?'selected':''))).join('')}</div><div class="start-select"><span class="label">TOUS LES PAYS</span><select id="start-country">${[...startWorld.countries].sort((a,b)=>a.name.localeCompare(b.name,'fr')).map(c=>`<option value="${c.id}" ${selectedCountry===c.id?'selected':''} ${(CATALOG.bookmarks.find(b=>b.id===startBookmark)?.unavailable||[]).includes(c.id)?'disabled':''}>${esc(c.name)}</option>`).join('')}</select></div>
       <div class="start-profile"><div class="row" style="gap:15px">${portrait(selectedCountry,'large',d)}<div><h3 style="font-size:26px">${esc(d.leader)}</h3><small style="display:block;margin:7px 0">${esc(d.role)}</small>${tag(IDEO[d.ideology])}</div></div><div class="profile-stats"><div class="stat">${d.civ+d.mil}<small>USINES</small></div><div class="stat">${d.divisions}<small>DIVISIONS</small></div><div class="stat">${num(d.manpower)}<small>R\u00c9SERVES</small></div><div class="stat">${d.mil>17?3:2}<small>RECHERCHE</small></div></div><p class="note" style="font-size:10px">${esc(d.description)}</p></div>
       <div class="start-options"><label><span class="label">POINT DE D\u00c9PART</span><select id="start-bookmark">${CATALOG.bookmarks.map(b=>`<option value="${b.id}" ${b.id===startBookmark?'selected':''}>${esc(b.name)}</option>`).join('')}</select></label><div class="note bookmark-note">${esc(CATALOG.bookmarks.find(b=>b.id===startBookmark)?.description||'')}</div></div><div class="start-options"><label><span class="label">CHRONOLOGIE</span><select id="start-scenario"><option value="historical" ${startHistorical==='historical'?'selected':''}>Dynamique historique conditionnelle</option><option value="sandbox" ${startHistorical==='sandbox'?'selected':''}>Diplomatie libre</option></select></label><label><span class="label">MOD DE DONN\u00c9ES</span>${btn(esc(mod?.name||'Aucun mod actif')+' \u2197','mods',{},'wide small')}</label></div>
@@ -557,7 +557,7 @@ async function launch(){
   catch(e){installVisualWorld(oldWorld);toast(e.message,true);showStart();}
 }
 function showMenu(){pauseGame();modal(`${modalHead('Menu de campagne')}<div class="stack">${btn('Reprendre la campagne','close',{},'primary wide',!S)}${btn(icon('save')+' Exporter la sauvegarde JSON','save',{},'wide',!S)}${btn(icon('folder')+' Importer une sauvegarde','load',{},'wide')}${btn('Nouvelle campagne','new',{},'wide')}${btn('Mods de donn\u00e9es','mods',{},'wide')}${btn('Emplacements de sauvegarde','saveSlots',{},'wide')}${btn('Préférences','settings',{},'wide')}${btn('Performance et diagnostic','performance15',{},'wide')}${btn('Dossier de campagne','tab',{id:'campaign'},'wide',!S)}${btn('Centre de guerre','tab',{id:'warfare'},'wide',!S)}${btn('Politique et institutions 1.3','tab',{id:'politics'},'wide',!S)}${btn('Trésor et macroéconomie 1.3','tab',{id:'treasury'},'wide',!S)}${btn('Manuel et raccourcis','help',{},'wide')}${btn('Sources et portraits','sources',{},'wide')}${btn('Diagnostics du moteur','diagnostics',{},'wide',!S)}</div><p class="note" style="margin-top:18px">Autosauvegarde tous les 20 jours de jeu si le stockage du navigateur l\u2019autorise. Exportez une copie pour la conserver.</p>`,'menu','narrow');}
-function exportSave(){if(!S)return;const blob=new Blob([JSON.stringify(S)],{type:'application/json'}),a=document.createElement('a'),url=URL.createObjectURL(blob);a.href=url;a.download=`Frontieres-${S.player}-${new Date(Date.UTC(1936,0,1+S.day)).toISOString().slice(0,10)}.json`;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);toast('Sauvegarde export\u00e9e.');}
+function exportSave(){if(!S)return;const blob=new Blob([JSON.stringify(Rules.packState16(S))],{type:'application/json'}),a=document.createElement('a'),url=URL.createObjectURL(blob);a.href=url;a.download=`Frontieres-${S.player}-${new Date(Date.UTC(1936,0,1+S.day)).toISOString().slice(0,10)}.json`;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);toast('Sauvegarde export\u00e9e.');}
 async function loadSave(raw){seenEvent='';selected.clear();army=null;pid=null;const oldWorld=WORLD;try{const candidate=Rules.previewModWorld(raw.mod||null,BASE_WORLD,CATALOG);installVisualWorld(candidate.world);await send('load',{world:BASE_WORLD,catalog:CATALOG,state:raw});mod=S.mod;modPreviewInput14=null;if(!S.pending&&!S.outcome){$('overlay').style.display='none';modalKind='';}centerOn(code(S.player).capital,3.4);toast('Sauvegarde charg\u00e9e. Le jeu est en pause.');}catch(e){installVisualWorld(oldWorld);toast('Chargement refus\u00e9 : '+e.message,true);}}
 function showEvent(){
   const e=S.pending.event;modal(`<div class="row between"><div class="eyebrow">D\u00c9P\u00caCHE / ${dateText(S.day)}</div>${tag('D\u00c9CISION REQUISE','gold')}</div><div class="event-title">${esc(e.title)}</div>${e.history?historicalEventBody(e):`<div class="event-paper"><p>${esc(e.text)}</p></div>`}<div class="event-choices">${e.choices.map((choice,index)=>btn(`<span>${esc(choice.text)}<small style="display:block;margin-top:5px">${effectText(choice.effect||{})}</small>${e.history?(choice.actions||[]).map(a=>`<small class="choice-action">${actionDescription(a)}</small>`).join(''):''}</span>${icon('arrow')}`,'event',{index})).join('')}</div><p class="note" style="margin-top:18px">La campagne est suspendue. Les alternatives peuvent modifier les crises suivantes. Les notices historiques ne garantissent pas un r\u00e9sultat militaire.</p>`,'event','narrow');
@@ -589,7 +589,7 @@ function showMods(){
   const active=mod?Rules.validateMod(mod,BASE_WORLD,CATALOG):null;
   const extra=active?(active.newCountries?.length||0):0;
   const territorial=active?.territories?.length||0;
-  modal(`${modalHead('Atelier de mondes','FRONTIÈRES 1.6 / MODS JSON SANS SCRIPTS')}
+  modal(`${modalHead('Atelier de mondes','FRONTIÈRES 1.7 / MODS JSON SANS SCRIPTS')}
     <p class="note">Creez ou combinez des univers alternatifs : Etats jouables, dirigeants, territoires, scenarios, technologies, arbres et evenements conditionnels. Le format historique 1 reste accepte. Le champ map peut dessiner des provinces et leurs liaisons. Un mod se charge avant une nouvelle campagne.</p>
     <div class="card" style="margin:14px 0"><div class="row between"><strong>${esc(active?.name||'Aucun mod selectionne')}</strong>${tag(active?'FORMAT '+active.version:'BASE','gold')}</div>
       <div class="row wrap" style="margin-top:10px">${tag(extra+' pays ajoutes')}${tag(territorial+' transferts')}${tag((active?.events||[]).length+' evenements')}${tag((active?.technologies||[]).length+' technologies')}${tag((active?.map?.addProvinces||[]).length+' nouvelles provinces')}</div>
@@ -719,7 +719,7 @@ document.addEventListener('change',ev=>{
 document.addEventListener('input',ev=>{if(ev.target.classList.contains('tmpl-stat'))updateTemplatePreview();});
 $('save-file').addEventListener('change',async ev=>{const file=ev.target.files[0];ev.target.value='';if(!file)return;try{if(file.size>18e6)throw Error('Fichier trop volumineux (18 Mo maximum).');await loadSave(JSON.parse(await file.text()));}catch(e){toast('Sauvegarde invalide : '+e.message,true);}});
 $('mod-file').addEventListener('change',async ev=>{const file=ev.target.files[0];ev.target.value='';if(!file)return;try{if(file.size>1400000)throw Error('Mod trop volumineux (1,4 Mo maximum).');mod=Rules.validateMod(JSON.parse(await file.text()),BASE_WORLD,CATALOG);modPreviewInput14=null;showMods();toast('Mod import\u00e9 et valid\u00e9.');}catch(e){toast('Mod refus\u00e9 : '+e.message,true);}});
-window.addEventListener('beforeunload',()=>{if(S)try{localStorage.setItem('frontieres-v4-autosave',JSON.stringify(S));}catch{}});
+window.addEventListener('beforeunload',()=>{if(S)try{localStorage.setItem('frontieres-v4-autosave',JSON.stringify(Rules.packState16(S)));}catch{}});
 
 /* Geography renderer. The map is sourced polygon geometry, not a decorative image. */
 const canvas=$('map'),ctx=canvas.getContext('2d'),mini=$('minimap'),mctx=mini.getContext('2d');
@@ -793,6 +793,17 @@ function visibleUnits(){
   const nearby=new Set();for(const p of owned())for(const n of p.neighbors)nearby.add(n);
   return S.units.filter(u=>u.owner===S.player||allied(S.player,u.owner)||nearby.has(u.pid)||(nation().intel[u.owner]||0)>=70);
 }
+const BASE_LOD_ZOOM=1.5,BASE_SCALE=2,baseCache=document.createElement('canvas'),baseCacheCtx=baseCache.getContext('2d');
+let baseCacheKey=null;
+function drawProvinceLayer(g,list,zoom){
+  for(const p of list){g.fillStyle=colorOf(p);g.fill(geometries[p.id].path,'evenodd');g.strokeStyle='#1b38334b';g.lineWidth=.42/zoom;g.stroke(geometries[p.id].path);}
+  // Country boundaries from real province segments. Shared boundary lines are thicker.
+  g.strokeStyle='#213b3be0';g.lineWidth=.9/zoom;
+  for(const p of list)if(p.coast||p.neighbors.some(id=>control(id)!==control(p.id)))g.stroke(geometries[p.id].path);
+  if(S&&mapMode==='political'){
+    for(const p of list)if(control(p.id)!==p.owner){g.fillStyle='#bd946d24';g.fill(geometries[p.id].path);}
+  }
+}
 function drawMap(){
   requestAnimationFrame(drawMap);if(!dirty)return;dirty=false;const start=performance.now(),dpr=canvas.width/mapWidth;
   ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,mapWidth,mapHeight);ctx.fillStyle='#162f3a';ctx.fillRect(0,0,mapWidth,mapHeight);
@@ -803,13 +814,17 @@ function drawMap(){
   ctx.lineWidth=.55/camera.zoom;ctx.strokeStyle='#4b6c742b';ctx.setLineDash([2/camera.zoom,4/camera.zoom]);ctx.beginPath();
   for(let x=0;x<1800;x+=75){ctx.moveTo(x,0);ctx.lineTo(x,1000);}for(let y=0;y<1000;y+=84){ctx.moveTo(0,y);ctx.lineTo(1800,y);}ctx.stroke();ctx.setLineDash([]);
   const visible=WORLD.provinces.filter(p=>onScreen(p.id));
-  for(const p of visible){ctx.fillStyle=colorOf(p);ctx.fill(geometries[p.id].path,'evenodd');ctx.strokeStyle='#1b38334b';ctx.lineWidth=.42/camera.zoom;ctx.stroke(geometries[p.id].path);}
-  // Country boundaries from real province segments. Shared boundary lines are thicker.
-  ctx.strokeStyle='#213b3be0';ctx.lineWidth=.9/camera.zoom;
-  for(const p of visible)if(p.coast||p.neighbors.some(id=>control(id)!==control(p.id)))ctx.stroke(geometries[p.id].path);
-  if(S&&mapMode==='political'){
-    for(const p of visible)if(control(p.id)!==p.owner){ctx.fillStyle='#bd946d24';ctx.fill(geometries[p.id].path);}
-  }
+  // Zoomed out, the province layer comes from a bitmap redrawn when the day,
+  // the map mode or the map changes; zoomed in, provinces are drawn directly.
+  if(camera.zoom<BASE_LOD_ZOOM){
+    const key=WORLD.mapId+'|'+WORLD.provinces.length+'|'+mapMode+'|'+atlasRegion+'|'+(S?S.player+'|'+S.revision:'-');
+    if(baseCacheKey!==key){
+      baseCacheKey=key;baseCache.width=Math.round(1800*BASE_SCALE);baseCache.height=Math.round(820*BASE_SCALE);
+      baseCacheCtx.setTransform(BASE_SCALE,0,0,BASE_SCALE,0,0);baseCacheCtx.clearRect(0,0,1800,820);
+      drawProvinceLayer(baseCacheCtx,WORLD.provinces,BASE_SCALE);
+    }
+    ctx.drawImage(baseCache,0,0,1800,820);
+  }else drawProvinceLayer(ctx,visible,camera.zoom);
   if(showRoutes||mapMode==='navy'){
     ctx.setLineDash([3/camera.zoom,4/camera.zoom]);ctx.strokeStyle='#d0b78675';ctx.lineWidth=.7/camera.zoom;
     for(const p of WORLD.provinces)for(const e of p.sea)if(e.to>p.id&&(onScreen(p.id)||onScreen(e.to))){const a=centers[p.id],b=centers[e.to];ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();}
@@ -873,7 +888,7 @@ function drawMap(){
 function drawMinimap(){
   if(releaseSettings.minimap===false)return;
   const w=mini.width,h=mini.height,sx=w/1800,sy=h/880;
-  // Rebuild the expensive 3,396+ province layer only after territorial or
+  // Rebuild the expensive province layer only after territorial or
   // country-color changes. Panning/zooming repaints just the viewport frame.
   const key=WORLD.mapId+'|'+WORLD.provinces.length+'|'+
     (S?S.provinces.map(q=>q.ctrl).join(','):'initial')+'|'+
@@ -1003,7 +1018,7 @@ function showSaveSlots(){pauseGame();let entries=[];for(let i=1;i<=3;i++){let ra
 function showPerformance15(){
   pauseGame();
   const p=lastWorkerPerf;
-  modal(`${modalHead('Performance et diagnostic','FRONTIÈRES 1.6 / TÉLÉMÉTRIE LOCALE')}
+  modal(`${modalHead('Performance et diagnostic','FRONTIÈRES 1.7 / TÉLÉMÉTRIE LOCALE')}
     <p class="note">Mesures observées sur cet appareil ; elles ne proviennent pas d'un benchmark universel.</p>
     <div class="grid2" style="margin:16px 0">
       <div class="card stat">${p.avgMs??'—'} ms<small>Temps moyen par jour simulé</small></div>
@@ -1050,7 +1065,7 @@ async function releaseAction(action,p){
  case 'politicalCampaign':case 'demobilize':case 'frontSector':case 'dismissTutorial':case 'airAutoReinforce':case 'fleetReinforce':await cmd(action,p);redraw();return true;
  case 'campaignContinue':await cmd(action);closeModal();setTab('campaign');return true;
  case 'saveSlots':showSaveSlots();return true;
- case 'storeSlot':if(p.occupied&&!confirm('Remplacer cette sauvegarde locale ?'))return true;{const state=JSON.stringify(S);try{localStorage.setItem('frontieres-v11-slot-'+p.slot,JSON.stringify({format:'FRONTIERES_SLOT',release:S.release,country:countryName(S.player),day:S.day,checksum:checksum(state),state}));toast('Campagne enregistr\u00e9e.');showSaveSlots();}catch{toast('Stockage plein ou bloqu\u00e9. Exportez la sauvegarde JSON.',true);}}return true;
+ case 'storeSlot':if(p.occupied&&!confirm('Remplacer cette sauvegarde locale ?'))return true;{const state=JSON.stringify(Rules.packState16(S));try{localStorage.setItem('frontieres-v11-slot-'+p.slot,JSON.stringify({format:'FRONTIERES_SLOT',release:S.release,country:countryName(S.player),day:S.day,checksum:checksum(state),state}));toast('Campagne enregistr\u00e9e.');showSaveSlots();}catch{toast('Stockage plein ou bloqu\u00e9. Exportez la sauvegarde JSON.',true);}}return true;
  case 'loadSlot':{const record=JSON.parse(localStorage.getItem('frontieres-v11-slot-'+p.slot)||'null');if(!record||checksum(record.state)!==record.checksum)throw Error('Emplacement absent ou corrompu.');await loadSave(JSON.parse(record.state));return true;}
  case 'deleteSlot':if(confirm('Effacer cet emplacement local ?')){localStorage.removeItem('frontieres-v11-slot-'+p.slot);showSaveSlots();}return true;
  case 'settings':showSettings();return true;
@@ -1135,7 +1150,7 @@ function showAtlas(section='timeline'){
  ${section==='timeline'?`<div class="row history-filters"><label><span class="label">ANNÉE DE RÉFÉRENCE</span><select id="history-year"><option value="all">Toutes les années</option>${Array.from({length:10},(_,i)=>1936+i).map(y=>`<option value="${y}" ${String(y)===historyYear?'selected':''}>${y}</option>`).join('')}</select></label><label><span class="label">AFFICHAGE</span><select id="history-scope"><option value="all">Tous les repères</option><option value="decisions" ${historyScope==='decisions'?'selected':''}>Décisions uniquement</option><option value="player" ${historyScope==='player'?'selected':''}>Mon pays</option></select></label><span class="note">${entries.length} entrées</span></div><div class="timeline-grid">${entries.map(e=>`<button class="timeline-entry ${e.kind}" data-a="historyDetail" data-p="${encodeURIComponent(JSON.stringify({id:e.id}))}"><span class="timeline-date">${dateText(e.day)}</span><div class="row between"><small>${esc(countryName(e.country))}</small>${tag(e.kind==='information'?'ARCHIVE':e.kind==='government'?'GOUVERNEMENT':'DÉCISION')}</div><h3>${esc(e.title)}</h3><p>${esc(e.historicalText||e.text)}</p><span class="timeline-status">${esc(historyStatus(e))} &#8599;</span></button>`).join('')||'<p class="note">Aucune entrée pour ce filtre.</p>'}</div>`:''}
  ${section==='regions'?`<p class="note" style="margin:16px 0">Sélectionnez une région pour la localiser sur la carte et examiner ses limites. Tous les tracés ci-dessous sont des approximations de jeu, pas des numérisations de traités.</p><div class="atlas-region-grid">${WORLD.historicalRegions.map(r=>`<button class="card atlas-region" data-a="historyRegion" data-p="${encodeURIComponent(JSON.stringify({id:r.id}))}"><small>${r.provinces.length} PROVINCES / RECONSTRUCTION</small><h3>${esc(r.name)}</h3><p>${esc(r.note||'Limites indicatives regroupant les provinces concernees par le scenario.')}</p><span>Localiser sur la carte &#8594;</span></button>`).join('')}</div>`:''}
  ${section==='countries'?`<div class="history-fact"><div class="eyebrow">DOSSIERS BIOGRAPHIQUES</div><h3>74 gouvernements au début de la partie</h3><p>Recherchez une fiche nationale, son gouvernement, ses officiers nommés et les portraits dont la provenance et la licence sont documentées. Les biographies sont des liens externes, non des fiches universitaires vérifiées individuellement.</p></div><div class="row wrap" style="margin:16px 0"><label for="atlas-country">Pays consulté</label><select id="atlas-country"><option value="">Sélectionner un pays...</option>${[...WORLD.countries].sort((a,b)=>a.name.localeCompare(b.name,'fr')).map(c=>`<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('')}</select></div><div class="atlas-region-grid">${WORLD.countries.map(c=>`<button class="card atlas-region" data-a="countryDossier" data-p="${encodeURIComponent(JSON.stringify({id:c.id}))}"><small>${esc(c.id)} · ${esc(c.role)}</small><h3>${esc(c.name)}</h3><p>${esc(c.leader)}</p><span>Consulter le dossier &#8599;</span></button>`).join('')}</div>`:''}
- ${section==='sources'?`<div class="history-fact"><div class="eyebrow">MÉTHODE ET LIMITES</div><h3>Une reconstruction originale, pas un atlas certifié.</h3><p>Le fond physique est issu de Natural Earth à l'échelle 1:110 millions, dans le domaine public. Les frontières historiques, les régions diplomatiques et les fleuves sont des tracés manuels schématiques. Les sources ci-dessous documentent les faits ; elles ne fournissent pas toutes les coordonnées du jeu.</p><p>CShapes n'est pas incorporé. Les terrains, les valeurs industrielles et les forces sont des paramètres de simulation. Le point de départ de 1939 est un état initial composé, non une simulation cachée de trois ans.</p><p>Les persécutions et crimes de masse sont rappelés dans des notices documentaires : ils ne constituent pas des actions récompensées par le jeu.</p></div><div class="archive-links source-grid">${historySourceLinks(Object.keys(CATALOG.historySources))}</div>`:''}`,'atlas','wide');
+ ${section==='sources'?`<div class="history-fact"><div class="eyebrow">MÉTHODE ET LIMITES</div><h3>Une reconstruction originale, pas un atlas certifié.</h3><p>Le fond physique et les régions administratives sont issus de Natural Earth à l'échelle 1:10 millions, dans le domaine public, découpés en provinces de jeu. Les frontières de 1936, les régions diplomatiques et les fleuves sont des tracés manuels schématiques. Les sources ci-dessous documentent les faits ; elles ne fournissent pas toutes les coordonnées du jeu.</p><p>CShapes n'est pas incorporé. Les terrains, les valeurs industrielles et les forces sont des paramètres de simulation. Le point de départ de 1939 est un état initial composé, non une simulation cachée de trois ans.</p><p>Les persécutions et crimes de masse sont rappelés dans des notices documentaires : ils ne constituent pas des actions récompensées par le jeu.</p></div><div class="archive-links source-grid">${historySourceLinks(Object.keys(CATALOG.historySources))}</div>`:''}`,'atlas','wide');
 }
 function showCountryDossier(id){
  const archive=PEOPLE.countries[id],d=S?.countries[id]?.identity||previewIdentity(DEF[id]||{});
