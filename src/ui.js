@@ -147,7 +147,7 @@ function exportArchiveGame(){
 /* Worker and messages */
 let worker;
 try{
-  const source=`const Engine=(${createEngineClass.toString()})();(${workerMain.toString()})(Engine);`;
+  const source=`${installSystems16.toString()}\nconst Engine=(${createEngineClass.toString()})();(${workerMain.toString()})(Engine);`;
   const url=URL.createObjectURL(new Blob([source],{type:'text/javascript'}));worker=new Worker(url);URL.revokeObjectURL(url);
   worker.onmessage=({data:m})=>{
     if(m.type==='state'){S=m.state;lastStateTick=performance.now();onState(m.perf);}

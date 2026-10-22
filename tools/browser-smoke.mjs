@@ -59,6 +59,22 @@ try {
     await page.waitForTimeout(300);
   }
 
+  // Every panel, sub-panel and map mode must render without throwing.
+  await page.evaluate(() => window.Frontieres.command('pause'));
+  const tabs = await page.$$eval('#rail [data-a=tab]', buttons => buttons.map(b => JSON.parse(decodeURIComponent(b.dataset.p)).id));
+  for (const id of tabs) {
+    await page.evaluate(tab => window.Frontieres.tab(tab), id);
+    for (const sub of await page.$$eval('#panel .subtabs [data-a]', buttons => buttons.map(b => b.dataset.p))) {
+      await page.locator(`#panel .subtabs [data-p="${sub}"]`).first().click();
+    }
+  }
+  for (const mode of await page.$$eval('#map-modes [data-a=mode]', buttons => buttons.map(b => b.dataset.p))) {
+    await page.locator(`#map-modes [data-p="${mode}"]`).click();
+    await page.waitForTimeout(50);
+  }
+  await page.evaluate(() => window.Frontieres.selectProvince(window.Frontieres.state().countries[window.Frontieres.state().player].identity.capital));
+  console.log(`ok   ${tabs.length} panels and every map mode rendered`);
+
   const state = await page.evaluate(() => ({day: window.Frontieres.state().day, player: window.Frontieres.state().player}));
   if (!errors.length) console.log(`ok   campaign started as ${state.player} and advanced from day ${startDay} to day ${state.day}`);
 } catch (error) {

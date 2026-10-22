@@ -13,7 +13,7 @@ function createEngineClass() {
     const rad=Math.PI/180,dy=(b.y-a.y)*rad,dx=(b.x-a.x)*rad;
     return 6371*2*Math.asin(Math.min(1,Math.sqrt(Math.sin(dy/2)**2+Math.cos(a.y*rad)*Math.cos(b.y*rad)*Math.sin(dx/2)**2)));
   };
-  const templateStats=t=>({
+  let templateStats=t=>({
     men:t.inf*1000+t.motor*1000+t.art*500+t.tank*650,
     soft:t.inf*12+t.motor*14+t.art*32+t.tank*24+(t.recon?3:0),
     hard:t.inf*2+t.motor*3+t.art*8+t.tank*25+(t.antiTank?16:0),
@@ -1180,12 +1180,12 @@ function createEngineClass() {
         assert(c.identity?.id===id&&typeof c.identity.name==='string'&&this.prov[c.identity.capital],'Identit\u00e9 nationale invalide.');
         for(const k of ['tech','research','focusDone','build','training','templates','relations_PLACEHOLDER','access','guarantees','pacts','trades','justifications','spies','lendLease','history','achievements'].filter(k=>k!=='relations_PLACEHOLDER'))assert(Array.isArray(c[k]),'Donn\u00e9e nationale invalide : '+k);
         for(const k of ['manpower','pool','pp','stability','support','casualties','xp','slots'])assert(finite(c[k]),'Ressource nationale invalide : '+k);
-        assert(['civilian','partial','war'].includes(c.economy)&&['civil','police','military'].includes(c.occupation),'Loi invalide.');
+        assert((this.catalog.laws?.economy?.map(l=>l.id)||['civilian','partial','war']).includes(c.economy)&&['civil','police','military'].includes(c.occupation),'Loi invalide.');
         assert(c.stock&&c.bonus&&c.allocation&&c.efficiency&&c.relations&&c.intel&&c.parties&&c.policyCooldown,'Structures nationales manquantes.');
         for(const k of Object.keys(this.catalog.equipment))assert(finite(c.stock[k])&&Number.isInteger(c.allocation[k])&&c.allocation[k]>=0&&finite(c.efficiency[k],0,1),'Stock ou allocation invalide : '+k);
         assert(finite(c.stock.fuel),'Carburant invalide.');
         for(const value of Object.values(c.bonus))assert(finite(value,-.5,5),'Bonus national invalide.');
-        assert(Array.isArray(c.identity.commanders)&&Number.isInteger(c.conscription)&&c.conscription>=1&&c.conscription<=4,'Commandement ou conscription invalide.');
+        assert(Array.isArray(c.identity.commanders)&&Number.isInteger(c.conscription)&&c.conscription>=0&&c.conscription<(this.catalog.laws?.conscription?.length||5),'Commandement ou conscription invalide.');
         if(c.macro||['1.3.0','1.3.1'].includes(state.release)){
           const m=c.macro,p=c.politics;
           assert(m&&p,'État politique ou macroéconomique manquant.');
@@ -2102,7 +2102,7 @@ function createEngineClass() {
     // All inputs come from JSON; no eval, dynamic import or executable mod callbacks.
     const mod141Key=/^[A-Za-z][A-Za-z0-9:_-]{2,79}$/;
     const mod141MapId=/^[a-z][a-z0-9_.-]{2,63}$/i;
-    const mod141Fields=new Set(['geoKey','name','owner','x','y','polygons','terrain','zone','seaZone','coast','port','airbase','vp','steel','oil','rubber','neighbors','sea']);
+    const mod141Fields=new Set(['geoKey','name','owner','x','y','polygons','terrain','zone','seaZone','coast','port','airbase','vp','steel','oil','rubber','aluminium','tungsten','chromium','neighbors','sea']);
     const mod141Hash=s=>{let a=2166136261,b=2246822519;for(let i=0;i<s.length;i++){a=Math.imul(a^s.charCodeAt(i),16777619)>>>0;b=Math.imul(b^s.charCodeAt(i),3266489917)>>>0;}return a.toString(16).padStart(8,'0')+b.toString(16).padStart(8,'0');};
     const mod141Polygon=polygons=>{
       assert(Array.isArray(polygons)&&polygons.length>=1&&polygons.length<=5,'Une province doit posseder de 1 a 5 polygones.');
@@ -2145,14 +2145,14 @@ function createEngineClass() {
         if(addition){assert(typeof p.name==='string'&&p.name.length>=2&&p.name.length<=100,'Nom provincial obligatoire.');assert(typeof p.owner==='string'&&ids.has(p.owner),'Proprietaire provincial inconnu.');assert(p.polygons!==undefined,'Geometrie obligatoire pour une nouvelle province.');}
         if(p.name!==undefined)assert(typeof p.name==='string'&&p.name.length>=2&&p.name.length<=100,'Nom provincial invalide.');
         if(p.owner!==undefined)assert(ids.has(p.owner),'Proprietaire provincial inconnu : '+p.owner);
-        if(p.terrain!==undefined)assert(['plains','forest','mountains','desert','urban'].includes(p.terrain),'Terrain invalide.');
+        if(p.terrain!==undefined)assert(['plains','forest','mountains','desert','urban','hills','marsh','jungle'].includes(p.terrain),'Terrain invalide.');
         if(p.zone!==undefined)assert(zones.has(p.zone),'Zone aerienne inconnue.');
         if(p.seaZone!==undefined)assert(p.seaZone===null||seas.has(p.seaZone),'Zone maritime inconnue.');
         if(p.coast!==undefined)assert(typeof p.coast==='boolean','Etat cotier invalide.');
         if(p.x!==undefined)assert(finite(p.x,-180,180),'Longitude invalide.');
         if(p.y!==undefined)assert(finite(p.y,-85,85),'Latitude invalide.');
         if(p.polygons!==undefined)mod141Polygon(p.polygons);
-        for(const k of ['vp','port','airbase','steel','oil','rubber'])if(p[k]!==undefined)assert(Number.isInteger(p[k])&&p[k]>=0&&p[k]<=1000,'Valeur provinciale invalide : '+k);
+        for(const k of ['vp','port','airbase','steel','oil','rubber','aluminium','tungsten','chromium'])if(p[k]!==undefined)assert(Number.isInteger(p[k])&&p[k]>=0&&p[k]<=1000,'Valeur provinciale invalide : '+k);
         if(p.neighbors!==undefined){
           assert(Array.isArray(p.neighbors)&&p.neighbors.length<=16,'Maximum 16 voisins terrestres.');
           assert(new Set(p.neighbors).size===p.neighbors.length,'Voisin terrestre duplique.');
@@ -2201,13 +2201,13 @@ function createEngineClass() {
         world.provinces.push({id,geoKey:p.geoKey,name:p.name,owner:p.owner,x,y,polygons:clone(p.polygons),
           city:true,capital:false,zone:p.zone||world.zones[0].id,seaZone:p.seaZone||null,
           neighbors:[],sea:[],terrain:p.terrain||'plains',coast:p.coast??true,
-          port:p.port??1,airbase:p.airbase??0,vp:p.vp??2,steel:p.steel??0,oil:p.oil??0,rubber:p.rubber??0,
+          port:p.port??1,airbase:p.airbase??0,vp:p.vp??2,steel:p.steel??0,oil:p.oil??0,rubber:p.rubber??0,aluminium:p.aluminium??0,tungsten:p.tungsten??0,chromium:p.chromium??0,
           historicalRegions:[],administration:'Scenario modde',cartographicConfidence:'fictional',overseas:false});
         keys.set(p.geoKey,id);
       }
       for(const edit of changes){
         const p=world.provinces[keys.get(edit.geoKey)];
-        for(const k of ['name','owner','x','y','terrain','zone','seaZone','coast','port','airbase','vp','steel','oil','rubber'])if(edit[k]!==undefined)p[k]=edit[k];
+        for(const k of ['name','owner','x','y','terrain','zone','seaZone','coast','port','airbase','vp','steel','oil','rubber','aluminium','tungsten','chromium'])if(edit[k]!==undefined)p[k]=edit[k];
         if(edit.polygons)p.polygons=clone(edit.polygons);
         if(edit.x===undefined&&edit.polygons&&!(map.addProvinces||[]).some(a=>a.geoKey===edit.geoKey)){
           const ring=edit.polygons[0];p.x=ring.reduce((a,b)=>a+b[0],0)/ring.length;
@@ -2292,6 +2292,14 @@ function createEngineClass() {
       state.release='1.5';this.checkInvariants();return state;
     };
 
+    // Frontieres 1.6: grand strategy systems (src/systems.js).
+    assert(typeof installSystems16==='function','Le module des syst\u00e8mes 1.6 est absent.');
+    installSystems16(Engine,{clone,clamp,sum,assert,finite,distance,hash:mod141Hash,
+      getTemplateStats:()=>templateStats,setTemplateStats:f=>{templateStats=f;}});
+
   return Engine;
 }
-if(typeof module!=='undefined')module.exports={createEngineClass,Engine:createEngineClass()};
+if(typeof module!=='undefined'){
+  if(typeof installSystems16==='undefined')globalThis.installSystems16=require('./systems.js').installSystems16;
+  module.exports={createEngineClass,Engine:createEngineClass()};
+}
