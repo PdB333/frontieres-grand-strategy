@@ -317,7 +317,8 @@ frontieres-grand-strategy/
 ├── .github/workflows/    # CI: syntax, build freshness, engine smoke test
 ├── tools/
 │   ├── build.mjs          # Rebuilds index.html from src/ and data/
-│   └── smoke.mjs          # Headless engine smoke test (Node.js)
+│   ├── smoke.mjs          # Headless engine smoke test (Node.js)
+│   └── browser-smoke.mjs  # Starts a campaign in headless Chromium (Playwright)
 ├── src/
 │   ├── shell.html         # Page template; build.mjs inlines the files below
 │   ├── engine.js          # Simulation engine source
@@ -352,7 +353,14 @@ node tools/build.mjs --check   # fail if index.html is stale
 node tools/smoke.mjs           # headless engine test: 1936/1939 campaigns, invariants, save/load, determinism
 ```
 
-GitHub Actions runs all three checks on every push and pull request. Historical test fixtures, automated browser tests, and development ZIP tools are not yet published.
+`tools/browser-smoke.mjs` opens `index.html` in headless Chromium, starts a campaign, runs the clock and fails on any page error, console error or in-game error notification. It needs Playwright:
+
+```bash
+npm install --no-save playwright && npx playwright install chromium
+node tools/browser-smoke.mjs
+```
+
+GitHub Actions runs all of these checks on every push and pull request. Historical test fixtures and development ZIP tools are not yet published.
 
 ## Development roadmap
 
@@ -433,7 +441,7 @@ Please read this section before reporting a feature as broken:
 7. **The UI is currently French.** This README is English; full UI localization is a future goal.
 8. **Browser support needs broader testing.** Development testing has focused on Chromium. The original automated environment did not certify real `file://` behavior or persistence across normal user browser sessions.
 9. **Some portraits require Internet access.** Portrait files are generally referenced rather than bundled. Third-party licensing varies.
-10. **The GitHub source snapshot is not yet a full developer SDK.** The build script and CI are available (see [Building and testing](#building-and-testing)), but historical test fixtures and browser tests are not published yet.
+10. **The GitHub source snapshot is not yet a full developer SDK.** The build script and CI are available (see [Building and testing](#building-and-testing)), but historical test fixtures are not published yet.
 
 ## Contributing and bug reports
 
