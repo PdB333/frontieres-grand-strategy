@@ -607,10 +607,12 @@ catalog['spirits'] = [
 catalog['startSpirits'] = {
     '1936': {'USA': ['isolation'], 'FRA': ['maginot', 'divided'], 'GBR': ['empire'], 'SOV': ['purges', 'plans', 'strategic_depth'],
              'GER': ['rearmament'], 'ITA': ['colonial'], 'JPN': ['zaibatsu', 'rivalry'], 'CHI': ['warlords', 'strategic_depth'],
-             'FIN': ['sisu'], 'SWI': ['national_redoubt']},
+             'FIN': ['sisu'], 'SWI': ['national_redoubt'], 'PRC': ['revolutionary_army'], 'SHX': ['warlords'], 'GXC': ['warlords'],
+             'YUN': ['warlords'], 'XSM': ['warlords'], 'SIK': ['warlords']},
     '1939': {'USA': ['isolation'], 'FRA': ['maginot'], 'GBR': ['empire'], 'SOV': ['purged_army', 'plans', 'strategic_depth'],
              'GER': ['rearmament', 'four_year'], 'ITA': ['colonial'], 'JPN': ['zaibatsu', 'rivalry'], 'CHI': ['united_front', 'strategic_depth'],
-             'FIN': ['sisu'], 'SWI': ['national_redoubt']},
+             'FIN': ['sisu'], 'SWI': ['national_redoubt'], 'PRC': ['revolutionary_army'], 'SHX': ['warlords'], 'GXC': ['warlords'],
+             'YUN': ['warlords'], 'XSM': ['warlords'], 'SIK': ['warlords']},
 }
 
 def dec(did, name, category, cost, desc, requires=None, effect=None, spirit_id=None, days=None, cooldown=0, once=False,
@@ -671,6 +673,7 @@ catalog['decisions'] = [
     dec('arsenal_of_democracy', 'Arsenal des démocraties', 'national', 120, 'Convertir l’industrie civile en arsenal.', {'country': ['USA'], 'tension': 40}, spirit_id='arsenal', once=True),
     dec('mare_nostrum', 'Mare Nostrum', 'national', 80, 'Faire de la Méditerranée une mer italienne.', {'country': ['ITA']}, spirit_id='mare_nostrum', once=True),
     dec('zaibatsu_mobilization', 'Mobilisation des conglomérats', 'national', 80, 'Les zaibatsu construisent trois arsenaux.', {'country': ['JPN']}, once=True, special={'build': {'mil': 3}}),
+    dec('integrate_province', 'Rallier un gouverneur provincial', 'national', 120, 'Le gouverneur le mieux disposé accepte l’autorité de Nankin : ses provinces, ses troupes et ses arsenaux rejoignent l’État central.', {'country': ['CHI'], 'warlord': True}, cooldown=240, special={'integrate': True}),
     dec('united_front', 'Front uni', 'national', 60, 'Suspendre la guerre civile face à l’invasion.', {'country': ['CHI'], 'war': True}, {'stability': 10}, 'united_front', once=True, remove=['warlords']),
     dec('supply_road', 'Route d’approvisionnement', 'national', 50, 'Ouvrir une route vers les ports alliés.', {'country': ['CHI'], 'war': True}, spirit_id='burma_road', once=True),
     dec('central_industrial_region', 'Région industrielle centrale', 'national', 80, 'Un pôle industriel à l’abri des frontières.', {'country': ['POL']}, once=True, special={'build': {'civ': 2, 'mil': 2}}),

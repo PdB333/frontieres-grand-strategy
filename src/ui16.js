@@ -571,6 +571,7 @@ PANELS16.decisions=function(){
     if(r.spirit&&!(c.spirits16||[]).some(s=>s.id===r.spirit))return 'Condition nationale absente.';
     if(r.faction&&c.faction==='none')return 'Exige une faction.';
     if(r.overseas&&!owned().some(p=>p.overseas))return 'Aucun territoire d’outre-mer.';
+    if(r.warlord&&!['SHX','GXC','YUN','XSM'].some(k=>S.countries[k]?.alive&&!S.countries[k].subject&&!S.wars.some(w=>(w.a===k&&w.b===S.player)||(w.b===k&&w.a===S.player))))return 'Aucun gouverneur provincial à rallier.';
     if(d.once&&u)return 'Déjà prise.';
     if(u&&d.cooldown&&u.day+d.cooldown>S.day)return 'Disponible dans '+(u.day+d.cooldown-S.day)+' jours.';
     if(c.pp<d.cost)return 'Il faut '+d.cost+' PP.';return '';};

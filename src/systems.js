@@ -327,6 +327,80 @@ function installSystems16(Engine,H){
   // quality (see the equipment section). Without it they are plain additions.
   Engine.prototype.produce16=function(id,key,amount){this.nation(id).stock[key]+=amount;};
   Engine.prototype.transferEquipment16=function(from,to,key,amount){this.nation(from).stock[key]-=amount;this.nation(to).stock[key]+=amount;};
+  // War lookups run tens of thousands of times a day: an index rebuilt
+  // whenever the war list changes (new array, new length or new last war).
+  Engine.prototype.warIndex16=function(){
+    const w=this.s.wars,tail=w.length?w[w.length-1].id:-1;
+    if(this._warRef!==w||this._warLen!==w.length||this._warTail!==tail){
+      const m=new Map(),add=(a,b)=>{let set=m.get(a);if(!set)m.set(a,set=new Set());set.add(b);};
+      for(const x of w){add(x.a,x.b);add(x.b,x.a);}
+      this._warMap=m;this._warRef=w;this._warLen=w.length;this._warTail=tail;
+    }
+    return this._warMap;
+  };
+  Engine.prototype.war=function(a,b){return !!this.warIndex16().get(a)?.has(b);};
+  // Same order as the original (country order, living countries only).
+  Engine.prototype.enemies=function(id){
+    const set=this.warIndex16().get(id);if(!set?.size)return [];
+    const out=[];for(const k in this.s.countries)if(set.has(k)&&this.s.countries[k].alive)out.push(k);
+    return out;
+  };
+  // Same result as access(a,b) for every pair, without the per-pair lookups.
+  Engine.prototype.accessMatrix=function(){
+    const C=this.s.countries,ids=Object.keys(C),permitted=Object.create(null);
+    for(const a of ids){
+      const ca=C[a],row=permitted[a]=Object.create(null),fa=ca.faction,acc=ca.access;
+      for(const b of ids)row[b]=a===b||fa!=='none'&&fa===C[b].faction||acc.includes(b);
+    }
+    return permitted;
+  };
+  // Supply: the 1.5 model with a best-first flood (each province settles once
+  // at its best value instead of being relaxed again and again) and cached
+  // lookups. Sources: capitals and ports weighted by convoys and blockade.
+  Engine.prototype.computeSupply=function(){
+    const s=this.s,P=this.prov,n=P.length,permitted=this.accessMatrix(),active=this.active();
+    const portsByOwner=Object.create(null),allPorts=[];
+    for(const p of P){const st=s.provinces[p.id];if(!st.port)continue;allPorts.push(p);(portsByOwner[st.ctrl]??=[]).push(p);}
+    const alliesById=new Map(active.map(id=>[id,active.filter(o=>this.allies(id,o))]));
+    const navalCache=new Map(),naval=(id,zone,mission)=>{const key=id+'|'+zone+'|'+mission;let v=navalCache.get(key);if(v===undefined){v=this.navalPower(id,zone,mission||null);navalCache.set(key,v);}return v;};
+    const loads=new Float64Array(n);
+    for(const u of s.units)loads[u.pid]+=templateStats16(u.template).width/20;
+    const values=new Float64Array(n),heapIds=[],heapKeys=[];
+    const push=(id,v)=>{let i=heapIds.length;heapIds.push(id);heapKeys.push(v);while(i>0){const up=(i-1)>>1;if(heapKeys[up]>=v)break;heapIds[i]=heapIds[up];heapKeys[i]=heapKeys[up];i=up;}heapIds[i]=id;heapKeys[i]=v;};
+    const pop=()=>{const top=heapIds[0],lastId=heapIds.pop(),lastKey=heapKeys.pop(),size=heapIds.length;if(size){let i=0;for(;;){let c=2*i+1;if(c>=size)break;if(c+1<size&&heapKeys[c+1]>heapKeys[c])c++;if(heapKeys[c]<=lastKey)break;heapIds[i]=heapIds[c];heapKeys[i]=heapKeys[c];i=c;}heapIds[i]=lastId;heapKeys[i]=lastKey;}return top;};
+    const seed=(pid,v)=>{if(values[pid]<v){values[pid]=v;push(pid,v);}};
+    for(const id of active){
+      const c=this.nation(id),capital=this.cap(id);if(s.provinces[capital]?.ctrl===id)seed(capital,1);
+      const ports=portsByOwner[id]||[];if(!ports.length)continue;
+      const convoyFactor=clamp(c.stock.convoys/Math.max(15,ports.length*2),0,1),foes=this.enemies(id),friends=alliesById.get(id);
+      for(const p of ports){
+        let raiding=0,escorts=0;for(const e of foes)raiding+=naval(e,p.seaZone,'raid');for(const o of friends)escorts+=naval(o,p.seaZone,'');
+        const blockade=clamp(1-raiding/Math.max(10,escorts+raiding)*.8,.2,1);
+        seed(p.id,.65*convoyFactor*blockade*(1+s.provinces[p.id].port*.06));
+      }
+    }
+    const bonus=new Map(),supplyBonus=k=>{let v=bonus.get(k);if(v===undefined){v=this.nation(k)?.bonus.supply||0;bonus.set(k,v);}return v;};
+    const move=new Float64Array(n),denom=new Float64Array(n);
+    for(let j=0;j<n;j++){const t=s.provinces[j];move[j]=.07*this.catalog.terrain[P[j].terrain].move;denom[j]=1+t.rail*.25+t.infra*.12;}
+    const done=new Uint8Array(n);
+    while(heapIds.length){
+      const i=pop();if(done[i])continue;done[i]=1;
+      const from=s.provinces[i].ctrl,row=permitted[from],extra=supplyBonus(from),vi=values[i];
+      for(const j of P[i].neighbors){
+        if(done[j]||!row?.[s.provinces[j].ctrl])continue;
+        const v=vi-move[j]/(denom[j]+extra);if(v>values[j]&&v>0){values[j]=v;push(j,v);}
+      }
+    }
+    for(let i=0;i<n;i++){const q=s.provinces[i];q.supply=clamp(values[i]*(1+q.hub*.08)*(1-q.damage*.4),0,1);}
+    const totals={},counts={},armyById=new Map(s.armies.map(a=>[a.id,a]));
+    for(const u of s.units){
+      const q=s.provinces[u.pid],g=this.general(armyById.get(u.army));
+      u.supply=clamp(q.supply*(1+supplyBonus(u.owner)+(u.template.logistics?.12:0)+(g?g.logistics*.025:0))/Math.max(1,loads[u.pid]/(2+q.infra+q.hub*2)),0,1);
+      totals[u.owner]=(totals[u.owner]||0)+u.supply;counts[u.owner]=(counts[u.owner]||0)+1;
+    }
+    for(const id of active)this.nation(id).stats.supply=(totals[id]||0)/(counts[id]||1);
+    this.computePockets(permitted,allPorts);
+  };
   // Daily cache of controlled provinces: economy and AI tolerate a one-day lag.
   Engine.prototype.ownedToday16=function(id){
     if(this._ownedDay!==this.s.day||this._ownedState!==this.s){
@@ -950,7 +1024,7 @@ function installSystems16(Engine,H){
         if(field.dist[u.pid]===-1){
           // No land route (islands, overseas allies): ship the division to the
           // nearest front province, a few per army and day to bound the cost.
-          if((seaRoutes.get(a.id)||0)>=4)continue;seaRoutes.set(a.id,(seaRoutes.get(a.id)||0)+1);
+          if((s.day+a.id)%3||(seaRoutes.get(a.id)||0)>=3)continue;seaRoutes.set(a.id,(seaRoutes.get(a.id)||0)+1);
           const goal=fronts.slice().sort((x,y)=>distance(x,this.prov[u.pid])-distance(y,this.prov[u.pid])||x.id-y.id)[0];
           const route=goal&&this.path(u.pid,goal.id,a.owner,true);if(route?.length){u.path=route;u.progress=0;}
           continue;
@@ -1740,6 +1814,24 @@ function installSystems16(Engine,H){
     return rebel;
   };
   const IDEO_FR={communist:'révolutionnaire',fascist:'national',democratic:'démocratique',authoritarian:'militaire'};
+  // Chinese regional powers: they join the central government's war against
+  // an invader (united front) and can be rallied by decision.
+  const WARLORDS=['PRC','SHX','GXC','YUN','XSM'];
+  Engine.WARLORDS16=WARLORDS;
+  Engine.prototype.integrable16=function(id){
+    if(id!=='CHI')return [];
+    return WARLORDS.filter(k=>k!=='PRC'&&k!==this.s.player&&this.nation(k)?.alive&&!this.nation(k).subject&&!this.war(id,k)&&!this.nation(k).capitulated16);
+  };
+  Engine.onDay16(function(){
+    if(this.s.day%7!==2||!this.nation('CHI')?.alive||this.nation('CHI').capitulated16)return;
+    const invaders=this.enemies('CHI').filter(e=>!WARLORDS.includes(e)&&e!=='SIK');
+    if(!invaders.length)return;
+    for(const k of WARLORDS){
+      const n=this.nation(k);if(!n?.alive||n.subject||n.capitulated16||k===this.s.player)continue;
+      for(const e of invaders)if(!this.war(k,e)&&!this.allies(k,e))try{this.declareWar(k,e,true,false);}catch{}
+      n.relations.CHI=Math.max(n.relations.CHI||0,50);
+    }
+  });
   Engine.onDay16(function(){
     if(this.s.day%30!==15)return;
     for(const id of this.active()){
@@ -1829,6 +1921,7 @@ function installSystems16(Engine,H){
     if(r.spirit&&!this.hasSpirit16(c,r.spirit))return 'Condition nationale absente.';
     if(r.faction&&c.faction==='none')return 'Exige une faction.';
     if(r.overseas&&!this.ownedToday16(id).some(p=>p.overseas))return 'Aucun territoire d’outre-mer.';
+    if(r.warlord&&!this.integrable16(id).length)return 'Aucun gouverneur provincial à rallier.';
     if(d.once&&used)return 'Décision déjà prise.';
     if(used&&d.cooldown&&used.day+d.cooldown>this.s.day)return 'Disponible dans '+(used.day+d.cooldown-this.s.day)+' jours.';
     if(c.pp<d.cost)return 'Il faut '+d.cost+' points politiques.';
@@ -1855,6 +1948,20 @@ function installSystems16(Engine,H){
     if(sp.scorch)for(const p of owned)if(p.neighbors.some(n=>this.war(id,s.provinces[n].ctrl)))s.provinces[p.id].damage=clamp(s.provinces[p.id].damage+.3,0,.85);
     if(sp.militia){const t=c.templates.find(t=>t.id==='garrison')||c.templates[0],a=this.s.armies.find(a=>a.owner===id);for(let i=0;i<sp.militia;i++){const u=this.spawn(id,this.cap(id),t,60);u.strength=.7;if(a)u.army=a.id;}}
     if(sp.colonial)c.manpower+=owned.filter(p=>p.overseas).length*2000;
+    if(sp.integrate){
+      // A provincial power rallies: its troops, stocks and land join peacefully.
+      const k=this.integrable16(id).sort((a,b)=>(this.nation(b).relations[id]||0)-(this.nation(a).relations[id]||0)||a.localeCompare(b))[0];
+      if(k){
+        const army=this.s.armies.find(a=>a.owner===id)||this.addArmy(id),n=this.nation(k);
+        for(const u of this.units(k)){u.owner=id;u.army=army.id;u.path=[];}
+        for(const key of Object.keys(n.stock))c.stock[key]=(c.stock[key]||0)+n.stock[key]*.6;
+        c.manpower+=n.manpower;
+        this.annex(id,k);
+        for(const p of this.prov)if(p.owner===k){const st=this.s.provinces[p.id];if(st.ctrl===id){st.compliance=80;st.resistance=0;}}
+        c.identity.cores=[...new Set([...(c.identity.cores||this.prov.filter(p=>p.owner===id).map(p=>p.id)),...this.prov.filter(p=>p.owner===k).map(p=>p.id)])];
+        this.log(this.info(k).name+' se rallie au gouvernement de '+this.info(id).name+'.','event');
+      }
+    }
     if(sp.dominions)for(const k of ['CAN','AST','NZL','SAF','RAJ']){const d=this.nation(k);if(!d?.alive)continue;c.relations[k]=clamp((c.relations[k]||0)+30,-100,100);if(c.faction!=='none'&&['none','Commonwealth'].includes(d.faction))d.faction=c.faction;}
     if(sp.build)for(const [kind,n] of Object.entries(sp.build)){
       const sites=owned.filter(p=>this.isCore(id,p.id)).sort(byVp);
@@ -1885,8 +1992,8 @@ function installSystems16(Engine,H){
   // conditions, political paths, alliances, claims and research bonuses.
   // ---------------------------------------------------------------------------
   const asList=v=>v==null?[]:Array.isArray(v)?v:[v];
-  Engine.prototype.focusBlock16=function(id,f){
-    const c=this.nation(id),r=f.requires||{},atWar=this.enemies(id).length>0;
+  Engine.prototype.focusBlock16=function(id,f,atWar=this.enemies(id).length>0){
+    const c=this.nation(id),r=f.requires||{};
     if(c.focusDone.includes(f.id))return 'Priorité déjà achevée.';
     if(!f.req.every(k=>c.focusDone.includes(k)))return 'Les priorités précédentes doivent être achevées.';
     if(f.reqAny?.length&&!f.reqAny.some(k=>c.focusDone.includes(k)))return 'L’une des priorités précédentes doit être achevée.';
@@ -2146,7 +2253,7 @@ function installSystems16(Engine,H){
   };
   Engine.prototype.aiFocus16=function(id){
     const c=this.nation(id);if(c.focus)return;
-    const prof=this.aiProfile16(id),options=this.tree(id).filter(f=>!this.focusBlock16(id,f)&&(!f.ideology||f.ideology.includes(c.ideology)));
+    const atWar=this.enemies(id).length>0,prof=this.aiProfile16(id),options=this.tree(id).filter(f=>!this.focusBlock16(id,f,atWar)&&(!f.ideology||f.ideology.includes(c.ideology)));
     if(!options.length)return;
     // Countries keep their regime: the matching political path is preferred,
     // the others are avoided.
@@ -2174,7 +2281,7 @@ function installSystems16(Engine,H){
     const c=this.nation(id);if(c.build.length>=3||c.stats.freeCiv<1)return;
     const prof=this.aiProfile16(id),atWar=this.enemies(id).length>0,year=1936+this.s.day/365.25;
     const owned=this.ownedToday16(id).filter(p=>this.s.provinces[p.id].ctrl===id);
-    const free=p=>{const sid=this.stateId(p.id);return this.stateCapacity(sid,id)-this.stateUsed(sid)-this.stateQueued(sid,id);};
+    const freeByState=new Map(),free=p=>{const sid=this.stateId(p.id);let v=freeByState.get(sid);if(v===undefined){v=this.stateCapacity(sid,id)-this.stateUsed(sid)-this.stateQueued(sid,id);freeByState.set(sid,v);}return v;};
     const pick=(filter,sort)=>owned.filter(filter).sort(sort)[0];
     let kind=!atWar&&year<1938.6&&c.stats.civ<c.stats.mil*1.8?'civ':'mil';
     if((prof.navy||0)>=.3&&c.stats.dock<10&&this.s.day%3===0)kind='dock';
@@ -2356,7 +2463,8 @@ function installSystems16(Engine,H){
   Engine.prototype.aiInvasion16=function(id){
     const c=this.nation(id),enemies=this.enemies(id).filter(e=>!this.nation(e).capitulated16);
     if(!enemies.length||(this.s.invasions16||[]).some(i=>i.owner===id)||c.stock.convoys<80)return;
-    const landEnemies=new Set(enemies.filter(e=>this.prov.some(p=>this.access(id,this.s.provinces[p.id].ctrl)&&p.neighbors.some(n=>this.s.provinces[n].ctrl===e))));
+    const reach=new Map(),reachable=k=>{let v=reach.get(k);if(v===undefined){v=!!this.access(id,k);reach.set(k,v);}return v;};
+    const landEnemies=new Set(enemies.filter(e=>this.ownedToday16(e).some(p=>p.neighbors.some(n=>reachable(this.s.provinces[n].ctrl)))));
     const overseas=enemies.filter(e=>!landEnemies.has(e));if(!overseas.length)return;
     const prepared=this.units(id).filter(u=>u.invasionPrep16);
     const ports=this.ownedToday16(id).filter(p=>this.s.provinces[p.id].ctrl===id&&this.s.provinces[p.id].port>0);if(!ports.length)return;
@@ -2369,14 +2477,15 @@ function installSystems16(Engine,H){
       }else if(this.s.day-(prepared[0].invasionDay16||0)>90){for(const u of prepared){u.invasionPrep16=null;u.invasionPort16=null;}}
       return;
     }
-    const spare=this.units(id).filter(u=>!u.path.length&&u.org>60&&!u.lent16&&!this.ownedToday16(id).some(p=>p.id===u.pid&&p.neighbors.some(n=>this.war(id,this.s.provinces[n].ctrl))));
+    const frontline=new Set(this.ownedToday16(id).filter(p=>p.neighbors.some(n=>this.war(id,this.s.provinces[n].ctrl))).map(p=>p.id));
+    const spare=this.units(id).filter(u=>!u.path.length&&u.org>60&&!u.lent16&&!frontline.has(u.pid));
     if(spare.length<6)return;
     let best=null;
     for(const e of overseas){
-      for(const p of this.prov){
-        if(this.s.provinces[p.id].ctrl!==e||!p.coast||!p.seaZone)continue;
+      for(const p of this.ownedToday16(e)){
+        if(!p.coast||!p.seaZone)continue;
         if((this.unitsAt.get(p.id)||[]).length)continue;
-        const port=ports.sort((a,b)=>distance(a,p)-distance(b,p)||a.id-b.id)[0],d=distance(port,p);
+        let port=null,d=Infinity;for(const q of ports){const dq=distance(q,p);if(dq<d||dq===d&&q.id<port.id){d=dq;port=q;}}
         if(d>1800*(1+c.bonus.invasion*2))continue;
         if(this.seaShare16(id,p.seaZone)<.6||this.seaShare16(id,port.seaZone)<.6)continue;
         const score=p.vp*3-d/200;
@@ -2386,7 +2495,7 @@ function installSystems16(Engine,H){
     if(!best)return;
     for(const u of spare.slice(0,6)){u.invasionPrep16=best.target;u.invasionPort16=best.port;u.invasionDay16=this.s.day;u.path=this.path(u.pid,best.port,id,false)||[];}
   };
-  const AI_DECISIONS=['rationalize','prospecting','public_works','officer_training','winter_gear','mobilize_reserves','emergency_production','sacred_union','four_year_plan','westwall','maginot_extension','imperial_conference','five_year_plan','zaibatsu_mobilization','united_front','supply_road','central_industrial_region','mare_nostrum','arsenal_of_democracy','end_isolation','border_forts','air_defense_program','evacuate_industry','national_union'];
+  const AI_DECISIONS=['integrate_province','rationalize','prospecting','public_works','officer_training','winter_gear','mobilize_reserves','emergency_production','sacred_union','four_year_plan','westwall','maginot_extension','imperial_conference','five_year_plan','zaibatsu_mobilization','united_front','supply_road','central_industrial_region','mare_nostrum','arsenal_of_democracy','end_isolation','border_forts','air_defense_program','evacuate_industry','national_union'];
   const AI_ADVISORS={political:['industrialist','economist','scientist','diplomat'],army:null,navy:['navy_fleet','navy_convoy'],air:['air_fighter'],command:['hc_planner','hc_infantry','hc_armor'],theorist:['theorist_army']};
   Engine.prototype.aiGovernment16=function(id){
     const c=this.nation(id),prof=this.aiProfile16(id);

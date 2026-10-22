@@ -7,6 +7,8 @@
   The rules are schematic gameplay heuristics (latitude bands, mountain
   neighbours and a few documented wetland / rainforest boxes), not a survey.
 * Straits: short sea crossings that land units may cross under fire.
+* New starting countries: Chinese regional powers and Iceland, carved from
+  their 1936 parent with a share of its industry and army.
 * Resources: aluminium, tungsten and chromium deposits, placed in the regions
   that dominated their production in the 1930s. Quantities are game values.
 """
@@ -137,6 +139,44 @@ for name, a, b in STRAITS:
         pb['neighbors'] = sorted(pb['neighbors'] + [pa['id']])
 world['straits'] = straits
 
+# --- New starting countries --------------------------------------------------
+# Regional powers of 1936 carved from their parent's provinces. Province lists
+# follow the schematic map (one province can stand for a whole prefecture).
+# Industry, divisions and manpower are game values taken from the parent.
+NEW_COUNTRIES = [
+    {'id': 'PRC', 'parent': 'CHI', 'name': 'Chine communiste', 'capital': 1777, 'capitalName': 'Yan’an', 'lon': 109.49, 'lat': 36.6,
+     'leader': 'Mao Zedong', 'role': 'Président du soviet central', 'ideology': 'communist', 'wiki': 'Mao Zedong', 'color': '#a8463c',
+     'civ': 1, 'mil': 1, 'divisions': 4, 'manpower': 100000, 'provinces': [1777],
+     'description': 'Survivez aux campagnes d’encerclement, gagnez les campagnes et préparez la guerre contre l’envahisseur.'},
+    {'id': 'SHX', 'parent': 'CHI', 'name': 'Shanxi', 'capital': 1787, 'capitalName': 'Taiyuan', 'lon': 112.55, 'lat': 37.87,
+     'leader': 'Yan Xishan', 'role': 'Gouverneur militaire', 'ideology': 'authoritarian', 'wiki': 'Yan Xishan', 'color': '#a99a62',
+     'civ': 2, 'mil': 1, 'divisions': 4, 'manpower': 120000, 'provinces': [1787, 1789, 1785],
+     'description': 'Le « gouverneur modèle » tient sa province entre Nankin, les communistes et la menace japonaise.'},
+    {'id': 'GXC', 'parent': 'CHI', 'name': 'Guangxi', 'capital': 1783, 'capitalName': 'Guilin', 'lon': 110.29, 'lat': 25.27,
+     'leader': 'Li Zongren', 'role': 'Chef de la clique du Guangxi', 'ideology': 'authoritarian', 'wiki': 'Li Zongren', 'color': '#8f9a64',
+     'civ': 1, 'mil': 1, 'divisions': 4, 'manpower': 120000, 'provinces': [1783, 1774],
+     'description': 'Une armée provinciale réputée et une autonomie jalousement défendue face au gouvernement central.'},
+    {'id': 'YUN', 'parent': 'CHI', 'name': 'Yunnan', 'capital': 1770, 'capitalName': 'Kunming', 'lon': 102.71, 'lat': 25.04,
+     'leader': 'Long Yun', 'role': 'Gouverneur du Yunnan', 'ideology': 'authoritarian', 'wiki': 'Long Yun', 'color': '#9c8a6a',
+     'civ': 1, 'mil': 1, 'divisions': 3, 'manpower': 90000, 'provinces': [1770, 1738, 1765],
+     'description': 'Les plateaux du Sud-Ouest et la route de l’Indochine font du Yunnan une pièce maîtresse.'},
+    {'id': 'XSM', 'parent': 'CHI', 'name': 'Nord-Ouest musulman', 'capital': 1762, 'capitalName': 'Xining', 'lon': 101.78, 'lat': 36.62,
+     'leader': 'Ma Bufang', 'role': 'Gouverneur militaire', 'ideology': 'authoritarian', 'wiki': 'Ma Bufang', 'color': '#7f8f78',
+     'civ': 1, 'mil': 1, 'divisions': 3, 'manpower': 70000, 'provinces': [1747, 1753, 1758, 1757, 1760, 1762, 1755, 1772, 1769],
+     'description': 'Cavaliers et gouverneurs de la famille Ma contrôlent les marches du Gansu, du Qinghai et du Ningxia.'},
+    {'id': 'SIK', 'parent': 'CHI', 'name': 'Xinjiang', 'capital': 1741, 'capitalName': 'Ürümqi', 'lon': 87.62, 'lat': 43.83,
+     'leader': 'Sheng Shicai', 'role': 'Gouverneur militaire', 'ideology': 'authoritarian', 'wiki': 'Sheng Shicai', 'color': '#8a7f9e',
+     'civ': 1, 'mil': 0, 'divisions': 2, 'manpower': 40000,
+     'provinces': [1731, 1733, 1732, 1735, 1734, 1739, 1740, 1743, 1744, 1741, 1745, 1748, 1754, 1746, 1752],
+     'description': 'Un immense territoire d’oasis, soutenu en sous-main par Moscou.'},
+    {'id': 'ICE', 'parent': 'DEN', 'name': 'Islande', 'capital': 2449, 'capitalName': 'Reykjavik', 'lon': -21.94, 'lat': 64.15,
+     'leader': 'Hermann Jónasson', 'role': 'Premier ministre', 'ideology': 'democratic', 'wiki': 'Hermann Jónasson', 'color': '#7d97a6',
+     'civ': 1, 'mil': 0, 'divisions': 0, 'manpower': 12000, 'provinces': [2449, 2466],
+     'description': 'Un royaume souverain uni au Danemark par la seule couronne, au milieu des routes de l’Atlantique Nord.'},
+]
+PARENT = {c['id']: c['parent'] for c in NEW_COUNTRIES}
+
+
 # --- Strategic resources -----------------------------------------------------
 DEPOSITS = {
     'aluminium': [
@@ -172,16 +212,40 @@ placed = {}
 for resource, rows in DEPOSITS.items():
     for owner, box, amount in rows:
         cx, cy = (box[0] + box[1]) / 2, (box[2] + box[3]) / 2
-        sites = [p for p in P if inside(p, box) and p['owner'] == owner]
+        # Deposits follow the pre-1.6 owners so that carving new countries
+        # out of a parent does not move them.
+        held = lambda p: PARENT.get(p['owner'], p['owner']) == owner
+        sites = [p for p in P if inside(p, box) and held(p)]
         # Large schematic provinces may have their centroid outside a small box:
         # fall back to the owner's provinces nearest to the deposit.
-        sites = sites or [p for p in P if p['owner'] == owner]
+        sites = sites or [p for p in P if held(p)]
         sites.sort(key=lambda p: (math.hypot(p['x'] - cx, p['y'] - cy), p['id']))
         sites = sites[:3]
         for i, p in enumerate(sites):
             share = amount // len(sites) + (1 if i < amount % len(sites) else 0)
             p[resource] += share
         placed[resource] = placed.get(resource, 0) + amount
+
+by_id = {p['id']: p for p in P}
+countries = {c['id']: c for c in world['countries']}
+for spec in NEW_COUNTRIES:
+    parent = countries[spec['parent']]
+    pids = [pid for pid in spec['provinces'] if by_id[pid]['owner'] in (spec['parent'], spec['id'])]
+    assert spec['capital'] in pids, spec['id']
+    fresh = spec['id'] not in countries
+    for pid in pids:
+        by_id[pid]['owner'] = spec['id']
+    parent['provinces'] = [pid for pid in parent['provinces'] if pid not in pids]
+    entry = {k: v for k, v in spec.items() if k != 'parent'}
+    entry.update({'fleet': 0, 'air': 0, 'faction': 'none', 'commanders': [], 'provinces': pids})
+    if fresh:
+        # The new country's industry and army come out of its parent's.
+        for key in ('civ', 'mil', 'divisions', 'manpower'):
+            parent[key] = max(10000 if key == 'manpower' else 1, parent[key] - spec[key])
+        world['countries'].append(entry)
+        countries[spec['id']] = entry
+    else:
+        countries[spec['id']].update(entry)
 
 world['version'] = '1.6.0'
 WORLD.write_text(json.dumps(world, separators=(',', ':'), ensure_ascii=False) + '\n', encoding='utf-8')
