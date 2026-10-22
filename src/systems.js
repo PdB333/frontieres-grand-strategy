@@ -17,7 +17,7 @@ function installSystems16(Engine,H){
   const RESOURCES=['steel','oil','rubber','aluminium','tungsten','chromium'];
   const NEW_PROVINCE_KEYS=['refinery','aa','coastalFort'];
   // Bonus keys added in 1.6. Older saves receive them at 0 during migration.
-  const NEW_BONUS=['buildingSlots','recruitment','ppGain','consumer','organization','airDefense','invasion','paradrop','reliability','attrition','breakthrough','entrench','mines','convoy','naval','casualties','resources','stabilityGrowth','supportGrowth'];
+  const NEW_BONUS=['buildingSlots','recruitment','ppGain','consumer','organization','airDefense','invasion','paradrop','reliability','attrition','breakthrough','entrench','mines','convoy','naval','casualties','resources','stabilityGrowth','supportGrowth','surrender'];
   Engine.RESOURCES16=RESOURCES;
   Engine.NEW_BONUS16=NEW_BONUS;
   const law=(catalog,kind,id)=>catalog.laws?.[kind]?.find(l=>l.id===id)||catalog.laws?.[kind]?.[0]||{};
@@ -98,10 +98,12 @@ function installSystems16(Engine,H){
   Engine.prototype.computeStateExtra=function(){
     return this.states16.list.map(st=>Math.max(0,this.stateUsed(st.id)-st.slots));
   };
+  const coreSets=new WeakMap();
   Engine.prototype.isCore=function(id,pid){
     const c=this.nation(id);if(!c)return false;
-    if(Array.isArray(c.identity.cores))return c.identity.cores.includes(pid);
-    return this.prov[pid].owner===id;
+    const cores=c.identity.cores;if(!Array.isArray(cores))return this.prov[pid].owner===id;
+    let set=coreSets.get(cores);if(!set||set.size!==cores.length){set=new Set(cores);coreSets.set(cores,set);}
+    return set.has(pid);
   };
 
   // ---------------------------------------------------------------------------
@@ -199,7 +201,9 @@ function installSystems16(Engine,H){
       }
       s.stateExtra=this.computeStateExtra();
       this.startingEquipment16();
+      this.startTechnology16();
       this.startGovernment16();
+      this.updateStats();this.applyOOB16();
     }
     s.release=RELEASE;
   };
@@ -211,16 +215,17 @@ function installSystems16(Engine,H){
   Engine.prototype.updateStats=function(){
     const base=Object.fromEntries(RESOURCES.map(k=>[k,this.catalog.resources?.[k]?.base??(k==='steel'?8:1)]));
     for(const c of Object.values(this.s.countries))c.stats={civ:0,mil:0,dock:0,freeCiv:0,...base,resourceFactor:1,divisionCount:0,supply:c.stats?.supply??1,vpHeld:1,coreShare:1,manpowerFactor:1,shortage:{},demand:{},exported:0,tradeIncome:0};
-    const held={},totals={},coreHeld={},nonCore={};
+    const held={},totals={},coreHeld={},nonCore={},wars=new Set(this.s.wars.flatMap(w=>[w.a+'|'+w.b,w.b+'|'+w.a]));
     for(const p of this.prov){
       const q=this.s.provinces[p.id],c=this.nation(q.ctrl);if(!c)continue;
+      const atWar=q.ctrl!==p.owner&&wars.has(q.ctrl+'|'+p.owner);
       const occupation=q.ctrl===p.owner?1:.3+q.compliance/200;
       const output=occupation*(1-q.damage)*Math.max(.3,1-q.resistance/150);
       for(const k of ['civ','mil','dock'])c.stats[k]+=q[k]*output;
       for(const k of RESOURCES)if(p[k])c.stats[k]+=p[k]*occupation*(1+(c.bonus.resources||0));
       if(q.refinery){c.stats.oil+=q.refinery*2*output;c.stats.rubber+=q.refinery*output;}
       totals[p.owner]=(totals[p.owner]||0)+p.vp;
-      if(this.allies(p.owner,q.ctrl)||(!this.war(p.owner,q.ctrl)&&q.ctrl===p.owner))held[p.owner]=(held[p.owner]||0)+p.vp;
+      if(q.ctrl===p.owner||!atWar&&this.allies(p.owner,q.ctrl))held[p.owner]=(held[p.owner]||0)+p.vp;
       if(this.isCore(q.ctrl,p.id))coreHeld[q.ctrl]=(coreHeld[q.ctrl]||0)+p.vp;
       else nonCore[q.ctrl]=(nonCore[q.ctrl]||0)+p.vp*q.compliance/100;
     }
@@ -366,6 +371,16 @@ function installSystems16(Engine,H){
       if(exposure<=0)continue;
       this.loss(u,rate*.0012*exposure,rate*1.1*exposure);
     }
+  };
+
+  // The 1.5 history step refreshes statistics every day; only do it when an
+  // event actually applied something (inner calls request a refresh).
+  const historicalStep15=Engine.prototype.historicalStep;
+  Engine.prototype.historicalStep=function(){
+    const real=this.updateStats;let requests=0;
+    this.updateStats=function(){requests++;};
+    try{historicalStep15.call(this);}finally{delete this.updateStats;if(this.updateStats!==real)this.updateStats=real;}
+    if(requests>1)this.updateStats();
   };
 
   // ---------------------------------------------------------------------------
@@ -766,7 +781,7 @@ function installSystems16(Engine,H){
       if(u.pocketed)this.loss(u,.0025*(1.15-u.supply),1.8);
       if(u.strength<1&&u.supply>.35&&!u.pocketed&&!busy.has(u.id)){
         let change=Math.min(.006*(1+(t.mods?.reinforce||0)),1-u.strength,c.manpower/Math.max(1,t.men));for(const [k,n] of Object.entries(t.eq))if(n)change=Math.min(change,c.stock[k]/n);
-        if(change>0){u.strength+=change;c.manpower-=change*t.men;for(const [k,n] of Object.entries(t.eq))c.stock[k]=Math.max(0,c.stock[k]-change*n);}
+        if(change>0){u.strength+=change;c.manpower=Math.max(0,c.manpower-change*t.men);for(const [k,n] of Object.entries(t.eq))c.stock[k]=Math.max(0,c.stock[k]-change*n);}
       }
     }
     this.s.units=this.s.units.filter(u=>u.strength>.04);this.indexUnits();
@@ -864,31 +879,103 @@ function installSystems16(Engine,H){
     if(p.value){assert(a.target&&this.war(id,a.target),'Le plan vise un pays avec lequel vous êtes en guerre.');a.order='attack';a.auto=true;}
     else a.order='defend';
   });
+  // Army orders, ported from 1.5 with per-call caches: units grouped by army,
+  // borders computed once per (owner, target), access lookups from a matrix.
+  // Offensive lines steer the objective; fallback lines replace the front
+  // when defending; planning decays while the army is engaged in attacks.
   const armyAI15=Engine.prototype.armyAI;
   Engine.prototype.armyAI=function(){
-    // Offensive lines steer the 1.5 objective logic toward the nearest point of
-    // the line; fallback lines replace the front when defending.
-    const restore=[];
-    for(const a of this.s.armies){
-      const plan=a.plan16;if(!plan)continue;
-      if(plan.execute&&a.order!=='attack')a.order='attack';
-      if(plan.offensive?.length&&a.order==='attack'){
-        const troops=this.s.units.filter(u=>u.army===a.id);
-        const centre=troops.length?{x:sum(troops.map(u=>this.prov[u.pid].x))/troops.length,y:sum(troops.map(u=>this.prov[u.pid].y))/troops.length}:this.prov[plan.offensive[0]];
-        const next=plan.offensive.find(pid=>!this.allies(a.owner,this.s.provinces[pid].ctrl))??plan.offensive.at(-1);
-        restore.push([a,a.objective]);a.objective=next;
-        if(!next||distance(centre,this.prov[next])<1)a.objective=plan.offensive.at(-1);
+    const s=this.s,counts=new Uint16Array(this.prov.length),permitted=this.accessMatrix();
+    for(const u of s.units)if(u.strength>0)counts[u.pid]++;
+    s.fronts={};
+    const byArmy=new Map();for(const u of s.units){if(u.army==null)continue;if(!byArmy.has(u.army))byArmy.set(u.army,[]);byArmy.get(u.army).push(u);}
+    const engagedArmies=new Set(),unitArmy=new Map(s.units.map(u=>[u.id,u.army])),seaRoutes=new Map();
+    for(const b of s.battles)for(const id of b.attackers)engagedArmies.add(unitArmy.get(id));
+    const borders=new Map(),fields=this.armyFields16??=new Map();
+    if(this.armyFieldsDay16!==s.day||this.armyFieldsState16!==s){fields.clear();this.armyFieldsDay16=s.day;this.armyFieldsState16=s;}
+    const border=(owner,target)=>{
+      const key=owner+'|'+target;let list=borders.get(key);if(list)return list;
+      const set=new Set();
+      // Front line: own land and land of allies at war with the target.
+      const held=new Map(),front=k=>{if(!held.has(k))held.set(k,k===owner||!!permitted[owner]?.[k]&&this.war(k,target));return held.get(k);};
+      for(const p of this.ownedToday16(target))for(const n of p.neighbors)if(front(s.provinces[n].ctrl))set.add(n);
+      list=[...set].sort((a,b)=>a-b).map(id=>this.prov[id]);borders.set(key,list);return list;
+    };
+    for(const a of s.armies){
+      if(!a.auto||!a.target||!this.nation(a.owner)?.alive||!this.nation(a.target)?.alive)continue;
+      const troops=(byArmy.get(a.id)||[]).filter(u=>u.owner===a.owner);if(!troops.length)continue;
+      const plan=a.plan16;
+      if(plan?.execute&&a.order!=='attack')a.order='attack';
+      const general=this.general(a);
+      if(a.order==='attack'&&engagedArmies.has(a.id))a.planning=clamp(a.planning-.015,0,1);
+      else a.planning=clamp(a.planning+.02+(general?general.planning*.001:0)+this.groupModifier(a,true)*.05,0,1);
+      let objective=a.objective!==null&&a.objective!==undefined?this.prov[a.objective]:null;
+      if(plan?.offensive?.length&&a.order==='attack'){const next=plan.offensive.find(pid=>!this.allies(a.owner,s.provinces[pid].ctrl))??plan.offensive.at(-1);objective=this.prov[next];}
+      let fronts=border(a.owner,a.target);
+      const anchors=(plan?.fallback?.length&&a.order==='defend'?plan.fallback:(a.frontSelection||[])).map(id=>this.prov[id]);
+      if(anchors.length){const limited=fronts.filter(p=>anchors.some(q=>distance(p,q)<450));if(limited.length)fronts=limited;else if(plan?.fallback?.length&&a.order==='defend')fronts=anchors.filter(p=>permitted[a.owner]?.[s.provinces[p.id].ctrl]);}
+      if(!fronts.length){
+        a.assessment={status:this.war(a.owner,a.target)?'Préparation maritime':'Aucune frontière terrestre',front:0,friendly:troops.length};
+        if(a.owner===s.player)continue;
+        continue;
       }
-      if(plan.fallback?.length&&a.order==='defend'){restore.push([a,a.objective,a.frontSelection]);a.frontSelection=plan.fallback.slice(0,20);}
+      a.invasion=null;s.fronts[a.id]=fronts.map(p=>p.id);
+      const key=a.owner+'_'+a.target+'_'+s.fronts[a.id].join(',');
+      let field=fields.get(key);
+      if(!field){
+        const dist=new Int32Array(this.prov.length).fill(-1),next=new Int32Array(this.prov.length).fill(-1),q=[];
+        const seeds=[...fronts].sort((x,y)=>s.provinces[y.id].supply-s.provinces[x.id].supply||x.id-y.id);
+        for(const p of seeds){dist[p.id]=0;q.push(p.id);}
+        for(let h=0;h<q.length;h++)for(const n of this.prov[q[h]].neighbors){if(dist[n]!==-1||!permitted[a.owner]?.[s.provinces[n].ctrl])continue;dist[n]=dist[q[h]]+1;next[n]=q[h];q.push(n);}
+        field={dist,next};fields.set(key,field);
+      }
+      const enemyIds=new Set();for(const p of fronts)for(const n of p.neighbors)if(s.provinces[n].ctrl===a.target)enemyIds.add(n);
+      let enemyCount=0;for(const pid of enemyIds)for(const e of this.unitsAt.get(pid)||[])if(this.war(a.owner,e.owner))enemyCount++;
+      a.assessment={status:a.order==='attack'?'Offensive planifiée':'Tenue du front',front:fronts.length,friendly:troops.length,enemy:enemyCount,ready:Math.round(100*sum(troops.map(u=>u.org/100*u.supply*u.strength))/troops.length),pockets:troops.filter(u=>u.pocketed).length};
+      const reserveCount=troops.length>=8?Math.floor(troops.length*(a.reserveRatio??.15)):0;
+      for(const [i,u] of troops.entries()){
+        if(u.path.length||u.retreatUntil>s.day||u.landing16||u.invasionPrep16)continue;
+        if(u.pocketed||u.org<25||u.supply<.2){
+          const safer=this.prov[u.pid].neighbors.filter(n=>permitted[a.owner]?.[s.provinces[n].ctrl]&&!(this.unitsAt.get(n)||[]).some(e=>this.war(a.owner,e.owner))).sort((x,y)=>s.provinces[y].supply-s.provinces[x].supply);
+          if(safer.length&&s.provinces[safer[0]].supply>u.supply+.15)u.path=[safer[0]];continue;
+        }
+        if(field.dist[u.pid]>0){if(i>=troops.length-reserveCount&&field.dist[u.pid]===1)continue;u.path=[field.next[u.pid]];u.progress=0;continue;}
+        if(field.dist[u.pid]===-1){
+          // No land route (islands, overseas allies): ship the division to the
+          // nearest front province, a few per army and day to bound the cost.
+          if((seaRoutes.get(a.id)||0)>=4)continue;seaRoutes.set(a.id,(seaRoutes.get(a.id)||0)+1);
+          const goal=fronts.slice().sort((x,y)=>distance(x,this.prov[u.pid])-distance(y,this.prov[u.pid])||x.id-y.id)[0];
+          const route=goal&&this.path(u.pid,goal.id,a.owner,true);if(route?.length){u.path=route;u.progress=0;}
+          continue;
+        }
+        if(field.dist[u.pid]===0&&counts[u.pid]>3){
+          const gaps=this.prov[u.pid].neighbors.filter(n=>field.dist[n]===0&&counts[n]+1<counts[u.pid]);
+          if(gaps.length){gaps.sort((x,y)=>counts[x]-counts[y]);u.path=[gaps[0]];counts[gaps[0]]++;counts[u.pid]--;continue;}
+        }
+        if(a.order!=='attack'||!this.war(a.owner,a.target)||u.org<(a.stance==='aggressive'?40:55)||u.strength<.40||u.supply<.25)continue;
+        let best=null;
+        for(const pid of this.prov[u.pid].neighbors){
+          if(s.provinces[pid].ctrl!==a.target)continue;
+          const p=this.prov[pid],st=s.provinces[pid];
+          let defense=0;for(const e of this.unitsAt.get(pid)||[])if(this.war(a.owner,e.owner))defense+=this.unitStats16(e).defense*e.strength*(.3+.7*e.supply);
+          defense*=this.catalog.terrain[p.terrain].defense*(1+st.fort*.15);
+          let attack=0;for(const n of p.neighbors)for(const e of this.unitsAt.get(n)||[])if(e.owner===a.owner&&e.org>45&&e.supply>.25)attack+=this.unitStats16(e).soft*e.strength*(.3+.7*e.supply);
+          attack*=1+a.planning*.2;
+          let corridor=0;for(const n of p.neighbors)if(s.provinces[n].ctrl===a.target)corridor++;
+          const ratio=attack/Math.max(10,defense),value=p.vp+st.hub*5+st.port*3+(corridor<=2?5:0)+(objective?Math.max(-20,(a.tactic==='spearhead'?60:30)-distance(p,objective)/(a.tactic==='spearhead'?22:35)):0);
+          const score=ratio*12+value-counts[pid]*2;
+          if(!best||score>best.score||score===best.score&&pid<best.pid)best={pid,ratio,score};
+        }
+        const threshold=(a.stance==='aggressive'?.55:a.stance==='cautious'?1.35:.92)*(a.tactic==='spearhead'?.87:a.tactic==='elastic'?1.4:1);
+        if(best&&best.ratio>=threshold){u.path=[best.pid];u.progress=0;u.entrench=0;}
+      }
     }
-    const planning=new Map(this.s.armies.map(a=>[a.id,a.planning]));
-    armyAI15.call(this);
-    for(const a of this.s.armies){
-      // Planning only builds up while the army is not attacking.
-      const engaged=this.s.battles.some(b=>b.a===a.owner&&b.attackers.some(id=>this.s.units.find(u=>u.id===id)?.army===a.id));
-      if(a.order==='attack'&&engaged)a.planning=clamp((planning.get(a.id)??a.planning)-.015,0,1);
+    // Player armies keep the 1.5 port-to-port landing assistant.
+    const overseas=s.armies.filter(a=>a.owner===s.player&&a.auto&&a.target&&a.order==='attack'&&!s.fronts[a.id]&&this.war(a.owner,a.target));
+    if(overseas.length&&s.day%6===0){
+      const keep=s.armies.filter(a=>!overseas.includes(a)).map(a=>[a,a.auto]),fronts=s.fronts;for(const [a] of keep)a.auto=false;
+      try{armyAI15.call(this);}finally{for(const [a,auto] of keep)a.auto=auto;s.fronts={...fronts,...s.fronts};}
     }
-    for(const [a,objective,front] of restore){a.objective=objective;if(front!==undefined)a.frontSelection=front;}
   };
   Engine.invariant16(function(state){
     for(const a of state.armies)if(a.plan16){
@@ -993,7 +1080,9 @@ function installSystems16(Engine,H){
   });
   // Naval invasions: preparation in a port, then a landing once the sea
   // zones are under control and the weather allows it.
-  Engine.command16('invasion',function(p,id,c){
+  Engine.command16('invasion',function(p,id){return this.startInvasion16(id,p.ids,p.target);});
+  Engine.prototype.startInvasion16=function(id,ids,targetPid){
+    const c=this.nation(id),p={ids,target:targetPid};
     assert(Array.isArray(p.ids)&&p.ids.length>=1&&p.ids.length<=12,'Choisissez de 1 à 12 divisions.');
     const units=[...new Set(p.ids)].map(uid=>this.s.units.find(u=>u.id===uid&&u.owner===id));
     assert(units.every(Boolean),'Une division ne vous appartient pas.');
@@ -1009,7 +1098,7 @@ function installSystems16(Engine,H){
     const inv={id:this.s.uid++,owner:id,units:units.map(u=>u.id),from,to:p.target,zones,progress:0,days:Math.max(6,12+2*units.length-Math.round(10*c.bonus.invasion)),status:'preparing'};
     for(const u of units){u.path=[];const a=this.s.armies.find(a=>a.id===u.army);if(a)a.auto=false;}
     this.s.invasions16.push(inv);return inv.id;
-  });
+  };
   Engine.command16('cancelInvasion',function(p,id){
     const inv=(this.s.invasions16||[]).find(i=>i.id===p.id&&i.owner===id);assert(inv,'Débarquement inconnu.');
     for(const uid of inv.units){const u=this.s.units.find(u=>u.id===uid);if(u?.landing16){u.landing16=null;u.path=[];}}
@@ -1197,6 +1286,31 @@ function installSystems16(Engine,H){
       this.syncOwnership16(before);return result;
     };
   }
+  // When a civil war splits a country, loyal divisions caught behind the new
+  // lines regroup on government territory and half of them defend the capital.
+  Engine.prototype.regroupLoyalists16=function(id){
+    const own=this.owned(id);if(!own.length)return;
+    const capital=this.cap(id),units=this.units(id);
+    units.forEach((u,i)=>{
+      if(this.s.provinces[u.pid].ctrl===id&&i%2)return;
+      const home=i%2===0?capital:own.slice().sort((a,b)=>distance(a,this.prov[u.pid])-distance(b,this.prov[u.pid])||a.id-b.id)[0].id;
+      u.pid=home;u.path=[];u.progress=0;u.landing16=null;
+    });
+    for(const a of this.s.armies.filter(a=>a.owner===id)){a.auto=true;a.order='defend';a.plan16=null;}
+    this.indexUnits();
+  };
+  const civilWar15=Engine.prototype.civilWar;
+  Engine.prototype.civilWar=function(id){
+    const result=civilWar15.call(this,id);this.regroupLoyalists16(id);
+    if(this.nation('NAT')?.alive&&this.war(id,'NAT')){this.addSpirit16(id,'civil_war');this.addSpirit16('NAT','civil_war');this.addSpirit16('NAT','africa_army');}
+    return result;
+  };
+  // Civil war spirits end with the war.
+  Engine.onDay16(function(){
+    if(this.s.day%7!==3)return;
+    for(const id of this.active()){const c=this.nation(id);if(this.hasSpirit16(c,'civil_war')&&!this.enemies(id).length){this.removeSpirit16(id,'civil_war');this.removeSpirit16(id,'africa_army');}}
+  });
+
   // Contribution to a war: damage inflicted and territory taken, per pair.
   Engine.prototype.warContribution16=function(a,b,inflicted,suffered){
     const w=this.s.warScore16??={};
@@ -1222,9 +1336,15 @@ function installSystems16(Engine,H){
       const c=this.nation(id),enemies=this.enemies(id);if(!enemies.length||c.capitulated16)continue;
       const original=this.coreProvinces16(id);
       const metro=original.filter(p=>distance(p,{x:c.identity.lon,y:c.identity.lat})<2300),scored=metro.length?metro:original;
-      const total=sum(scored.map(p=>p.vp)),lost=sum(scored.filter(p=>this.war(id,this.s.provinces[p.id].ctrl)).map(p=>p.vp));
-      const capCtrl=this.s.provinces[c.identity.capital]?.ctrl;
-      if(!((total>0&&lost/total>.65&&this.war(id,capCtrl))||!this.owned(id).length))continue;
+      const occupied=scored.filter(p=>this.war(id,this.s.provinces[p.id].ctrl));
+      const total=sum(scored.map(p=>p.vp)),lost=sum(occupied.map(p=>p.vp));
+      // Surrender progress mixes victory points and land, so a country whose
+      // cities sit on an exposed coast can still fight on from the interior.
+      // Holding the original capital raises the bar; spirits (vast territory,
+      // civil war, national resolve) move the threshold.
+      const capCtrl=this.s.provinces[c.identity.capital]?.ctrl,limit=clamp(.65+(c.bonus.surrender||0),.4,.95);
+      const share=total>0?.6*lost/total+.4*occupied.length/scored.length:0;
+      if(!(share>limit&&this.war(id,capCtrl)||share>Math.min(.97,limit+.15)||!this.owned(id).length))continue;
       if(id==='FRA'&&this.s.historical&&!c.identity.exile&&this.s.historyState&&!this.s.historyState.flags.france_armistice&&capCtrl==='GER'){
         const event=this.catalog.historicalEvents.find(e=>e.id==='h_french_armistice');
         if(event&&this.owned('FRA').some(p=>distance(p,{x:2.35,y:48.86})>2300)){
@@ -1606,8 +1726,9 @@ function installSystems16(Engine,H){
     for(const u of this.units(id))if(pids.includes(u.pid)){u.owner=tag;u.army=army.id;u.path=[];}
     army.target=id;army.order='attack';army.auto=true;
     base.parties[ideology]=Math.max(5,(base.parties[ideology]||0)*.4);
-    this.declareWar(tag,id,true,false);
+    this.declareWar(tag,id,true,false);this.addSpirit16(tag,'civil_war');this.addSpirit16(id,'civil_war');
     if(sponsor&&this.nation(sponsor)?.alive)for(const k of [sponsor])if(!this.war(k,id)&&!this.allies(k,id))this.nation(k).relations[tag]=100;
+    this.regroupLoyalists16(id);
     this.log('Guerre civile : '+def.name+' se soulève contre le gouvernement de '+base.identity.name+'.','war');
     return rebel;
   };
@@ -1748,8 +1869,7 @@ function installSystems16(Engine,H){
     if(d.spirit)this.addSpirit16(id,d.spirit,d.days||null);
     for(const r of d.removeSpirit||[])this.removeSpirit16(id,r);
     if(d.special)this.decisionSpecial16(id,d.special);
-    if(id===this.s.player)this.log('Décision : '+d.name+'.','success');
-    this.updateStats();
+    if(id===this.s.player){this.log('Décision : '+d.name+'.','success');this.updateStats();}
   };
   Engine.command16('takeDecision',function(p,id){this.takeDecision16(id,p.id);});
   // Focus trees may grant or remove spirits and advisors-like modifiers.
@@ -1757,6 +1877,26 @@ function installSystems16(Engine,H){
     for(const s of f.spirits||[])this.addSpirit16(id,s,f.spiritDays||null);
     for(const s of f.removeSpirits||[])this.removeSpirit16(id,s);
     if(f.decision)this.nation(id).decisions16=this.nation(id).decisions16||{};
+  };
+  // Pre-1936 research: majors start with a few technologies and the matching
+  // equipment generation in part of their stocks.
+  const START_TECHS={
+    major:['outillage1','construction1','armes1','artillerie1','logistique1'],
+    GER:['blindage1','mobile1','chasse1','etatmajor1','calcul1'],SOV:['blindage1','mobile1','profondeur1','calcul1'],
+    GBR:['escorte1','chasse1','radar1','calcul1'],FRA:['profondeur1','defense1','calcul1'],USA:['escorte1','calcul1','chasse1'],
+    ITA:['chasse1','escorte1'],JPN:['escorte1','sousmarins1','chasse1','mountain_troops'],
+    minor:['armes1'],
+  };
+  const MAJORS=['GER','SOV','GBR','FRA','USA','ITA','JPN'],SECONDARY=['POL','CZE','SPA','HOL','BEL','SWE','ROM','YUG','TUR','CAN','AST','HUN','RAJ','SAF'];
+  Engine.prototype.startTechnology16=function(){
+    for(const [id,c] of Object.entries(this.s.countries)){
+      const list=MAJORS.includes(id)?[...START_TECHS.major,...(START_TECHS[id]||[])]:SECONDARY.includes(id)?START_TECHS.minor:[];
+      for(const key of list){const t=this.tech(key);if(t&&!c.tech.includes(key)&&t.req.every(r=>c.tech.includes(r)||list.includes(r))){c.tech.push(key);this.effect(id,t.effect);}}
+      for(const type of Object.keys(this.catalog.equipment)){
+        const m=this.lineModel16(c,type);if(!m||!c.stock[type])continue;
+        c.eqStats[type]=Object.fromEntries(Object.entries(m.stats||{}).map(([k,v])=>[k,+(1+(v-1)*.6).toFixed(4)]).filter(([,v])=>Math.abs(v-1)>1e-4));
+      }
+    }
   };
   Engine.prototype.startGovernment16=function(){
     const scenario=this.s.historyState?.scenario||'1936';
@@ -1769,6 +1909,379 @@ function installSystems16(Engine,H){
       assert(c.advisors16&&Object.entries(c.advisors16).every(([slot,list])=>Array.isArray(list)&&list.length<=(this.catalog.advisorSlots?.[slot]?.[1]||1)&&list.every(a=>advisors.get(a)?.slot===slot)),'Conseillers invalides.');
       assert(c.decisions16&&typeof c.decisions16==='object','Décisions invalides.');
     }
+  });
+
+  // ---------------------------------------------------------------------------
+  // Artificial intelligence. Each country follows a profile (aggression,
+  // army doctrine, naval and air weight, research order). Heavy planning is
+  // staggered over ten days; army orders are refreshed every five days.
+  // ---------------------------------------------------------------------------
+  Engine.prototype.aiProfile16=function(id){return {...(this.catalog.aiProfiles?.default||{aggression:.2,army:'infantry',navy:.1,air:.15,research:[]}),...(this.catalog.aiProfiles?.[id]||{})};};
+  Engine.prototype.unitPower16=function(u){const st=this.unitStats16(u);return (st.soft+st.hard*.5+st.defense)/2*u.strength*(.5+u.org/200);};
+  Engine.prototype.strategyAI=function(){
+    const day=this.s.day,ids=this.active();
+    for(let i=0;i<ids.length;i++){
+      const id=ids[i];if(id===this.s.player)continue;
+      const c=this.nation(id);if(c.capitulated16&&!c.exile16)continue;
+      const slot=(i+day)%10;
+      try{
+        if(!c.exile16){
+          if(slot===0){this.aiProduction16(id);this.aiResearch16(id);this.aiFocus16(id);this.aiLaws16(id);}
+          if(slot===3){this.aiConstruction16(id);this.aiGovernment16(id);}
+          if(slot===5){this.aiRecruit16(id);this.aiNavy16(id);}
+          if(slot===7){this.aiDiplomacy16(id);this.aiInvasion16(id);}
+        }
+        if(slot===5||slot===0)this.aiAir16(id);
+        if(day%5===i%5)this.aiFronts16(id);
+      }catch(error){if(typeof console!=='undefined')console.warn('[IA]',id,error.message);}
+    }
+  };
+  const DOCTRINE_MIX={
+    infantry:{rifles:.30,supportEq:.07,artillery:.15,antiTank:.06,antiAir:.05,trucks:.06,lightTanks:.04,tanks:.05,fighters:.12,cas:.05,bombers:.05},
+    armor:{rifles:.24,supportEq:.07,artillery:.12,antiTank:.05,antiAir:.04,trucks:.1,lightTanks:.05,tanks:.12,mechanized:.03,fighters:.12,cas:.06},
+    mass:{rifles:.38,supportEq:.06,artillery:.17,antiTank:.06,antiAir:.04,trucks:.05,tanks:.06,fighters:.1,cas:.05,bombers:.03},
+    firepower:{rifles:.26,supportEq:.07,artillery:.2,antiTank:.07,antiAir:.05,trucks:.06,tanks:.07,fighters:.12,cas:.03,bombers:.04},
+  };
+  Engine.prototype.aiProduction16=function(id){
+    const c=this.nation(id),prof=this.aiProfile16(id),mix={...(DOCTRINE_MIX[prof.army]||DOCTRINE_MIX.infantry)};
+    for(const k of ['fighters','cas','bombers'])if(mix[k])mix[k]*=.6+(prof.air||.15)*2.5;
+    if((prof.air||0)>=.25&&this.lineModel16(c,'strategicBombers'))mix.strategicBombers=.04;
+    if((prof.navy||0)>=.3&&this.lineModel16(c,'navalBombers'))mix.navalBombers=.04;
+    const need={};
+    for(const u of this.units(id)){const st=templateStats16(u.template);for(const [k,n] of Object.entries(st.eq))need[k]=(need[k]||0)+n*(1.15-u.strength);}
+    for(const [k,w] of Object.entries(mix)){
+      if(!this.lineModel16(c,k)){delete mix[k];continue;}
+      const deficit=(need[k]||0)/Math.max(1,c.stock[k]);
+      if(deficit>1)mix[k]=w*Math.min(2.2,1+deficit*.3);else if(c.stock[k]>(need[k]||0)*3+500)mix[k]=w*.6;
+    }
+    const totalW=sum(Object.values(mix))||1;
+    for(const k in c.allocation)c.allocation[k]=0;
+    let used=0;for(const [k,w] of Object.entries(mix)){c.allocation[k]=Math.floor(c.stats.mil*w/totalW);used+=c.allocation[k];}
+    c.allocation.rifles=(c.allocation.rifles||0)+Math.max(0,c.stats.mil-used);
+    const docks=c.stats.dock;if(!docks)return;
+    const ports=this.ownedToday16(id).filter(p=>this.s.provinces[p.id].port).length,naval={};
+    naval.convoys=c.stock.convoys<ports*3+60?.35:.1;
+    naval.destroyers=.3;naval.submarines=['GER','ITA','JPN'].includes(id)?.3:.15;
+    if(this.lineModel16(c,'cruisers')&&docks>=4)naval.cruisers=.12;
+    if((prof.navy||0)>=.3&&docks>=8){naval.battleships=.08;if(c.tech.includes('carrier_ops'))naval.carriers=.12;}
+    const nw=sum(Object.values(naval));let nused=0;
+    for(const [k,w] of Object.entries(naval)){c.allocation[k]=Math.floor(docks*w/nw);nused+=c.allocation[k];}
+    c.allocation.destroyers+=Math.max(0,docks-nused);
+  };
+  Engine.prototype.aiResearch16=function(id){
+    const c=this.nation(id),prof=this.aiProfile16(id),year=1936+this.s.day/365.25,order=prof.research||[];
+    while(c.research.length<c.slots){
+      const options=this.catalog.techs.filter(t=>!c.tech.includes(t.id)&&!c.research.some(r=>r.id===t.id)&&t.req.every(r=>c.tech.includes(r))&&t.year<=year+.6);
+      if(!options.length)break;
+      options.sort((a,b)=>{const ga=order.indexOf(a.group),gb=order.indexOf(b.group);return (a.year-b.year)*2+((ga<0?9:ga)-(gb<0?9:gb))||a.id.localeCompare(b.id);});
+      this.researchStart(id,options[0].id);
+    }
+  };
+  Engine.prototype.aiFocus16=function(id){
+    const c=this.nation(id);if(c.focus)return;
+    const prof=this.aiProfile16(id),options=this.tree(id).filter(f=>!c.focusDone.includes(f.id)&&f.req.every(r=>c.focusDone.includes(r))&&(!f.exclusive||!c.focusDone.includes(f.exclusive))&&(!f.ideology||f.ideology.includes(c.ideology)));
+    if(!options.length)return;
+    const score=f=>{const e=f.effect||{};return (e.civ||e.mil||e.production||e.construction?3:0)+(e.research||e.slots?2:0)+(e.attack||e.defense||e.xp?1.5:0)+((e.tension||0)>0?prof.aggression*2-.8:0)-f.days/200;};
+    options.sort((a,b)=>score(b)-score(a)||a.id.localeCompare(b.id));
+    this.focusStart(id,options[0].id);
+  };
+  Engine.prototype.aiLaws16=function(id){
+    const c=this.nation(id),laws=this.catalog.laws,atWar=this.enemies(id).length>0;
+    const losing=atWar&&(c.stats.coreShare??1)<.75;
+    const econTarget=atWar?(losing?'total':'war'):this.s.tension>=50?'partial':this.s.tension>=25?'early':'civilian';
+    const econ=laws.economy,ci=econ.findIndex(l=>l.id===c.economy),ti=econ.findIndex(l=>l.id===econTarget);
+    if(ti>ci){const next=econ[ci+1];if(next&&c.pp>=next.cost+30&&(!next.war||atWar)&&(!next.tension||atWar||this.s.tension>=next.tension||c.support>=60)){c.pp-=next.cost;c.economy=next.id;c.stability=clamp(c.stability-4+(next.stability||0),0,100);}}
+    const consc=laws.conscription,divisions=this.units(id).length;
+    const conscTarget=atWar?(losing?5:4):this.s.tension>=40?3:Math.min(2,c.conscription);
+    if(c.conscription<conscTarget&&c.manpower<divisions*4000+60000){
+      const next=consc[c.conscription+1];
+      if(next&&c.pp>=next.cost+30&&(!next.war||atWar)&&(!next.tension||atWar||this.s.tension>=next.tension||c.support>=60)){
+        c.pp-=next.cost;c.pool=Math.max(0,c.pool+c.identity.manpower*((next.pool||1)-(consc[c.conscription].pool||1)));c.conscription++;c.stability=clamp(c.stability-6+(next.stability||0),0,100);
+      }
+    }
+  };
+  Engine.prototype.aiConstruction16=function(id){
+    const c=this.nation(id);if(c.build.length>=3||c.stats.freeCiv<1)return;
+    const prof=this.aiProfile16(id),atWar=this.enemies(id).length>0,year=1936+this.s.day/365.25;
+    const owned=this.ownedToday16(id).filter(p=>this.s.provinces[p.id].ctrl===id);
+    const free=p=>{const sid=this.stateId(p.id);return this.stateCapacity(sid,id)-this.stateUsed(sid)-this.stateQueued(sid,id);};
+    const pick=(filter,sort)=>owned.filter(filter).sort(sort)[0];
+    let kind=!atWar&&year<1938.6&&c.stats.civ<c.stats.mil*1.8?'civ':'mil';
+    if((prof.navy||0)>=.3&&c.stats.dock<10&&this.s.day%3===0)kind='dock';
+    if(c.stats.shortage?.oil<1&&c.tech.includes('synthetic1')&&this.s.day%2===0)kind='refinery';
+    const target=pick(p=>free(p)>0&&(kind!=='dock'||p.coast)&&this.isCore(id,p.id),(a,b)=>free(b)-free(a)||b.vp-a.vp||a.id-b.id);
+    try{if(target)this.construct(id,target.id,kind);}catch{}
+    if(c.build.length<3&&this.s.tension>=40&&prof.aggression<.5){
+      const border=pick(p=>p.neighbors.some(n=>{const k=this.s.provinces[n].ctrl;return k!==id&&!this.allies(id,k)&&this.aiProfile16(k).aggression>=.5;})&&this.s.provinces[p.id].fort<3,(a,b)=>b.vp-a.vp||a.id-b.id);
+      try{if(border)this.construct(id,border.id,'fort');}catch{}
+    }
+    if(c.build.length<3&&atWar){
+      const weak=pick(p=>p.neighbors.some(n=>this.war(id,this.s.provinces[n].ctrl))&&this.s.provinces[p.id].infra<4&&this.s.provinces[p.id].supply<.5,(a,b)=>a.id-b.id);
+      try{if(weak)this.construct(id,weak.id,'infra');}catch{}
+    }
+  };
+  Engine.prototype.aiRecruit16=function(id){
+    const c=this.nation(id),prof=this.aiProfile16(id),atWar=this.enemies(id).length>0,count=this.units(id).length+c.training.length;
+    const target=Math.min(180,Math.round(atWar?c.stats.mil*2.4+12:c.stats.mil*(1.2+this.s.tension/60)+8));
+    if(count>=target||c.training.length>=6)return;
+    const enemyArmor=this.enemies(id).some(e=>this.units(e).some(u=>u.template.tank>0));
+    const armored=prof.army==='armor'&&c.stock.tanks+c.stock.lightTanks>400&&count%4===0;
+    const templateId=armored?'armored':enemyArmor&&c.templates.some(t=>t.id==='line_at')&&count%3===0?'line_at':'infantry';
+    const template=c.templates.find(t=>t.id===templateId)||c.templates[0];
+    const front=this.ownedToday16(id).find(p=>this.s.provinces[p.id].ctrl===id&&p.neighbors.some(n=>this.war(id,this.s.provinces[n].ctrl)));
+    const site=front?front.id:this.cap(id);
+    for(const n of [2,1]){try{this.recruit(id,template.id,site,n);return;}catch{}}
+    if(template.id!=='infantry')try{this.recruit(id,c.templates[0].id,site,1);}catch{}
+  };
+  // Army fronts: the border with each enemy is split into connected sectors;
+  // each sector gets an army sized by its length and by the enemy forces
+  // nearby. Only land held by the country or by allies at war with that
+  // enemy counts: a non-belligerent ally's territory is not a front. Remote
+  // sectors (colonies) get a garrison unless the enemy masses troops there.
+  Engine.prototype.frontSectors16=function(id,e){
+    const front=new Map(),own=k=>{if(!front.has(k))front.set(k,k===id||this.allies(id,k)&&this.war(k,e));return front.get(k);};
+    const set=new Set();
+    for(const p of this.ownedToday16(e))for(const n of p.neighbors)if(own(this.s.provinces[n].ctrl))set.add(n);
+    const seen=new Set(),sectors=[];
+    for(const start of [...set].sort((a,b)=>a-b)){
+      if(seen.has(start))continue;
+      const list=[start];seen.add(start);
+      for(let h=0;h<list.length;h++)for(const n of this.prov[list[h]].neighbors)if(set.has(n)&&!seen.has(n)){seen.add(n);list.push(n);}
+      sectors.push(list.map(i=>this.prov[i]));
+    }
+    return sectors;
+  };
+  Engine.prototype.aiFronts16=function(id){
+    const c=this.nation(id),prof=this.aiProfile16(id);
+    const committed=new Set((this.s.invasions16||[]).filter(i=>i.owner===id).flatMap(i=>i.units));
+    const units=this.units(id).filter(u=>!u.landing16&&!committed.has(u.id)&&!u.lent16&&!u.invasionPrep16);
+    if(!units.length)return;
+    const enemies=this.enemies(id).filter(e=>!this.nation(e)?.capitulated16);
+    const capital=this.prov[this.cap(id)];
+    const fronts=[];
+    for(const e of enemies){
+      for(const border of this.frontSectors16(id,e)){
+        const centre={x:sum(border.map(p=>p.x))/border.length,y:sum(border.map(p=>p.y))/border.length};
+        // Enemy forces facing the sector: two rings of provinces beyond it.
+        const near=new Set();
+        for(const p of border)for(const n of p.neighbors)if(this.s.provinces[n].ctrl===e){near.add(n);for(const m of this.prov[n].neighbors)if(this.s.provinces[m].ctrl===e)near.add(m);}
+        let local=0;for(const pid of near)for(const u of this.unitsAt.get(pid)||[])if(this.war(id,u.owner))local+=this.unitPower16(u);
+        const far=distance(centre,capital)>2500;
+        fronts.push({e,border,centre,local,weight:Math.sqrt(border.length)*(far?.3:1)+local/400,cap:far&&local<200?Math.max(2,Math.ceil(border.length/6)):Infinity});
+      }
+    }
+    // Volunteer and expeditionary armies keep their own command.
+    const foreign=new Set(this.s.units.filter(u=>u.owner===id&&u.lent16).map(u=>u.army));
+    const armies=this.s.armies.filter(a=>a.owner===id&&!foreign.has(a.id));
+    if(!fronts.length){
+      // Peace or a war overseas: a single defensive army facing the main threat.
+      const owned=this.ownedToday16(id);
+      const threat=[...new Set(owned.flatMap(p=>p.neighbors.map(n=>this.s.provinces[n].ctrl)))].filter(k=>k!==id&&!this.allies(id,k)&&this.nation(k)?.alive).sort((a,b)=>this.aiProfile16(b).aggression*this.units(b).length-this.aiProfile16(a).aggression*this.units(a).length||a.localeCompare(b))[0]||null;
+      const a=armies[0]||this.addArmy(id);a.target=threat;a.order='defend';a.auto=true;a.plan16=null;a.frontSelection=[];
+      for(const u of units)if(!this.s.armies.some(x=>x.id===u.army&&x.owner===id))u.army=a.id;
+      return;
+    }
+    fronts.sort((a,b)=>b.weight-a.weight||a.e.localeCompare(b.e)||a.border[0].id-b.border[0].id);
+    const totalWeight=sum(fronts.map(f=>f.weight));
+    for(const f of fronts)f.quota=Math.min(f.cap,Math.max(1,Math.round(units.length*f.weight/totalWeight)));
+    // Divisions freed by capped sectors go to the main sector.
+    const spare=units.length-sum(fronts.map(f=>f.quota));if(spare>0)fronts[0].quota+=spare;
+    const used=new Set();
+    for(const f of fronts){
+      let a=armies.find(a=>!used.has(a.id)&&a.target===f.e&&a.frontSelection?.length&&distance(this.prov[a.frontSelection[0]],f.centre)<600)||armies.find(a=>!used.has(a.id)&&a.target===f.e)||armies.find(a=>!used.has(a.id));
+      if(!a){a=this.addArmy(id);armies.push(a);}
+      used.add(a.id);f.army=a;a.target=f.e;a.auto=true;
+      const step=Math.max(1,Math.ceil(f.border.length/20));
+      a.frontSelection=f.border.filter((p,i)=>i%step===0).map(p=>p.id);
+    }
+    // Nearest divisions go to each sector, heaviest sectors first.
+    const pool=[...units];
+    for(const f of fronts){
+      pool.sort((a,b)=>distance(this.prov[a.pid],f.centre)-distance(this.prov[b.pid],f.centre)||a.id-b.id);
+      for(const u of pool.splice(0,f.quota))u.army=f.army.id;
+    }
+    for(const u of pool)u.army=fronts[0].army.id;
+    for(const a of armies)if(!used.has(a.id)){a.target=null;a.order='defend';a.plan16=null;a.frontSelection=[];}
+    for(const a of this.s.armies)if(foreign.has(a.id)&&a.owner===id){a.target=fronts[0].e;a.frontSelection=[...fronts[0].army.frontSelection];}
+    for(const f of fronts){
+      const own=sum(units.filter(u=>u.army===f.army.id).map(u=>this.unitPower16(u))),enemy=Math.max(1,f.local);
+      // Civil wars are fought to the end: both camps keep attacking.
+      const aggression=Math.min(1,prof.aggression+(this.hasSpirit16(c,'civil_war')?.5:0));
+      // A quiet front is probed every few months when the odds are even.
+      const attack=own>=enemy*(1.6-aggression*.6)||this.s.day-(f.army.offensive16??this.s.day-60)>=90&&own>=enemy*.9;
+      if(attack&&f.army.order!=='attack')f.army.offensive16=this.s.day;
+      f.army.order=attack?'attack':'defend';f.army.tactic=attack?'spearhead':'elastic';f.army.stance=aggression>.6?'aggressive':'balanced';
+      // Objective: the most valuable enemy province within reach of the sector.
+      let goal=null;for(const p of this.ownedToday16(f.e))if(distance(p,f.centre)<900&&(!goal||p.vp>goal.vp||p.vp===goal.vp&&p.id<goal.id))goal=p;
+      f.army.plan16={offensive:attack&&goal?[goal.id]:[],fallback:[],execute:attack};
+      if(!f.army.general){const free=c.identity.commanders.find(g=>!this.s.armies.some(a=>a.owner===id&&a.general===g.id));if(free)f.army.general=free.id;}
+    }
+  };
+  Engine.prototype.aiAir16=function(id){
+    const c=this.nation(id),enemies=this.enemies(id),wings=this.s.wings.filter(w=>w.owner===id);
+    const bases=this.ownedToday16(id).filter(p=>this.s.provinces[p.id].ctrl===id&&this.s.provinces[p.id].airbase>0);if(!bases.length)return;
+    const front=this.ownedToday16(id).find(p=>p.neighbors.some(n=>this.war(id,this.s.provinces[n].ctrl)));
+    const focus=front||this.prov[this.cap(id)],base=bases.sort((a,b)=>distance(a,focus)-distance(b,focus)||a.id-b.id)[0];
+    for(const kind of Object.keys(AIR_MISSIONS)){
+      if(c.stock[kind]>=40&&wings.filter(w=>w.kind===kind).length<4){
+        const size=Math.min(250,Math.floor(c.stock[kind]));c.stock[kind]-=size;
+        const w={id:this.s.uid++,owner:id,name:'Escadre '+(kind==='fighters'?'de chasse':'aérienne'),kind,size,base:base.id,zone:this.prov[base.id].zone,mission:'reserve',xp:0,autoReinforce:true,targetSize:250};
+        this.s.wings.push(w);wings.push(w);
+      }
+    }
+    for(const w of wings){
+      w.autoReinforce=true;w.targetSize=Math.max(w.targetSize||100,200);
+      if(!enemies.length){w.mission='reserve';continue;}
+      const zone=front?front.zone:this.prov[this.cap(id)].zone;
+      if(distance(this.prov[w.base],focus)>(AIR_RANGE[w.kind]||1600)*.7){w.base=base.id;}
+      if(w.kind==='fighters'){w.zone=zone;w.mission='superiority';}
+      else if(w.kind==='cas'||w.kind==='bombers'){w.zone=zone;w.mission=front?'support':'reserve';}
+      else if(w.kind==='strategicBombers'){
+        const target=this.prov.filter(p=>enemies.includes(this.s.provinces[p.id].ctrl)&&this.s.provinces[p.id].civ+this.s.provinces[p.id].mil>0&&distance(p,this.prov[w.base])<AIR_RANGE.strategicBombers*.9).sort((a,b)=>(this.s.provinces[b.id].civ+this.s.provinces[b.id].mil)-(this.s.provinces[a.id].civ+this.s.provinces[a.id].mil))[0];
+        if(target){w.zone=target.zone;w.mission='strategic';}else w.mission='reserve';
+      }
+      else if(w.kind==='navalBombers'){
+        const fleet=this.s.fleets.find(f=>enemies.includes(f.owner)&&f.mission!=='port'&&this.world.seas.some(z=>z.id===f.zone&&distance(z,this.prov[w.base])<AIR_RANGE.navalBombers*.9));
+        if(fleet){w.seaZone=fleet.zone;w.mission='navalStrike';}else w.mission='reserve';
+      }
+      else w.mission=this.units(id).some(u=>u.pocketed)?'airSupply':'reserve';
+    }
+  };
+  Engine.prototype.aiNavy16=function(id){
+    const c=this.nation(id),enemies=this.enemies(id),prof=this.aiProfile16(id);
+    const ports=this.ownedToday16(id).filter(p=>this.s.provinces[p.id].ctrl===id&&this.s.provinces[p.id].port>0);if(!ports.length)return;
+    const home=ports.sort((a,b)=>this.s.provinces[b.id].port-this.s.provinces[a.id].port||a.id-b.id)[0];
+    let fleets=this.s.fleets.filter(f=>f.owner===id);
+    const spare=['destroyers','submarines','cruisers','battleships','carriers'].filter(k=>c.stock[k]>=1);
+    if(spare.length&&sum(spare.map(k=>Math.floor(c.stock[k])))>=3){
+      let f=fleets.find(f=>f.mission==='port'&&f.base===home.id);
+      if(!f){f={id:this.s.uid++,owner:id,name:'Escadre',base:home.id,zone:home.seaZone,mission:'port',eta:0,ships:{destroyers:0,submarines:0,cruisers:0,battleships:0,carriers:0},strength:1,reinforce:true};this.s.fleets.push(f);fleets.push(f);}
+      for(const k of spare){const n=Math.floor(c.stock[k]);f.ships[k]=(f.ships[k]||0)+n;c.stock[k]-=n;}
+    }
+    if(!enemies.length){for(const f of fleets){if(f.mission!=='port'&&(prof.navy||0)<.3)f.mission='port';else if((prof.navy||0)>=.3&&f.strength>.8){f.mission='patrol';}}return;}
+    const enemyFleets=this.s.fleets.filter(f=>enemies.includes(f.owner));
+    const enemyPorts=this.prov.filter(p=>enemies.includes(this.s.provinces[p.id].ctrl)&&this.s.provinces[p.id].port>0&&p.seaZone);
+    const strongest=fleets.slice().sort((a,b)=>this.fleetRating(b)-this.fleetRating(a))[0];
+    const myPower=sum(fleets.map(f=>this.fleetRating(f))),theirPower=sum(enemyFleets.map(f=>this.fleetRating(f)));
+    for(const f of fleets){
+      if(f.strength<.45){f.mission='port';continue;}
+      const subsOnly=!f.ships.destroyers&&!f.ships.cruisers&&!f.ships.battleships&&!f.ships.carriers&&f.ships.submarines>0;
+      let zone=f.zone,mission;
+      if(subsOnly){zone=enemyPorts.sort((a,b)=>distance(a,this.prov[f.base])-distance(b,this.prov[f.base])||a.id-b.id)[0]?.seaZone||home.seaZone;mission='raid';}
+      else if(f===strongest&&myPower>=theirPower*.7){const target=enemyFleets.sort((a,b)=>this.fleetRating(b)-this.fleetRating(a))[0];zone=target&&this.world.seas.some(z=>z.id===target.zone&&distance(z,this.prov[f.base])<4000)?target.zone:home.seaZone;mission='strike';}
+      else if(myPower<theirPower*.4&&(f.ships.destroyers||0)>2){zone=home.seaZone;mission='mines';}
+      else {zone=home.seaZone;mission='escort';}
+      if(zone&&zone!==f.zone){f.zone=zone;f.eta=5;}
+      f.mission=mission;
+    }
+  };
+  Engine.prototype.aiInvasion16=function(id){
+    const c=this.nation(id),enemies=this.enemies(id).filter(e=>!this.nation(e).capitulated16);
+    if(!enemies.length||(this.s.invasions16||[]).some(i=>i.owner===id)||c.stock.convoys<80)return;
+    const landEnemies=new Set(enemies.filter(e=>this.prov.some(p=>this.access(id,this.s.provinces[p.id].ctrl)&&p.neighbors.some(n=>this.s.provinces[n].ctrl===e))));
+    const overseas=enemies.filter(e=>!landEnemies.has(e));if(!overseas.length)return;
+    const prepared=this.units(id).filter(u=>u.invasionPrep16);
+    const ports=this.ownedToday16(id).filter(p=>this.s.provinces[p.id].ctrl===id&&this.s.provinces[p.id].port>0);if(!ports.length)return;
+    if(prepared.length){
+      const target=prepared[0].invasionPrep16,port=prepared[0].invasionPort16;
+      const ready=prepared.filter(u=>u.pid===port);
+      if(ready.length>=Math.min(4,prepared.length)&&this.war(id,this.s.provinces[target].ctrl)){
+        for(const u of prepared){u.invasionPrep16=null;u.invasionPort16=null;}
+        try{this.startInvasion16(id,ready.slice(0,8).map(u=>u.id),target);}catch{for(const u of ready)u.path=[];}
+      }else if(this.s.day-(prepared[0].invasionDay16||0)>90){for(const u of prepared){u.invasionPrep16=null;u.invasionPort16=null;}}
+      return;
+    }
+    const spare=this.units(id).filter(u=>!u.path.length&&u.org>60&&!u.lent16&&!this.ownedToday16(id).some(p=>p.id===u.pid&&p.neighbors.some(n=>this.war(id,this.s.provinces[n].ctrl))));
+    if(spare.length<6)return;
+    let best=null;
+    for(const e of overseas){
+      for(const p of this.prov){
+        if(this.s.provinces[p.id].ctrl!==e||!p.coast||!p.seaZone)continue;
+        if((this.unitsAt.get(p.id)||[]).length)continue;
+        const port=ports.sort((a,b)=>distance(a,p)-distance(b,p)||a.id-b.id)[0],d=distance(port,p);
+        if(d>1800*(1+c.bonus.invasion*2))continue;
+        if(this.seaShare16(id,p.seaZone)<.6||this.seaShare16(id,port.seaZone)<.6)continue;
+        const score=p.vp*3-d/200;
+        if(!best||score>best.score)best={score,target:p.id,port:port.id};
+      }
+    }
+    if(!best)return;
+    for(const u of spare.slice(0,6)){u.invasionPrep16=best.target;u.invasionPort16=best.port;u.invasionDay16=this.s.day;u.path=this.path(u.pid,best.port,id,false)||[];}
+  };
+  const AI_DECISIONS=['rationalize','prospecting','public_works','officer_training','winter_gear','mobilize_reserves','emergency_production','sacred_union','four_year_plan','westwall','maginot_extension','imperial_conference','five_year_plan','zaibatsu_mobilization','united_front','supply_road','central_industrial_region','mare_nostrum','arsenal_of_democracy','end_isolation','border_forts','air_defense_program','evacuate_industry','national_union'];
+  const AI_ADVISORS={political:['industrialist','economist','scientist','diplomat'],army:null,navy:['navy_fleet','navy_convoy'],air:['air_fighter'],command:['hc_planner','hc_infantry','hc_armor'],theorist:['theorist_army']};
+  Engine.prototype.aiGovernment16=function(id){
+    const c=this.nation(id),prof=this.aiProfile16(id);
+    for(const [slot,pref] of Object.entries(AI_ADVISORS)){
+      const list=pref||(prof.aggression>.5?['army_offense','army_mobile']:['army_defense','army_org']);
+      const max=this.catalog.advisorSlots?.[slot]?.[1]||1,hired=c.advisors16?.[slot]||[];if(hired.length>=max)continue;
+      const pick=list.map(a=>this.catalog.advisors.find(x=>x.id===a)).find(a=>a&&!hired.includes(a.id)&&(!a.ideology||a.ideology.includes(c.ideology)));
+      if(pick&&c.pp>=pick.cost+60){this.hireAdvisor16(id,pick.id);c.pp-=pick.cost;return;}
+    }
+    for(const did of AI_DECISIONS){
+      const d=this.catalog.decisions.find(x=>x.id===did);if(!d||c.pp<d.cost+50)continue;
+      if(did==='evacuate_industry'&&(c.stats.coreShare??1)>.85)continue;
+      if(did==='mobilize_reserves'&&c.manpower>this.units(id).length*5000)continue;
+      if(!this.decisionReason16(id,d)){this.takeDecision16(id,did);return;}
+    }
+  };
+  Engine.prototype.aiDiplomacy16=function(id){
+    const c=this.nation(id),prof=this.aiProfile16(id);
+    // Joining a faction of the same ideology once the world becomes dangerous.
+    if(c.faction==='none'&&!c.subject&&this.s.tension>=45&&!this.enemies(id).length){
+      const factions=new Map();
+      for(const k of this.active()){const n=this.nation(k);if(n.faction==='none'||k===id)continue;const f=factions.get(n.faction)||{mil:0,ideology:null,leader:null};if(n.stats.mil>f.mil){f.mil=n.stats.mil;f.ideology=n.ideology;f.leader=k;}factions.set(n.faction,f);}
+      const near=new Set(this.ownedToday16(id).flatMap(p=>p.neighbors.map(n=>this.s.provinces[n].ctrl)));
+      const threatened=[...near].some(k=>k!==id&&this.nation(k)?.alive&&this.aiProfile16(k).aggression>=.5&&this.nation(k).ideology!==c.ideology);
+      for(const [name,f] of factions){
+        if(f.ideology!==c.ideology||!threatened&&f.ideology==='democratic')continue;
+        if(unit01(hash32(id.charCodeAt(0)*131+id.charCodeAt(1)*17+this.s.day))<.15){c.faction=name;this.log(this.info(id).name+' rejoint la faction '+name+'.','event');break;}
+      }
+    }
+    // Volunteers for an ideological ally in a civil war.
+    // Fascist and communist powers back the camp closest to them; the side
+    // facing a fascist camp is helped by communists.
+    if((prof.aggression>=.5||c.ideology==='communist')&&!this.enemies(id).length&&this.s.tension>=20&&!this.s.units.some(u=>u.lent16?.home===id)){
+      const ally=this.active().find(k=>k!==id&&this.hasSpirit16(this.nation(k),'civil_war')&&this.enemies(k).length&&(this.nation(k).ideology===c.ideology||c.ideology==='communist'&&this.enemies(k).some(e=>this.nation(e).ideology==='fascist')));
+      if(ally){const spare=this.units(id).filter(u=>!u.path.length).slice(0,c.ideology==='communist'?2:3);if(spare.length)try{this.lend16(id,ally,spare,'volunteer');}catch{}}
+    }
+    // Sandbox wars for aggressive profiles.
+    if(!this.s.historical&&prof.aggression>=.5&&this.s.day>240&&!this.enemies(id).length&&c.pp>=80){
+      const j=c.justifications.find(j=>j.progress>=j.days&&this.nation(j.target)?.alive&&!this.allies(id,j.target));
+      if(j){try{this.declareWar(id,j.target);}catch{}return;}
+      if(!c.justifications.length){
+        const targets=[...new Set(this.ownedToday16(id).flatMap(p=>p.neighbors.map(n=>this.s.provinces[n].ctrl)))].filter(k=>k!==id&&this.nation(k)?.alive&&!this.allies(id,k)&&this.units(k).length<this.units(id).length*.6);
+        const t=targets.sort((a,b)=>this.units(a).length-this.units(b).length||a.localeCompare(b))[0];
+        if(t){c.pp-=40;c.justifications.push({target:t,progress:0,days:60,goal:'conquest'});this.s.tension=clamp(this.s.tension+5,0,100);}
+      }
+    }
+  };
+  // 1939 bookmark: three years of rearmament are authored, not simulated.
+  Engine.prototype.applyOOB16=function(){
+    const bookmark=(this.catalog.bookmarks||[]).find(b=>b.id===this.s.historyState?.scenario);if(!bookmark?.oob)return;
+    for(const [id,o] of Object.entries(bookmark.oob)){
+      const c=this.nation(id);if(!c?.alive)continue;
+      const owned=this.owned(id).filter(p=>this.isCore(id,p.id)).sort((a,b)=>b.vp-a.vp||a.id-b.id);if(!owned.length)continue;
+      for(const kind of ['civ','mil']){
+        const missing=Math.max(0,(o[kind]||0)-c.stats[kind]);
+        for(let i=0;i<missing;i++){const p=owned[i%Math.min(owned.length,12)];this.s.provinces[p.id][kind]++;}
+      }
+      const extra=Math.max(0,(o.divisions||0)-this.units(id).length);
+      const frontier=owned.filter(p=>p.neighbors.some(n=>this.s.provinces[n].ctrl!==id)),positions=frontier.length?frontier:owned;
+      let army=this.s.armies.find(a=>a.owner===id)||this.addArmy(id);
+      const armored=c.templates.find(t=>t.id==='armored')||c.templates[0],infantry=c.templates[0];
+      for(let i=0;i<extra;i++){
+        if(i%12===0&&i)army=this.addArmy(id);
+        const u=this.spawn(id,positions[(i*5)%positions.length].id,(o.armor||0)>0&&i%Math.round(1/(o.armor||1))===0?armored:infantry,80);u.army=army.id;
+      }
+      c.stock.rifles+=extra*500;c.stock.artillery+=extra*20;c.stock.supportEq+=extra*30;c.stock.antiTank+=extra*10;
+      if(o.air){const fighters=this.s.wings.find(w=>w.owner===id&&w.kind==='fighters');const add=Math.max(0,o.air-sum(this.s.wings.filter(w=>w.owner===id).map(w=>w.size)));if(fighters)fighters.size+=Math.round(add*.6);c.stock.cas+=Math.round(add*.2);c.stock.bombers+=Math.round(add*.2);}
+      c.pool+=extra*9000;c.manpower+=extra*2000;
+    }
+    this.s.stateExtra=this.computeStateExtra();
+  };
+  Engine.invariant16(function(state){
+    for(const u of state.units)if(u.invasionPrep16!=null)assert(this.prov[u.invasionPrep16]&&this.prov[u.invasionPort16],'Préparation de débarquement invalide.');
   });
 
   // ---------------------------------------------------------------------------
@@ -1796,8 +2309,8 @@ function installSystems16(Engine,H){
       raw=clone(raw);
       for(const c of Object.values(raw.countries||{}))for(const key in this.baseCatalog.equipment){if(c.stock)c.stock[key]??=0;if(c.allocation)c.allocation[key]??=0;if(c.efficiency)c.efficiency[key]??=.45;}
     }
-    const state=load15.call(this,raw);
-    this.init16(false);this.updateStats();this.checkInvariants();return this.s;
+    const migrating=raw?.release!==RELEASE,state=load15.call(this,raw);
+    this.init16(false);if(migrating)this.updateStats();this.checkInvariants();return this.s;
   };
   const check15=Engine.prototype.checkInvariants;
   Engine.prototype.checkInvariants=function(state=this.s){

@@ -577,7 +577,7 @@ catalog['spirits'] = [
     spirit('colonial', 'Ambitions coloniales', 'Le régime cherche des victoires outre-mer.', {'attack': .03}),
     spirit('zaibatsu', 'Conglomérats industriels', 'Les grands groupes dominent l’économie.', {'production': .05}),
     spirit('rivalry', 'Rivalité armée-marine', 'Deux états-majors se disputent les crédits.', {'research': -.05}),
-    spirit('warlords', 'Seigneurs de la guerre', 'L’autorité centrale reste contestée dans les provinces.', {'stabilityGrowth': -.3, 'organization': -.1, 'recruitment': .2}),
+    spirit('warlords', 'Seigneurs de la guerre', 'L’autorité centrale reste contestée et les armées provinciales sont mal équipées.', {'stabilityGrowth': -.3, 'organization': -.15, 'recruitment': .2, 'attack': -.12, 'defense': -.05, 'surrender': .15}),
     spirit('rationalization', 'Rationalisation industrielle', 'Normes et méthodes modernes dans les ateliers.', {'production': .08}),
     spirit('export_drive', 'Campagne d’exportation', 'Les entreprises sont incitées à vendre à l’étranger.', {'construction': .04}),
     spirit('prospecting', 'Prospection minière', 'Des géologues ouvrent de nouveaux gisements.', {'resources': .1}),
@@ -597,13 +597,20 @@ catalog['spirits'] = [
     spirit('arsenal', 'Arsenal des démocraties', 'L’industrie civile se convertit massivement.', {'production': .1}),
     spirit('mare_nostrum', 'Mare Nostrum', 'La marine domine la Méditerranée.', {'navy': .08}),
     spirit('burma_road', 'Route d’approvisionnement', 'Une route lointaine maintient l’aide étrangère.', {'supply': .1, 'resources': .05}),
-    spirit('united_front', 'Front uni', 'Les factions rivales combattent l’envahisseur ensemble.', {'stabilityGrowth': .2, 'organization': .05}),
+    spirit('united_front', 'Front uni', 'Les factions rivales combattent l’envahisseur ensemble.', {'stabilityGrowth': .2, 'organization': .05, 'surrender': .1}),
+    spirit('strategic_depth', 'Profondeur stratégique', 'L’immensité du territoire permet d’échanger l’espace contre le temps.', {'surrender': .2, 'attrition': .1, 'supply': .1}),
+    spirit('civil_war', 'Guerre civile', 'Le pays se déchire : milices improvisées, cadres divisés, nul ne veut capituler.', {'attack': -.2, 'organization': -.1, 'surrender': .25, 'production': -.1}),
+    spirit('africa_army', 'Armée d’Afrique', 'Les troupes coloniales aguerries forment le noyau du camp insurgé.', {'attack': .12, 'organization': .1}),
+    spirit('sisu', 'Sisu', 'Skieurs, forêts et lacs gelés : chaque position se défend jusqu’au bout.', {'defense': .12, 'attrition': .3, 'surrender': .1}),
+    spirit('national_redoubt', 'Réduit national', 'Le relief et une armée de milice préparée de longue date protègent le pays.', {'defense': .1, 'entrench': .2, 'surrender': .05}),
 ]
 catalog['startSpirits'] = {
-    '1936': {'USA': ['isolation'], 'FRA': ['maginot', 'divided'], 'GBR': ['empire'], 'SOV': ['purges', 'plans'],
-             'GER': ['rearmament'], 'ITA': ['colonial'], 'JPN': ['zaibatsu', 'rivalry'], 'CHI': ['warlords']},
-    '1939': {'USA': ['isolation'], 'FRA': ['maginot'], 'GBR': ['empire'], 'SOV': ['purged_army', 'plans'],
-             'GER': ['rearmament', 'four_year'], 'ITA': ['colonial'], 'JPN': ['zaibatsu', 'rivalry'], 'CHI': ['united_front']},
+    '1936': {'USA': ['isolation'], 'FRA': ['maginot', 'divided'], 'GBR': ['empire'], 'SOV': ['purges', 'plans', 'strategic_depth'],
+             'GER': ['rearmament'], 'ITA': ['colonial'], 'JPN': ['zaibatsu', 'rivalry'], 'CHI': ['warlords', 'strategic_depth'],
+             'FIN': ['sisu'], 'SWI': ['national_redoubt']},
+    '1939': {'USA': ['isolation'], 'FRA': ['maginot'], 'GBR': ['empire'], 'SOV': ['purged_army', 'plans', 'strategic_depth'],
+             'GER': ['rearmament', 'four_year'], 'ITA': ['colonial'], 'JPN': ['zaibatsu', 'rivalry'], 'CHI': ['united_front', 'strategic_depth'],
+             'FIN': ['sisu'], 'SWI': ['national_redoubt']},
 }
 
 def dec(did, name, category, cost, desc, requires=None, effect=None, spirit_id=None, days=None, cooldown=0, once=False,
@@ -668,6 +675,37 @@ catalog['decisions'] = [
     dec('supply_road', 'Route d’approvisionnement', 'national', 50, 'Ouvrir une route vers les ports alliés.', {'country': ['CHI'], 'war': True}, spirit_id='burma_road', once=True),
     dec('central_industrial_region', 'Région industrielle centrale', 'national', 80, 'Un pôle industriel à l’abri des frontières.', {'country': ['POL']}, once=True, special={'build': {'civ': 2, 'mil': 2}}),
 ]
+
+# --- AI profiles and the 1939 order of battle --------------------------------------
+R_LAND = ['industry', 'infantry', 'logistics', 'air', 'armor', 'doctrine', 'navy']
+catalog['aiProfiles'] = {
+    'default': {'aggression': .2, 'army': 'infantry', 'navy': .1, 'air': .15, 'research': R_LAND},
+    'GER': {'aggression': .9, 'army': 'armor', 'navy': .15, 'air': .25, 'research': ['industry', 'armor', 'air', 'infantry', 'doctrine', 'logistics', 'navy']},
+    'ITA': {'aggression': .6, 'army': 'infantry', 'navy': .3, 'air': .2, 'research': ['industry', 'infantry', 'navy', 'air', 'armor', 'doctrine', 'logistics']},
+    'JPN': {'aggression': .8, 'army': 'infantry', 'navy': .45, 'air': .25, 'research': ['navy', 'air', 'industry', 'infantry', 'doctrine', 'armor', 'logistics']},
+    'SOV': {'aggression': .5, 'army': 'mass', 'navy': .05, 'air': .2, 'research': ['industry', 'armor', 'infantry', 'air', 'doctrine', 'logistics', 'navy']},
+    'USA': {'aggression': .3, 'army': 'armor', 'navy': .4, 'air': .3, 'research': ['industry', 'air', 'navy', 'armor', 'infantry', 'logistics', 'doctrine']},
+    'GBR': {'aggression': .3, 'army': 'infantry', 'navy': .45, 'air': .3, 'research': ['industry', 'navy', 'air', 'infantry', 'logistics', 'armor', 'doctrine']},
+    'FRA': {'aggression': .2, 'army': 'firepower', 'navy': .2, 'air': .2, 'research': ['industry', 'infantry', 'armor', 'air', 'doctrine', 'logistics', 'navy']},
+    'CHI': {'aggression': .2, 'army': 'mass', 'navy': 0, 'air': .05, 'research': ['industry', 'infantry', 'logistics', 'doctrine', 'air', 'armor', 'navy']},
+    'POL': {'aggression': .2, 'army': 'infantry', 'navy': .02, 'air': .1, 'research': R_LAND},
+}
+OOB_1939 = {
+    'GER': {'divisions': 76, 'civ': 36, 'mil': 42, 'air': 1100, 'armor': .16},
+    'FRA': {'divisions': 50, 'civ': 34, 'mil': 24, 'air': 600, 'armor': .06},
+    'GBR': {'divisions': 30, 'civ': 38, 'mil': 26, 'air': 900, 'armor': .05},
+    'POL': {'divisions': 34, 'civ': 15, 'mil': 12, 'air': 200},
+    'SOV': {'divisions': 96, 'civ': 48, 'mil': 40, 'air': 1300, 'armor': .1},
+    'ITA': {'divisions': 46, 'civ': 22, 'mil': 20, 'air': 500, 'armor': .04},
+    'JPN': {'divisions': 56, 'civ': 28, 'mil': 30, 'air': 800, 'armor': .03},
+    'CHI': {'divisions': 60, 'civ': 22, 'mil': 12},
+    'USA': {'divisions': 26, 'civ': 66, 'mil': 24, 'air': 700, 'armor': .05},
+    'ROM': {'divisions': 22}, 'HUN': {'divisions': 14}, 'YUG': {'divisions': 20}, 'FIN': {'divisions': 14}, 'BEL': {'divisions': 16},
+    'HOL': {'divisions': 12}, 'TUR': {'divisions': 22}, 'SPA': {'divisions': 24}, 'CAN': {'divisions': 10}, 'RAJ': {'divisions': 24},
+}
+for b in catalog['bookmarks']:
+    if b['id'] == '1939':
+        b['oob'] = OOB_1939
 
 CATALOG.write_text(json.dumps(catalog, separators=(',', ':'), ensure_ascii=False), encoding='utf-8')
 print('catalog keys', sorted(catalog))
