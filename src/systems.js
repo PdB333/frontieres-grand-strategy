@@ -171,7 +171,10 @@ function installSystems16(Engine,H){
   Engine.prototype.ensure16=function(){
     const s=this.s;if(!s)return;
     if(!Array.isArray(s.stateExtra)||s.stateExtra.length!==this.states16.list.length)s.stateExtra=this.computeStateExtra();
-    for(const st of s.provinces)for(const k of NEW_PROVINCE_KEYS)st[k]??=0;
+    for(let i=0;i<s.provinces.length;i++){
+      const st=s.provinces[i];for(const k of NEW_PROVINCE_KEYS)st[k]??=0;
+      if(st.own===undefined||!s.countries[st.own]){const p=this.prov[i];st.own=s.countries[p.owner]&&this.war(st.ctrl,p.owner)?p.owner:st.ctrl;}
+    }
     for(const [id,c] of Object.entries(s.countries)){
       c.trade??=DEFAULT_TRADE[id]||'export';
       for(const k of NEW_BONUS)c.bonus[k]??=0;
@@ -1170,6 +1173,465 @@ function installSystems16(Engine,H){
     for(const f of state.fleets)assert(FLEET_MISSIONS.includes(f.mission),'Mission navale invalide.');
     for(const inv of state.invasions16||[])assert(Number.isInteger(inv.id)&&this.prov[inv.from]&&this.prov[inv.to]&&Array.isArray(inv.units)&&['preparing','waiting','landing'].includes(inv.status),'Débarquement invalide.');
     for(const [zone,m] of Object.entries(state.mines16||{}))for(const v of Object.values(m))assert(finite(v,0,1000),'Champ de mines invalide.');
+  });
+
+  // ---------------------------------------------------------------------------
+  // De jure ownership. "own" changes only through annexation, treaties,
+  // releases and peace conferences; wartime occupation changes "ctrl" only.
+  // ---------------------------------------------------------------------------
+  Engine.prototype.syncOwnership16=function(before){
+    for(let i=0;i<this.s.provinces.length;i++){
+      const st=this.s.provinces[i];if(before[i]===st.ctrl)continue;
+      if(!this.war(st.ctrl,st.own??before[i]))st.own=st.ctrl;
+    }
+  };
+  for(const name of ['annex','transferHistoryRegion','releaseHistoryCountry','franceHistoryArmistice','civilWar','eventChoice','applyHistoryActions']){
+    const original=Engine.prototype[name];
+    Engine.prototype[name]=function(...args){
+      if(!this.s?.provinces)return original.apply(this,args);
+      const before=this.s.provinces.map(st=>st.ctrl),result=original.apply(this,args);
+      this.syncOwnership16(before);return result;
+    };
+  }
+  // Contribution to a war: damage inflicted and territory taken, per pair.
+  Engine.prototype.warContribution16=function(a,b,inflicted,suffered){
+    const w=this.s.warScore16??={};
+    w[a+'|'+b]=+((w[a+'|'+b]||0)+inflicted/1000).toFixed(3);w[b+'|'+a]=+((w[b+'|'+a]||0)+suffered/1000).toFixed(3);
+  };
+  const capture15=Engine.prototype.capture;
+  Engine.prototype.capture=function(pid,attackers){
+    const old=this.s.provinces[pid].ctrl,lead=attackers.find(u=>u.strength>.08);
+    const result=capture15.call(this,pid,attackers);
+    if(lead&&this.s.provinces[pid].ctrl===lead.owner&&old!==lead.owner){const w=this.s.warScore16??={};w[lead.owner+'|'+old]=+((w[lead.owner+'|'+old]||0)+this.prov[pid].vp*2).toFixed(3);}
+    return result;
+  };
+
+  // ---------------------------------------------------------------------------
+  // Capitulation, governments in exile and peace conferences.
+  // ---------------------------------------------------------------------------
+  Engine.prototype.coreProvinces16=function(id){
+    const c=this.nation(id);
+    return Array.isArray(c.identity.cores)?c.identity.cores.map(pid=>this.prov[pid]).filter(Boolean):this.prov.filter(p=>p.owner===id);
+  };
+  Engine.prototype.checkCapitulations=function(){
+    for(const id of this.active()){
+      const c=this.nation(id),enemies=this.enemies(id);if(!enemies.length||c.capitulated16)continue;
+      const original=this.coreProvinces16(id);
+      const metro=original.filter(p=>distance(p,{x:c.identity.lon,y:c.identity.lat})<2300),scored=metro.length?metro:original;
+      const total=sum(scored.map(p=>p.vp)),lost=sum(scored.filter(p=>this.war(id,this.s.provinces[p.id].ctrl)).map(p=>p.vp));
+      const capCtrl=this.s.provinces[c.identity.capital]?.ctrl;
+      if(!((total>0&&lost/total>.65&&this.war(id,capCtrl))||!this.owned(id).length))continue;
+      if(id==='FRA'&&this.s.historical&&!c.identity.exile&&this.s.historyState&&!this.s.historyState.flags.france_armistice&&capCtrl==='GER'){
+        const event=this.catalog.historicalEvents.find(e=>e.id==='h_french_armistice');
+        if(event&&this.owned('FRA').some(p=>distance(p,{x:2.35,y:48.86})>2300)){
+          if(!this.s.seenEvents.includes(event.id)){this.s.seenEvents.push(event.id);if(this.s.player==='FRA'){this.s.eventQueue.push({country:'FRA',event:clone(event)});this.historyRecord(event,'queued');}else this.historyChoice('FRA',event,0);}
+          continue;
+        }
+      }
+      this.capitulate16(id);
+    }
+  };
+  Engine.prototype.capitulate16=function(id){
+    const c=this.nation(id),enemies=this.enemies(id),tally={};
+    for(const p of this.coreProvinces16(id)){const ctrl=this.s.provinces[p.id].ctrl;if(this.war(id,ctrl))tally[ctrl]=(tally[ctrl]||0)+p.vp;}
+    const occupier=Object.keys(tally).sort((a,b)=>tally[b]-tally[a]||a.localeCompare(b))[0]||enemies[0];
+    for(const st of this.s.provinces)if(st.ctrl===id){st.ctrl=occupier;st.compliance=30;st.resistance=10;}
+    const host=this.active().find(o=>o!==id&&this.allies(id,o)&&!this.nation(o).capitulated16&&enemies.some(e=>this.war(o,e))&&this.owned(o).length);
+    c.capitulated16={day:this.s.day,enemies:[...enemies],occupier};
+    if(host){
+      c.exile16={host};
+      const haven=this.cap(host),port=this.owned(host).find(p=>this.s.provinces[p.id].port);
+      for(const u of this.units(id)){u.pid=haven;u.path=[];u.progress=0;u.org=Math.min(u.org,40);u.landing16=null;}
+      for(const w of this.s.wings.filter(w=>w.owner===id)){w.base=haven;w.mission='reserve';}
+      for(const f of this.s.fleets.filter(f=>f.owner===id))if(port){f.base=port.id;f.zone=port.seaZone;f.mission='port';}
+      this.log(this.info(id).name+' capitule ; son gouvernement poursuit la guerre en exil ('+this.info(host).name+').','war');
+    }else{
+      const winner=this.nation(occupier);
+      for(const key of Object.keys(c.stock))if(winner){winner.stock[key]=(winner.stock[key]||0)+c.stock[key]*.4;c.stock[key]=0;}
+      this.s.units=this.s.units.filter(u=>u.owner!==id);this.s.wings=this.s.wings.filter(w=>w.owner!==id);this.s.fleets=this.s.fleets.filter(f=>f.owner!==id);
+      this.s.wars=this.s.wars.filter(w=>w.a!==id&&w.b!==id);
+      c.alive=false;c.training=[];c.build=[];
+      this.log(this.info(id).name+' capitule. Son territoire reste occupé jusqu’à la conférence de paix.','war');
+      if(id===this.s.player){this.s.outcome={type:'defeat',day:this.s.day,winner:occupier};this.s.paused=true;}
+    }
+    this.frontCache={};this.indexUnits();
+  };
+  Engine.prototype.sideOf16=function(id){
+    const c=this.nation(id);if(!c)return [id];
+    if(c.faction==='none')return [id,...Object.keys(this.s.countries).filter(k=>this.nation(k).subject===id)];
+    return Object.keys(this.s.countries).filter(k=>this.nation(k).faction===c.faction);
+  };
+  Engine.prototype.fighting16=function(id){const c=this.nation(id);return !!(c?.alive&&!c.capitulated16&&this.enemies(id).length);};
+  Engine.onDay16(function(){
+    if(this.s.conference16||this.s.day%3!==0)return;
+    for(const [id,c] of Object.entries(this.s.countries)){
+      if(!c.capitulated16||c.inConference16)continue;
+      const side=this.sideOf16(id);
+      if(side.some(k=>this.fighting16(k)))continue;
+      const losers=side.filter(k=>this.nation(k).capitulated16);
+      const winners=[...new Set(losers.flatMap(k=>[...this.nation(k).capitulated16.enemies,...this.enemies(k)]))].filter(k=>this.nation(k)?.alive&&!this.nation(k).capitulated16&&!losers.includes(k));
+      if(!winners.length){for(const k of losers)this.restore16(k);continue;}
+      this.openConference16(losers,winners);return;
+    }
+  });
+  // A capitulated country whose enemies are gone gets its land back.
+  Engine.prototype.restore16=function(id){
+    const c=this.nation(id);if(!c)return;
+    for(const st of this.s.provinces)if(st.own===id&&(this.allies(id,st.ctrl)||!this.nation(st.ctrl)?.alive||this.nation(st.ctrl)?.capitulated16))st.ctrl=id;
+    if(!this.owned(id).length)return;
+    c.alive=true;c.capitulated16=null;c.exile16=null;c.inConference16=false;
+    for(const u of this.units(id)){u.pid=this.cap(id);u.path=[];}
+    this.log(this.info(id).name+' recouvre sa souveraineté.','success');
+  };
+  Engine.prototype.conferenceStates16=function(losers){
+    const rows=new Map();
+    for(const p of this.prov){
+      const st=this.s.provinces[p.id];if(!losers.includes(st.own))continue;
+      const sid=this.stateId(p.id);
+      if(!rows.has(sid))rows.set(sid,{sid,name:this.states16.list[sid].name,owner:st.own,provinces:[],vp:0,claimedBy:null,action:null});
+      const row=rows.get(sid);row.provinces.push(p.id);row.vp+=p.vp;
+    }
+    return [...rows.values()];
+  };
+  Engine.prototype.openConference16=function(losers,winners){
+    const states=this.conferenceStates16(losers),score=this.s.warScore16||{};
+    const contribution=Object.fromEntries(winners.map(w=>[w,5+sum(losers.map(l=>score[w+'|'+l]||0))]));
+    const totalContribution=sum(Object.values(contribution)),budget=sum(states.map(s=>4+s.vp*2))*.9;
+    const participants=winners.map(w=>{
+      const goal=this.nation(w).justifications.find(j=>losers.includes(j.target))?.goal||null;
+      return {id:w,points:Math.round((20+budget*contribution[w]/totalContribution)*(goal?1.25:1)),start:0,passed:false,goal};
+    }).sort((a,b)=>b.points-a.points||a.id.localeCompare(b.id));
+    for(const p of participants)p.start=p.points;
+    for(const l of losers)this.nation(l).inConference16=true;
+    this.s.conference16={id:this.s.uid++,day:this.s.day,losers,participants,states,puppets:[],liberated:[],log:[],turn:0};
+    this.log('Conférence de paix : '+losers.map(l=>this.info(l).name).join(', ')+'.','war');
+    if(participants.some(p=>p.id===this.s.player)){this.s.paused=true;}
+    this.conferenceAdvance16();
+  };
+  Engine.prototype.blocked16=function(){return !!this.s.conference16?.participants.some(p=>p.id===this.s.player&&!p.passed);};
+  Engine.prototype.conferenceCost16=function(actor,row){
+    const conf=this.s.conference16,controlled=row.provinces.filter(pid=>this.s.provinces[pid].ctrl===actor||this.allies(actor,this.s.provinces[pid].ctrl)&&this.s.provinces[pid].ctrl===actor).length;
+    const core=row.provinces.some(pid=>this.isCore(actor,pid)),adjacent=row.provinces.some(pid=>this.prov[pid].neighbors.some(n=>this.s.provinces[n].ctrl===actor||this.s.provinces[n].own===actor));
+    const goal=conf.participants.find(p=>p.id===actor)?.goal;
+    let cost=(4+row.vp*2)*(controlled*2>=row.provinces.length?.6:1.25)*(core?.5:1)*(adjacent?.9:1.2);
+    if(goal==='conquest')cost*=.85;if(goal==='border'&&adjacent)cost*=.7;
+    return Math.max(1,Math.round(cost));
+  };
+  Engine.prototype.puppetCost16=function(actor,loser){
+    const rows=this.s.conference16.states.filter(r=>r.owner===loser&&!r.claimedBy);
+    const goal=this.s.conference16.participants.find(p=>p.id===actor)?.goal;
+    return Math.max(1,Math.round(sum(rows.map(r=>this.conferenceCost16(actor,r)))*.55*(goal==='puppet'?.7:1)));
+  };
+  Engine.prototype.releasableRows16=function(def){
+    const admins=new Set(def.admins);
+    return this.s.conference16.states.filter(r=>!r.claimedBy&&r.provinces.some(pid=>admins.has(this.prov[pid].administration)));
+  };
+  Engine.prototype.conferenceAct16=function(actor,action){
+    const conf=this.s.conference16,p=conf.participants.find(x=>x.id===actor);assert(conf&&p&&!p.passed,'Aucune conférence en cours pour ce pays.');
+    const name=this.info(actor).name;
+    if(action.type==='pass'){p.passed=true;conf.log.push(name+' se retire des négociations.');return;}
+    if(action.type==='take'){
+      const row=conf.states.find(r=>r.sid===action.sid);assert(row&&!row.claimedBy,'État déjà attribué.');
+      const cost=this.conferenceCost16(actor,row);assert(p.points>=cost,'Points insuffisants ('+cost+').');
+      p.points-=cost;row.claimedBy=actor;row.action='take';conf.log.push(name+' obtient '+row.name+' ('+cost+' points).');return;
+    }
+    if(action.type==='puppet'){
+      assert(conf.losers.includes(action.loser),'Pays vaincu inconnu.');
+      const rows=conf.states.filter(r=>r.owner===action.loser&&!r.claimedBy);assert(rows.length,'Aucun territoire disponible.');
+      const cost=this.puppetCost16(actor,action.loser);assert(p.points>=cost,'Points insuffisants ('+cost+').');
+      p.points-=cost;for(const r of rows){r.claimedBy=actor;r.action='puppet';}
+      conf.puppets.push({loser:action.loser,overlord:actor});conf.log.push(name+' impose un gouvernement soumis à '+this.info(action.loser).name+' ('+cost+' points).');return;
+    }
+    if(action.type==='liberate'){
+      const def=(this.catalog.releasables||[]).find(r=>r.id===action.id);assert(def&&!this.nation(def.id)?.alive,'Nation inconnue ou déjà indépendante.');
+      const rows=this.releasableRows16(def);assert(rows.length,'Aucun territoire de cette nation n’est en jeu.');
+      const cost=Math.max(1,Math.round(sum(rows.map(r=>this.conferenceCost16(actor,r)))*.5));assert(p.points>=cost,'Points insuffisants ('+cost+').');
+      p.points-=cost;for(const r of rows){r.claimedBy=actor;r.action='liberate:'+def.id;}
+      conf.liberated.push({id:def.id,by:actor,puppet:!!action.puppet});conf.log.push(name+' libère '+def.name+(action.puppet?' sous sa tutelle':'')+' ('+cost+' points).');return;
+    }
+    throw new Error('Action de conférence inconnue.');
+  };
+  Engine.prototype.conferenceAI16=function(actor){
+    const conf=this.s.conference16,p=conf.participants.find(x=>x.id===actor),c=this.nation(actor);
+    let best=null;
+    for(const row of conf.states){
+      if(row.claimedBy)continue;const cost=this.conferenceCost16(actor,row);if(cost>p.points)continue;
+      const controlled=row.provinces.some(pid=>this.s.provinces[pid].ctrl===actor),core=row.provinces.some(pid=>this.isCore(actor,pid));
+      const adjacent=row.provinces.some(pid=>this.prov[pid].neighbors.some(n=>this.s.provinces[n].ctrl===actor));
+      const value=(controlled?3:0)+(core?5:0)+(adjacent?2:0)+row.vp/5-cost/25;
+      if(value>1&&(!best||value>best.value))best={value,action:{type:'take',sid:row.sid}};
+    }
+    for(const loser of conf.losers){
+      const rows=conf.states.filter(r=>r.owner===loser&&!r.claimedBy);if(rows.length<4)continue;
+      const cost=this.puppetCost16(actor,loser);if(cost>p.points)continue;
+      const value=(p.goal==='puppet'?6:2)+rows.length/4+(c.ideology!==this.nation(loser).ideology?1:0)-cost/40;
+      if(!best||value>best.value)best={value,action:{type:'puppet',loser}};
+    }
+    if(c.ideology==='democratic')for(const def of this.catalog.releasables||[]){
+      if(this.nation(def.id)?.alive)continue;const rows=this.releasableRows16(def);if(!rows.length)continue;
+      const cost=Math.max(1,Math.round(sum(rows.map(r=>this.conferenceCost16(actor,r)))*.5));if(cost>p.points)continue;
+      const value=1.5+rows.length/3-cost/30;
+      if(!best||value>best.value)best={value,action:{type:'liberate',id:def.id,puppet:false}};
+    }
+    this.conferenceAct16(actor,best?.action||{type:'pass'});
+  };
+  Engine.prototype.conferenceAdvance16=function(){
+    const conf=this.s.conference16;if(!conf)return;
+    for(let guard=0;guard<2000;guard++){
+      const open=conf.participants.filter(p=>!p.passed);
+      if(!open.length||conf.states.every(r=>r.claimedBy)){this.closeConference16();return;}
+      const p=open.sort((a,b)=>b.points-a.points||a.id.localeCompare(b.id))[0];
+      if(p.points<1){p.passed=true;continue;}
+      if(p.id===this.s.player)return;
+      this.conferenceAI16(p.id);
+    }
+    this.closeConference16();
+  };
+  Engine.prototype.releaseCountry16=function(def,pids,subject=null){
+    const parentId=this.s.provinces[pids[0]].own||this.s.provinces[pids[0]].ctrl,parent=this.nation(parentId)||this.nation(this.s.provinces[pids[0]].ctrl);
+    const capital=pids.map(i=>this.prov[i]).sort((a,b)=>b.vp-a.vp||a.id-b.id)[0];
+    const d=clone(parent.identity);
+    Object.assign(d,{id:def.id,name:def.name,leader:def.leader||'Gouvernement provisoire',wiki:def.leader||def.name,role:'Chef du gouvernement',cabinet:null,headOfState:null,ideology:def.ideology||'authoritarian',color:def.color||'#969075',
+      capital:capital.id,capitalName:capital.name,lon:capital.x,lat:capital.y,provinces:pids,cores:pids,commanders:[],divisions:0,civ:0,mil:0,fleet:0,air:0,manpower:Math.max(40000,pids.length*15000),faction:subject?this.nation(subject).faction:'none',exile:false,
+      description:'État libéré ou recréé au cours de la campagne.'});
+    const existing=this.nation(def.id);
+    const c=existing||this.createNation(d);
+    if(existing){Object.assign(existing.identity,d);existing.alive=true;existing.capitulated16=null;existing.exile16=null;}
+    else this.s.countries[def.id]=c;
+    c.subject=subject;c.autonomy16=subject?40:null;c.ideology=d.ideology;
+    if(!existing)for(const k in c.parties)c.parties[k]=k===d.ideology?60:13.3;
+    for(const pid of pids){const st=this.s.provinces[pid];st.ctrl=def.id;st.own=def.id;st.resistance=0;st.compliance=80;}
+    const army=this.addArmy(def.id);
+    const template=c.templates[0],count=Math.min(8,Math.max(1,Math.round(pids.length/4)));
+    for(let i=0;i<count;i++){const u=this.spawn(def.id,pids[i%pids.length],template,60);u.army=army.id;}
+    this.updateStats();this.defaultProduction(def.id);this.frontCache={};
+    return c;
+  };
+  Engine.prototype.closeConference16=function(){
+    const conf=this.s.conference16;if(!conf)return;
+    for(const row of conf.states){
+      if(row.action==='take'){for(const pid of row.provinces){const st=this.s.provinces[pid];st.ctrl=row.claimedBy;st.own=row.claimedBy;st.compliance=25;st.resistance=10;}}
+    }
+    for(const lib of conf.liberated){
+      const def=this.catalog.releasables.find(r=>r.id===lib.id),pids=conf.states.filter(r=>r.action==='liberate:'+lib.id).flatMap(r=>r.provinces);
+      if(def&&pids.length)this.releaseCountry16(def,pids,lib.puppet?lib.by:null);
+    }
+    for(const loser of conf.losers){
+      const c=this.nation(loser),rows=conf.states.filter(r=>r.owner===loser&&(!r.claimedBy||r.action==='puppet'));
+      for(const r of rows)for(const pid of r.provinces){const st=this.s.provinces[pid];st.ctrl=loser;st.own=loser;st.resistance=0;}
+      const puppet=conf.puppets.find(x=>x.loser===loser);
+      c.inConference16=false;c.capitulated16=null;c.exile16=null;
+      if(rows.length){
+        c.alive=true;c.capitulated16=null;c.exile16=null;
+        c.subject=puppet?puppet.overlord:null;c.autonomy16=puppet?30:null;c.faction=puppet?this.nation(puppet.overlord).faction:'none';
+        if(!this.s.provinces[c.identity.capital]||this.s.provinces[c.identity.capital].ctrl!==loser){const home=this.owned(loser).sort((a,b)=>b.vp-a.vp)[0];Object.assign(c.identity,{capital:home.id,capitalName:home.name,lon:home.x,lat:home.y});}
+        for(const u of this.units(loser)){u.pid=this.cap(loser);u.path=[];}
+        if(!this.units(loser).length){const a=this.addArmy(loser);for(let i=0;i<3;i++){const u=this.spawn(loser,this.cap(loser),c.templates[0],50);u.army=a.id;}}
+      }else{
+        c.alive=false;this.s.units=this.s.units.filter(u=>u.owner!==loser);this.s.wings=this.s.wings.filter(w=>w.owner!==loser);this.s.fleets=this.s.fleets.filter(f=>f.owner!==loser);
+      }
+    }
+    const winners=conf.participants.map(p=>p.id);
+    // Occupied land of the winning side returns to its rightful owner.
+    for(const st of this.s.provinces){
+      const owner=this.nation(st.own);
+      if(owner&&st.own!==st.ctrl&&!conf.losers.includes(st.own)&&(winners.includes(st.ctrl)||conf.losers.includes(st.ctrl))&&!this.war(st.own,st.ctrl)){
+        st.ctrl=st.own;if(!owner.alive)this.restore16(st.own);
+      }
+    }
+    for(const [id,c] of Object.entries(this.s.countries))if(c.capitulated16&&!c.inConference16&&!conf.losers.includes(id)&&this.owned(id).length&&this.sideOf16(id).some(k=>winners.includes(k)))this.restore16(id);
+    this.s.wars=this.s.wars.filter(w=>!((winners.includes(w.a)&&conf.losers.includes(w.b))||(winners.includes(w.b)&&conf.losers.includes(w.a))));
+    for(const l of conf.losers)for(const w of winners){const a=this.nation(l),b=this.nation(w);if(a&&b){a.pacts.push({target:w,until:this.s.day+365});b.pacts.push({target:l,until:this.s.day+365});}}
+    for(const key of Object.keys(this.s.warScore16||{})){const [a,b]=key.split('|');if(conf.losers.includes(a)||conf.losers.includes(b))delete this.s.warScore16[key];}
+    this.s.peaceLog16??=[];this.s.peaceLog16.unshift({day:this.s.day,losers:conf.losers,log:conf.log.slice(-40)});if(this.s.peaceLog16.length>12)this.s.peaceLog16.length=12;
+    this.s.conference16=null;
+    this.log('Le traité de paix est signé : '+conf.log.length+' clauses.','success');
+    if(conf.losers.includes(this.s.player)&&!this.nation().alive){this.s.outcome={type:'defeat',day:this.s.day,winner:winners[0]};this.s.paused=true;}
+    for(const u of this.s.units)if(!this.access(u.owner,this.s.provinces[u.pid].ctrl)&&!this.war(u.owner,this.s.provinces[u.pid].ctrl)){u.pid=this.cap(u.owner);u.path=[];}
+    this.s.battles=[];this.frontCache={};this.updateStats();this.indexUnits();this.computeSupply();
+  };
+  Engine.command16('peaceTake',function(p,id){this.conferenceAct16(id,{type:'take',sid:p.sid});this.conferenceAdvance16();});
+  Engine.command16('peacePuppet',function(p,id){this.conferenceAct16(id,{type:'puppet',loser:p.loser});this.conferenceAdvance16();});
+  Engine.command16('peaceLiberate',function(p,id){this.conferenceAct16(id,{type:'liberate',id:p.id,puppet:!!p.puppet});this.conferenceAdvance16();});
+  Engine.command16('peacePass',function(p,id){this.conferenceAct16(id,{type:'pass'});this.conferenceAdvance16();});
+  Engine.command16('peaceAuto',function(p,id){const conf=this.s.conference16;assert(conf,'Aucune conférence en cours.');
+    for(let guard=0;guard<500&&this.s.conference16&&conf.participants.some(x=>x.id===id&&!x.passed);guard++){this.conferenceAI16(id);this.conferenceAdvance16();}});
+
+  // ---------------------------------------------------------------------------
+  // Diplomacy: war goals, volunteers, expeditionary forces, subject autonomy,
+  // releasable nations, ideological civil wars and coups.
+  // ---------------------------------------------------------------------------
+  const WAR_GOALS={conquest:{name:'Conquête',days:1,tension:5},puppet:{name:'Vassalisation',days:.8,tension:3},border:{name:'Rectification de frontière',days:.5,tension:2}};
+  Engine.WAR_GOALS16=WAR_GOALS;
+  Engine.command16('justify',function(p,id,c){
+    const goal=WAR_GOALS[p.goal||'conquest'];assert(goal,'But de guerre inconnu.');
+    const t=this.nation(p.target);assert(t?.alive&&p.target!==id,'Pays cible invalide.');
+    assert(!this.allies(id,p.target)&&!this.war(id,p.target),'Objectif invalide.');assert(!c.justifications.some(j=>j.target===p.target),'Justification déjà engagée.');
+    if(p.goal==='border')assert(this.owned(id).some(q=>q.neighbors.some(n=>this.s.provinces[n].ctrl===p.target)),'Une rectification de frontière exige une frontière commune.');
+    const threatened=this.active().some(o=>this.allies(id,o)&&this.war(o,p.target));
+    if(c.ideology==='democratic')assert(this.s.tension>=40||threatened,'Une démocratie exige 40 % de tension mondiale ou un allié attaqué.');
+    pp(c,40);c.pp-=40;
+    c.justifications.push({target:p.target,progress:0,days:Math.round((c.ideology==='democratic'?120:60)*goal.days),goal:p.goal||'conquest'});
+    this.s.tension=clamp(this.s.tension+goal.tension,0,100);
+  });
+  // Volunteers and expeditionary forces: divisions lent to another country.
+  Engine.prototype.lend16=function(home,target,units,kind){
+    const t=this.nation(target);
+    let army=this.s.armies.find(a=>a.owner===target&&a.name.startsWith(kind==='volunteer'?'Volontaires':'Corps expéditionnaire')&&a.name.endsWith(this.info(home).name));
+    if(!army){army=this.addArmy(target,(kind==='volunteer'?'Volontaires de ':'Corps expéditionnaire de ')+this.info(home).name);army.auto=true;army.target=this.enemies(target)[0]||null;army.order=army.target?'attack':'defend';}
+    const landing=this.cap(target);
+    for(const u of units){
+      u.lent16={home,kind,day:this.s.day};u.owner=target;u.army=army.id;u.path=[];u.landing16=null;
+      if(!this.access(target,this.s.provinces[u.pid].ctrl))u.pid=landing;
+    }
+    this.indexUnits();
+  };
+  Engine.prototype.recall16=function(u){
+    const home=u.lent16.home;if(!this.nation(home)?.alive){u.strength=0;return;}
+    u.owner=home;u.lent16=null;u.path=[];u.landing16=null;
+    u.army=this.s.armies.find(a=>a.owner===home)?.id??this.addArmy(home).id;
+    if(!this.access(home,this.s.provinces[u.pid].ctrl))u.pid=this.cap(home);
+  };
+  Engine.command16('volunteers',function(p,id,c){
+    const t=this.nation(p.target);assert(t?.alive&&p.target!==id,'Pays cible invalide.');
+    assert(this.enemies(p.target).length,'Ce pays n’est pas en guerre.');
+    assert(!this.enemies(p.target).some(e=>this.war(id,e))&&!this.war(id,p.target),'Vous êtes déjà partie prenante : utilisez un corps expéditionnaire.');
+    assert(this.s.tension>=20||t.ideology===c.ideology,'Il faut 20 % de tension mondiale ou une idéologie commune.');
+    const units=[...new Set(p.ids||[])].map(uid=>this.s.units.find(u=>u.id===uid&&u.owner===id));
+    assert(units.length&&units.every(Boolean),'Sélectionnez vos divisions.');
+    const lent=this.s.units.filter(u=>u.lent16?.home===id&&u.lent16.kind==='volunteer').length;
+    assert(lent+units.length<=Math.max(2,Math.floor(this.units(id).length*.15)),'Les volontaires sont limités à 15 % de vos divisions.');
+    pp(c,20);c.pp-=20;this.lend16(id,p.target,units,'volunteer');c.relations[p.target]=clamp((c.relations[p.target]||0)+15,-100,100);
+  });
+  Engine.command16('expeditionary',function(p,id,c){
+    assert(this.allies(id,p.target)&&p.target!==id&&this.nation(p.target)?.alive,'Un corps expéditionnaire rejoint un allié de faction.');
+    const units=[...new Set(p.ids||[])].map(uid=>this.s.units.find(u=>u.id===uid&&u.owner===id));
+    assert(units.length&&units.every(Boolean),'Sélectionnez vos divisions.');
+    this.lend16(id,p.target,units,'expedition');
+  });
+  Engine.command16('recall',function(p,id){
+    const units=this.s.units.filter(u=>u.lent16?.home===id&&(!p.ids||p.ids.includes(u.id)));assert(units.length,'Aucune division prêtée.');
+    for(const u of units)this.recall16(u);this.indexUnits();
+  });
+  Engine.onDay16(function(){
+    for(const u of this.s.units){
+      if(!u.lent16)continue;
+      const home=u.lent16.home,host=u.owner;
+      if(!this.nation(host)?.alive||!this.nation(home)?.alive||this.war(home,host)||(u.lent16.kind==='volunteer'&&!this.enemies(host).length)||(u.lent16.kind==='expedition'&&!this.allies(home,host)))this.recall16(u);
+    }
+  });
+  // Subjects: autonomy from 0 (integrated) to 100 (independence).
+  Engine.SUBJECT_LEVELS16=[[0,'Protectorat intégré'],[20,'État fantoche'],[45,'Protectorat'],[70,'Dominion']];
+  Engine.prototype.subjectLevel16=function(c){let name='';for(const [n,label] of Engine.SUBJECT_LEVELS16)if((c.autonomy16??40)>=n)name=label;return name;};
+  Engine.onDay16(function(){
+    if(this.s.day%30!==0)return;
+    for(const [id,c] of Object.entries(this.s.countries)){
+      if(!c.alive||!c.subject)continue;
+      const overlord=this.nation(c.subject);if(!overlord?.alive){c.subject=null;c.autonomy16=null;continue;}
+      c.autonomy16??=40;
+      const garrison=this.units(c.subject).filter(u=>this.s.provinces[u.pid].ctrl===id).length;
+      const drift=this.units(id).length*.08+(c.stability-50)*.03-garrison*.15-(this.enemies(c.subject).length&&this.allies(id,c.subject)?.3:0);
+      c.autonomy16=clamp(c.autonomy16+drift,0,100);
+      if(c.autonomy16>=100){c.subject=null;c.autonomy16=null;this.log(this.info(id).name+' obtient sa pleine indépendance.','event');}
+    }
+  });
+  Engine.command16('autonomy',function(p,id,c){
+    const t=this.nation(p.target);assert(t?.alive&&t.subject===id,'Ce pays n’est pas un sujet.');assert([-1,1].includes(p.delta),'Variation invalide.');
+    pp(c,40);c.pp-=40;t.autonomy16=clamp((t.autonomy16??40)+p.delta*10,0,99);
+    if(p.delta<0)t.stability=clamp(t.stability-3,0,100);
+  });
+  Engine.command16('annexSubject',function(p,id,c){
+    const t=this.nation(p.target);assert(t?.alive&&t.subject===id,'Ce pays n’est pas un sujet.');
+    assert((t.autonomy16??40)<20,'L’autonomie doit être inférieure à 20.');pp(c,120);c.pp-=120;this.annex(id,p.target);
+  });
+  Engine.command16('releaseSubject',function(p,id,c){
+    const t=this.nation(p.target);assert(t?.alive&&t.subject===id,'Ce pays n’est pas un sujet.');
+    t.subject=null;t.autonomy16=null;t.faction='none';c.relations[p.target]=clamp((c.relations[p.target]||0)+40,-100,100);
+  });
+  Engine.command16('demandAutonomy',function(p,id,c){
+    assert(c.subject,'Votre pays n’est pas un sujet.');pp(c,50);c.pp-=50;
+    c.autonomy16=clamp((c.autonomy16??40)+12,0,100);c.relations[c.subject]=clamp((c.relations[c.subject]||0)-10,-100,100);
+  });
+  // Resource extraction by the overlord (game abstraction).
+  const updateStats16=Engine.prototype.updateStats;
+  Engine.prototype.updateStats=function(){
+    updateStats16.call(this);
+    for(const [id,c] of Object.entries(this.s.countries)){
+      if(!c.alive||!c.subject||!c.stats)continue;const overlord=this.nation(c.subject);if(!overlord?.alive||!overlord.stats)continue;
+      const share=(100-(c.autonomy16??40))/100*.3;
+      for(const r of RESOURCES){const taken=c.stats[r]*share;c.stats[r]-=taken;overlord.stats[r]+=taken;}
+    }
+  };
+  // Releasable nations from one's own territory.
+  Engine.prototype.releasableFor16=function(id){
+    const total=this.owned(id).length;
+    return (this.catalog.releasables||[]).filter(def=>!this.nation(def.id)?.alive).map(def=>{
+      const admins=new Set(def.admins),pids=this.prov.filter(p=>admins.has(p.administration)&&this.s.provinces[p.id].ctrl===id).map(p=>p.id);
+      return {def,pids};
+    }).filter(x=>x.pids.length&&x.pids.length<total);
+  };
+  Engine.command16('releaseNation',function(p,id,c){
+    const entry=this.releasableFor16(id).find(x=>x.def.id===p.id);assert(entry,'Nation non libérable.');
+    assert(!entry.pids.some(pid=>this.s.battles.some(b=>b.pid===pid)),'Combats en cours sur ce territoire.');
+    pp(c,50);c.pp-=50;
+    for(const u of this.units(id))if(entry.pids.includes(u.pid)){u.pid=this.cap(id);u.path=[];}
+    this.releaseCountry16(entry.def,entry.pids,p.puppet?id:null);
+    if(p.puppet)this.nation(entry.def.id).faction=c.faction==='none'?'Pacte '+id:c.faction;
+    if(p.puppet&&c.faction==='none')c.faction='Pacte '+id;
+    this.log(entry.def.name+' est '+(p.puppet?'libéré sous votre tutelle':'désormais indépendant')+'.','success');
+  });
+  // Ideological civil wars.
+  const CIVIL_NAMES={communist:'gouvernement révolutionnaire',fascist:'régime national',democratic:'gouvernement démocratique',authoritarian:'junte militaire'};
+  Engine.prototype.civilWar16=function(id,ideology,sponsor=null){
+    const base=this.nation(id);if(!base?.alive)return null;
+    const candidates=[id[0]+'R'+id[2],'R'+id.slice(0,2),'X'+id.slice(1),id.slice(0,2)+'X',id[0]+'Z'+id[2]];
+    const tag=candidates.find(k=>/^[A-Z][A-Z0-9]{2}$/.test(k)&&!this.s.countries[k]&&!this.defs[k]);if(!tag)return null;
+    const states=[...new Set(this.owned(id).map(p=>this.stateId(p.id)))].map(sid=>this.states16.list[sid]);
+    const capital=this.prov[this.cap(id)];
+    states.sort((a,b)=>distance(this.prov[b.capital],capital)-distance(this.prov[a.capital],capital));
+    const share=clamp((base.parties[ideology]||40)/100,.3,.55),total=sum(states.map(s=>s.score));
+    const rebelStates=[];let acc=0;for(const st of states){if(acc>=total*share)break;if(st.provinces.includes(capital.id))continue;rebelStates.push(st);acc+=st.score;}
+    const pids=rebelStates.flatMap(st=>st.provinces.filter(pid=>this.s.provinces[pid].ctrl===id));if(!pids.length)return null;
+    const def={id:tag,name:base.identity.name+' — '+CIVIL_NAMES[ideology],ideology,color:{communist:'#a8574c',fascist:'#6b5a3c',democratic:'#5d84a8',authoritarian:'#7a7a52'}[ideology],leader:'Comité '+(IDEO_FR[ideology]||ideology)};
+    const rebel=this.releaseCountry16(def,pids,null);
+    rebel.identity.cores=[...new Set([...(base.identity.cores||this.prov.filter(p=>p.owner===id).map(p=>p.id))])];
+    rebel.faction=sponsor?this.nation(sponsor).faction:'none';
+    for(const k of Object.keys(rebel.stock)){rebel.stock[k]=(base.stock[k]||0)*share;base.stock[k]=(base.stock[k]||0)*(1-share);}
+    rebel.manpower=base.manpower*share;base.manpower*=1-share;rebel.pool=base.pool*share;base.pool*=1-share;
+    const army=this.s.armies.find(a=>a.owner===tag);
+    for(const u of this.units(id))if(pids.includes(u.pid)){u.owner=tag;u.army=army.id;u.path=[];}
+    army.target=id;army.order='attack';army.auto=true;
+    base.parties[ideology]=Math.max(5,(base.parties[ideology]||0)*.4);
+    this.declareWar(tag,id,true,false);
+    if(sponsor&&this.nation(sponsor)?.alive)for(const k of [sponsor])if(!this.war(k,id)&&!this.allies(k,id))this.nation(k).relations[tag]=100;
+    this.log('Guerre civile : '+def.name+' se soulève contre le gouvernement de '+base.identity.name+'.','war');
+    return rebel;
+  };
+  const IDEO_FR={communist:'révolutionnaire',fascist:'national',democratic:'démocratique',authoritarian:'militaire'};
+  Engine.onDay16(function(){
+    if(this.s.day%30!==15)return;
+    for(const id of this.active()){
+      const c=this.nation(id);if(c.subject||c.capitulated16||id===this.s.player&&this.s.historical&&this.s.day<365)continue;
+      const rival=Object.keys(c.parties).filter(k=>k!==c.ideology).sort((a,b)=>c.parties[b]-c.parties[a])[0];
+      if(rival&&c.parties[rival]>=60&&c.stability<35&&this.owned(id).length>=6)this.civilWar16(id,rival);
+    }
+  });
+  Engine.command16('coup',function(p,id,c){
+    const t=this.nation(p.target);assert(t?.alive&&p.target!==id,'Pays cible invalide.');assert(!this.war(id,p.target),'Impossible en guerre.');
+    assert((c.intel[p.target]||0)>=60,'Il faut 60 % de renseignement sur ce pays.');assert(t.ideology!==c.ideology,'Ce pays partage déjà votre idéologie.');
+    assert((t.parties[c.ideology]||0)>=30,'Votre courant doit dépasser 30 % dans ce pays.');
+    pp(c,100);c.pp-=100;c.intel[p.target]-=40;
+    const rebel=this.civilWar16(p.target,c.ideology,id);assert(rebel,'Le coup d’État a échoué.');
+  });
+  Engine.invariant16(function(state){
+    for(const p of state.provinces)assert(state.countries[p.own],'Propriétaire de jure invalide.');
+    for(const [id,c] of Object.entries(state.countries)){
+      if(c.autonomy16!=null)assert(finite(c.autonomy16,0,100),'Autonomie invalide.');
+      if(c.exile16)assert(state.countries[c.exile16.host],'Gouvernement en exil invalide.');
+    }
+    for(const u of state.units)if(u.lent16)assert(state.countries[u.lent16.home]&&['volunteer','expedition'].includes(u.lent16.kind),'Division prêtée invalide.');
+    const conf=state.conference16;
+    if(conf){assert(Array.isArray(conf.losers)&&Array.isArray(conf.participants)&&Array.isArray(conf.states),'Conférence invalide.');for(const r of conf.states)assert(Array.isArray(r.provinces)&&r.provinces.every(pid=>this.prov[pid]),'État de conférence invalide.');}
   });
 
   // ---------------------------------------------------------------------------

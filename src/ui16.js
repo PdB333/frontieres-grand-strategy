@@ -149,11 +149,7 @@ renderPanel=function(force=false){
   if(!S)return;
   for(const extra of PANEL_EXTRAS16[tab]||[]){const html=extra();if(html)$('panel').insertAdjacentHTML('beforeend',html);}
 };
-// Imports of the six resources from the diplomacy panel.
-panelExtras16('diplomacy',()=>{
-  const atWar=war(S.player,target);
-  return `<div class="sectionlabel">Importations stratégiques</div><div class="grid2">${Object.entries(RES16).map(([k,n])=>btn('Importer 4 '+esc(n.toLowerCase()),'trade',{target,resource:k},'small',atWar||target===S.player)).join('')}</div><small>Chaque contrat coûte une usine civile ; l’exportateur doit disposer d’un surplus exportable selon sa loi commerciale.</small>`;
-});
+
 
 renderMapModes();renderPanel();
 
@@ -456,6 +452,84 @@ ACTIONS16.push(async(action,p)=>{
     case 'airMission16':{const mission=$('air-mission-'+p.id).value;await cmd('airMission',{id:p.id,mission,zone:$('air-zone-'+p.id).value,seaZone:$('air-sea-'+p.id)?.value});toast('Mission aérienne affectée.');renderPanel(true);return true;}
     case 'invasionTool16':beginTargetTool16('invasion');return true;
     case 'paradropTool16':beginTargetTool16('paradrop');return true;
+  }
+  return false;
+});
+
+/* ---- Peace conference, exile and diplomacy ---- */
+const WAR_GOALS16={conquest:'Conquête',puppet:'Vassalisation',border:'Rectification de frontière'};
+const subjectLevel16=c=>{let name='';for(const [n,label] of Rules.SUBJECT_LEVELS16)if((c.autonomy16??40)>=n)name=label;return name;};
+function conferenceCost16(actor,row){
+  const conf=S.conference16,controlled=row.provinces.filter(pid=>S.provinces[pid].ctrl===actor).length;
+  const core=row.provinces.some(pid=>isCore16(actor,pid)),adjacent=row.provinces.some(pid=>WORLD.provinces[pid].neighbors.some(n=>S.provinces[n].ctrl===actor||S.provinces[n].own===actor));
+  const goal=conf.participants.find(p=>p.id===actor)?.goal;
+  let cost=(4+row.vp*2)*(controlled*2>=row.provinces.length?.6:1.25)*(core?.5:1)*(adjacent?.9:1.2);
+  if(goal==='conquest')cost*=.85;if(goal==='border'&&adjacent)cost*=.7;
+  return Math.max(1,Math.round(cost));
+}
+function showConference16(){
+  const conf=S.conference16;if(!conf)return;pauseGame();
+  const me=conf.participants.find(p=>p.id===S.player),open=me&&!me.passed;
+  const rows=[...conf.states].sort((a,b)=>(a.claimedBy?1:0)-(b.claimedBy?1:0)||b.vp-a.vp);
+  const puppetCost=loser=>Math.max(1,Math.round(total(conf.states.filter(r=>r.owner===loser&&!r.claimedBy).map(r=>conferenceCost16(S.player,r)))*.55*(me?.goal==='puppet'?.7:1)));
+  const libs=(CATALOG.releasables||[]).filter(def=>!nation(def.id)?.alive).map(def=>{const admins=new Set(def.admins),list=conf.states.filter(r=>!r.claimedBy&&r.provinces.some(pid=>admins.has(WORLD.provinces[pid].administration)));return {def,list,cost:Math.max(1,Math.round(total(list.map(r=>conferenceCost16(S.player,r)))*.5))};}).filter(x=>x.list.length);
+  modal(`${modalHead('Conférence de paix','DIPLOMATIE / TRAITÉ / '+dateText(conf.day))}
+    <p class="note">Vaincus : ${conf.losers.map(l=>esc(countryName(l))).join(', ')}. Chaque vainqueur dépense ses points à tour de rôle selon sa contribution à la guerre. Les États que vous occupez, vos territoires nationaux et les États voisins coûtent moins cher. Les États non réclamés reviennent au vaincu.</p>
+    <div class="grid3" style="margin:12px 0">${conf.participants.map(p=>`<div class="card stat ${p.id===S.player?'gold':''}">${p.points} / ${p.start}<small>${esc(countryName(p.id).toUpperCase())}${p.goal?' / '+esc(WAR_GOALS16[p.goal]||p.goal):''}${p.passed?' / RETIRÉ':''}</small></div>`).join('')}</div>
+    ${open?`<div class="row wrap">${btn('Passer mon tour définitivement','peacePass',{},'small')}${btn('Laisser l’état-major décider','peaceAuto',{},'small primary')}</div>`:'<p class="note">Vous ne participez plus aux négociations. Le traité sera signé après le dernier tour.</p>'}
+    ${open?`<div class="sectionlabel">Vassalisation</div><div class="row wrap">${conf.losers.filter(l=>conf.states.some(r=>r.owner===l&&!r.claimedBy)).map(l=>btn('Vassaliser '+esc(countryName(l))+' / '+puppetCost(l)+' pts','peacePuppet',{loser:l},'small',puppetCost(l)>me.points)).join('')}</div>`:''}
+    ${open&&libs.length?`<div class="sectionlabel">Libération de nations</div><div class="stack">${libs.map(x=>`<div class="card row between"><span>${esc(x.def.name)}<small style="display:block">${x.list.length} État(s) / ${x.cost} points</small></span><div class="row">${btn('Indépendante','peaceLiberate',{id:x.def.id,puppet:false},'small',x.cost>me.points)}${btn('Sous tutelle','peaceLiberate',{id:x.def.id,puppet:true},'small',x.cost>me.points)}</div></div>`).join('')}</div>`:''}
+    <div class="sectionlabel">États en jeu / ${rows.length}</div><table class="table"><thead><tr><th>État</th><th>Vaincu</th><th>Occupant</th><th>PV</th><th>Coût</th><th></th></tr></thead><tbody>${rows.map(r=>{const ctrl=S.provinces[r.provinces[0]].ctrl,cost=open?conferenceCost16(S.player,r):'';return `<tr><td>${esc(r.name)}</td><td>${esc(countryName(r.owner))}</td><td>${esc(countryName(ctrl))}</td><td>${r.vp}</td><td>${cost}</td><td>${r.claimedBy?tag(countryName(r.claimedBy),r.claimedBy===S.player?'good':''):open?btn('Prendre','peaceTake',{sid:r.sid},'small',cost>me.points):''}</td></tr>`;}).join('')}</tbody></table>
+    <div class="sectionlabel">Clauses</div><div class="stack">${conf.log.slice().reverse().map(l=>`<div class="logentry"><p>${esc(l)}</p></div>`).join('')||'<p class="note">Aucune clause pour le moment.</p>'}</div>`,'conference','wide');
+}
+const onState15=onState;
+onState=function(perf){
+  onState15(perf);
+  const me=S.conference16?.participants.find(p=>p.id===S.player);
+  if(me&&!me.passed&&modalKind!=='conference'&&modalKind!=='event')showConference16();
+  if(!S.conference16&&modalKind==='conference'){$('overlay').style.display='none';modalKind='';}
+};
+DRAW16.push((ctx,zoom)=>{
+  const conf=S?.conference16;if(!conf)return;
+  for(const r of conf.states){const color=r.claimedBy?code(r.claimedBy)?.color||'#c9a96b':'#c85f4a';for(const pid of r.provinces){ctx.fillStyle=color+'66';ctx.fill(geometries[pid].path);ctx.strokeStyle=r.claimedBy?'#f5e3b0':'#ff8f7a';ctx.lineWidth=1.2/zoom;ctx.stroke(geometries[pid].path);}}
+});
+PANELS16.diplomacy=function(){
+  const c=nation(),t=nation(target),atWar=war(S.player,target),friend=allied(S.player,target),rel=c.relations[target]||0,intel=c.intel[target]||0;
+  if(!t)return undefined;
+  const j=c.justifications.find(j=>j.target===target),sel=ownUnits().filter(u=>selected.has(u.id));
+  const lent=S.units.filter(u=>u.lent16?.home===S.player),hosted=S.units.filter(u=>u.owner===S.player&&u.lent16);
+  const subjects=Object.values(S.countries).filter(x=>x.alive&&x.subject===S.player);
+  const tAtWar=S.wars.some(w=>w.a===target||w.b===target);
+  const releasable=(CATALOG.releasables||[]).filter(def=>!nation(def.id)?.alive).map(def=>({def,pids:WORLD.provinces.filter(p=>def.admins.includes(p.administration)&&control(p.id)===S.player).map(p=>p.id)})).filter(x=>x.pids.length&&x.pids.length<owned().length);
+  return panelHeader('Affaires étrangères','Garanties, factions et buts de guerre peuvent transformer un conflit local en guerre mondiale.')+`
+    ${c.exile16?`<div class="card" style="border-color:#c98070"><strong class="bad">Gouvernement en exil</strong><p class="note">Votre gouvernement siège chez ${esc(countryName(c.exile16.host))}. Vos forces poursuivent la guerre ; la victoire de vos alliés vous rendra votre territoire.</p></div>`:''}
+    ${c.subject?`<div class="card stack"><div class="eyebrow">VOTRE STATUT</div>${metric('Puissance tutélaire',esc(countryName(c.subject)))}${metric(esc(subjectLevel16(c)),Math.round(c.autonomy16??40)+' % d’autonomie')}${bar(c.autonomy16??40)}${btn('Revendiquer plus d’autonomie / 50 PP','demandAutonomy',{},'small',c.pp<50)}</div>`:''}
+    ${selectCountries(target,'dip-select',S.player)}
+    <div class="leader-card" style="margin-top:13px">${portrait(target)}<div><h3 style="font-size:20px">${esc(code(target).leader)}</h3><small>${esc(code(target).role)}</small>${tag(atWar?'EN GUERRE':friend?'ALLIÉ':'EN PAIX',atWar?'bad':friend?'good':'')}</div></div>
+    <div class="card" style="margin-top:9px">${metric('Faction',esc(t.faction==='none'?'Aucune':t.faction))}${metric('Idéologie',esc(IDEO[t.ideology]))}${metric('Relations',String(rel),rel>=25?'good':'')}${metric('Renseignement',Math.round(intel)+' %')}${metric('Divisions',friend||intel>=45?String(S.units.filter(u=>u.owner===target).length):'Non confirmé')}${t.subject?metric('Puissance tutélaire',esc(countryName(t.subject))):''}${t.exile16?metric('Statut','En exil'):''}</div>
+    <div class="sectionlabel">Diplomatie</div><div class="grid2">${btn('Relations +25 / 25 PP','relations',{target},'small',atWar)}${btn('Accès militaire / 20 PP','access',{target},'small',atWar)}${btn('Inviter / 75 PP','alliance',{target},'small',atWar||friend||t.faction!=='none')}${btn('Garantir / 40 PP','guarantee',{target},'small',atWar)}${btn('Non-agression / 40 PP','pact',{target},'small',atWar)}${btn('Reconnaissance / 35 PP','spy',{target,mission:'recon'},'small')}</div>
+    <div class="sectionlabel">Buts de guerre</div>${j?`<div class="card"><strong style="font-size:12px">${esc(WAR_GOALS16[j.goal]||'Conquête')} : ${j.progress>=j.days?'objectif prêt':'en cours'}</strong><small style="display:block;margin:7px 0">${j.progress}/${j.days} jours</small>${bar(j.progress/j.days*100)}</div>`:`<div class="card stack"><select id="war-goal">${Object.entries(WAR_GOALS16).map(([k,label])=>`<option value="${k}">${esc(label)}</option>`).join('')}</select>${btn('Justifier ce but de guerre / 40 PP','justify16',{target},'small',atWar||friend)}<small>Les démocraties attendent 40 % de tension mondiale. Un but de guerre donne 25 % de points en plus et des réductions à la conférence de paix.</small></div>`}
+    <div class="stack" style="margin-top:8px">${btn('Déclarer la guerre / 50 PP','confirmWar',{target},'danger small',atWar||friend||!j||j.progress<j.days)}${btn('Négocier un armistice / 50 PP','peace',{target,terms:'white'},'small',!atWar)}${btn('Exiger la soumission / 50 PP','peace',{target,terms:'puppet'},'small',!atWar)}</div>
+    <div class="sectionlabel">Volontaires et corps expéditionnaires</div><div class="card stack"><p class="note">${sel.length} division(s) sélectionnée(s). Les volontaires rejoignent un pays en guerre sans entrer vous-même dans le conflit (15 % de vos divisions au maximum). Un corps expéditionnaire renforce un allié de faction.</p>
+      <div class="row wrap">${btn('Envoyer des volontaires / 20 PP','volunteers',{target,ids:sel.map(u=>u.id)},'small',!sel.length||!tAtWar||atWar)}${btn('Corps expéditionnaire','expeditionary',{target,ids:sel.map(u=>u.id)},'small',!sel.length||!friend||target===S.player)}</div>
+      ${lent.length?`${metric('Divisions prêtées',lent.length)}${btn('Rappeler toutes les divisions prêtées','recall',{},'small')}`:''}${hosted.length?metric('Divisions alliées sous vos ordres',hosted.length):''}</div>
+    ${t.subject===S.player?`<div class="sectionlabel">Sujet : ${esc(countryName(target))}</div><div class="card stack">${metric(esc(subjectLevel16(t)),Math.round(t.autonomy16??40)+' % d’autonomie')}${bar(t.autonomy16??40)}<div class="row wrap">${btn('Réduire l’autonomie / 40 PP','autonomy',{target,delta:-1},'small')}${btn('Accorder de l’autonomie / 40 PP','autonomy',{target,delta:1},'small')}${btn('Annexer / 120 PP','annexSubject',{target},'small danger',(t.autonomy16??40)>=20)}${btn('Libérer','releaseSubject',{target},'small')}</div><small>L’autonomie progresse avec l’armée et la stabilité du sujet ; vos garnisons la freinent. À 100 %, il devient indépendant. Le suzerain prélève une part de ses ressources.</small></div>`:''}
+    ${subjects.length?`<div class="sectionlabel">Vos sujets</div><div class="stack">${subjects.map(x=>`<div class="card row between"><span>${esc(x.identity.name)}<small style="display:block">${esc(subjectLevel16(x))} / ${Math.round(x.autonomy16??40)} %</small></span>${btn(icon('arrow'),'countryDiplomacy',{id:x.identity.id},'small ghost')}</div>`).join('')}</div>`:''}
+    <div class="sectionlabel">Coup d’État</div><div class="card stack"><p class="note">Avec 60 % de renseignement et un courant de votre idéologie au-delà de 30 %, vous pouvez provoquer une guerre civile dans ce pays.</p>${btn('Fomenter un coup d’État / 100 PP','coup',{target},'small danger',atWar||intel<60||t.ideology===c.ideology||(t.parties[c.ideology]||0)<30)}</div>
+    <div class="sectionlabel">Importations stratégiques</div><div class="grid2">${Object.entries(RES16).map(([k,n])=>btn('Importer 4 '+esc(n.toLowerCase()),'trade',{target,resource:k},'small',atWar)).join('')}</div>
+    <div class="sectionlabel">Prêt-bail de matériel</div><div class="card stack"><select id="lease-equipment">${Object.entries(CATALOG.equipment).map(([k,e])=>`<option value="${k}">${esc(e.name)}</option>`).join('')}</select><div class="row between"><small>Quantité quotidienne</small><input id="lease-qty" type="number" min="1" max="500" value="20"></div>${btn('Proposer le prêt-bail','leaseForm',{target},'small',atWar)}</div>${c.lendLease.map(l=>`<div class="card row between" style="margin-top:7px"><small>${num(l.daily)} ${esc(CATALOG.equipment[l.equipment].name)} / jour → ${esc(countryName(l.target))}</small>${btn('×','cancelLease',{id:l.id},'small ghost')}</div>`).join('')}
+    ${releasable.length?`<div class="sectionlabel">Nations libérables de votre territoire</div><div class="stack">${releasable.map(x=>`<div class="card row between"><span>${esc(x.def.name)}<small style="display:block">${x.pids.length} province(s)</small></span><div class="row">${btn('Indépendante / 50 PP','releaseNation16',{id:x.def.id,puppet:false},'small',c.pp<50)}${btn('Sous tutelle / 50 PP','releaseNation16',{id:x.def.id,puppet:true},'small',c.pp<50)}</div></div>`).join('')}</div>`:''}
+    ${(S.peaceLog16||[]).length?`<div class="sectionlabel">Traités signés</div><div class="stack">${S.peaceLog16.map(t=>`<details class="card"><summary>${dateText(t.day)} / ${t.losers.map(l=>esc(countryName(l))).join(', ')}</summary>${t.log.map(l=>`<p class="note">${esc(l)}</p>`).join('')}</details>`).join('')}</div>`:''}`;
+};
+['peaceTake','peacePuppet','peaceLiberate','peacePass','peaceAuto','volunteers','expeditionary','recall','autonomy','annexSubject','releaseSubject','demandAutonomy','coup'].forEach(a=>direct.delete(a));
+ACTIONS16.push(async(action,p)=>{
+  switch(action){
+    case 'peaceTake':case 'peacePuppet':case 'peaceLiberate':case 'peacePass':case 'peaceAuto':await cmd(action,p);if(S.conference16)showConference16();else closeModal();return true;
+    case 'justify16':await cmd('justify',{target:p.target,goal:$('war-goal').value});renderPanel(true);toast('Justification engagée.');return true;
+    case 'volunteers':case 'expeditionary':await cmd(action,p);selected.clear();renderSelection();renderPanel(true);toast(action==='volunteers'?'Volontaires envoyés.':'Corps expéditionnaire transféré.');return true;
+    case 'recall':case 'autonomy':case 'annexSubject':case 'releaseSubject':case 'demandAutonomy':await cmd(action,p);renderPanel(true);return true;
+    case 'coup':if(confirm('Fomenter un coup d’État ? Une guerre civile éclatera dans ce pays.')){await cmd('coup',p);renderPanel(true);}return true;
+    case 'releaseNation16':if(confirm('Libérer cette nation ? Le territoire et les bâtiments lui seront cédés.')){await cmd('releaseNation',p);renderPanel(true);}return true;
   }
   return false;
 });

@@ -461,5 +461,60 @@ for t in catalog['techs']:
     if t['id'] in UNLOCKS:
         t['unlock'] = UNLOCKS[t['id']]
 
+# --- Releasable nations ---------------------------------------------------------------
+# Territory = provinces whose "administration" matches (optionally only from listed owners).
+def rel(rid, name, admins, ideology, color, owners=None, leader='Gouvernement provisoire'):
+    entry = {'id': rid, 'name': name, 'admins': admins, 'ideology': ideology, 'color': color, 'leader': leader}
+    if owners:
+        entry['owners'] = owners
+    return entry
+
+catalog['releasables'] = [
+    rel('SLO', 'Slovaquie', ['Slovakia'], 'authoritarian', '#5d7fa3'),
+    rel('UKR', 'Ukraine', ['Ukraine'], 'authoritarian', '#c7b25c'),
+    rel('BLR', 'Biélorussie', ['Belarus'], 'authoritarian', '#9a8a6a'),
+    rel('AZR', 'Azerbaïdjan', ['Azerbaijan'], 'authoritarian', '#5f9b8f'),
+    rel('KAZ', 'Kazakhstan', ['Kazakhstan'], 'authoritarian', '#6aa0b8'),
+    rel('UZB', 'Ouzbékistan', ['Uzbekistan'], 'authoritarian', '#7b9f6a'),
+    rel('TMS', 'Turkménistan', ['Turkmenistan'], 'authoritarian', '#8aa36f'),
+    rel('KYR', 'Kirghizistan', ['Kyrgyzstan'], 'authoritarian', '#b0705f'),
+    rel('TAJ', 'Tadjikistan', ['Tajikistan'], 'authoritarian', '#a57e5c'),
+    rel('CRO', 'Croatie', ['Croatia'], 'authoritarian', '#7b8fb4'),
+    rel('SLV', 'Slovénie', ['Slovenia'], 'democratic', '#8db08e'),
+    rel('BOS', 'Bosnie', ['Bosnia and Herz.'], 'authoritarian', '#a8a06c'),
+    rel('MNT', 'Monténégro', ['Montenegro'], 'authoritarian', '#9c6a5f'),
+    rel('MKD', 'Macédoine', ['Macedonia', 'Kosovo'], 'authoritarian', '#b38f60'),
+    rel('MOL', 'Moldavie', ['Moldova'], 'authoritarian', '#8c9a6d'),
+    rel('ICE', 'Islande', ['Iceland'], 'democratic', '#7aa3c7'),
+    rel('ALG', 'Algérie', ['Algérie'], 'authoritarian', '#5e9a6e'),
+    rel('MOR', 'Maroc', ['Maroc'], 'authoritarian', '#b0644e'),
+    rel('TUN', 'Tunisie', ['Tunisie'], 'authoritarian', '#b37b6e'),
+    rel('SYR', 'Syrie', ['Syrie mandataire'], 'authoritarian', '#a29266'),
+    rel('LEB', 'Liban', ['Liban mandataire'], 'democratic', '#8db38a'),
+    rel('INC', 'Indochine', ['Indochine'], 'authoritarian', '#b0855c'),
+    rel('MAD', 'Madagascar', ['Madagascar'], 'authoritarian', '#8f9e6b'),
+    rel('FWA', 'Afrique-Occidentale', ['Senegal', 'Mauritania', 'Soudan français', 'Guinea', "Côte d'Ivoire", 'Niger', 'Burkina Faso', 'Benin', 'Togo'], 'authoritarian', '#9d8f62'),
+    rel('FEA', 'Afrique-Équatoriale', ['Tchad', 'Central African Rep.', 'Congo', 'Gabon'], 'authoritarian', '#7e9467'),
+    rel('JOR', 'Transjordanie', ['Jordan'], 'authoritarian', '#a99168'),
+    rel('KEN', 'Kenya', ['Kenya'], 'authoritarian', '#8a6f52'),
+    rel('NGA', 'Nigeria', ['Nigeria'], 'authoritarian', '#6c9466'),
+    rel('GLD', 'Côte-de-l’Or', ['Ghana'], 'authoritarian', '#b2a05f'),
+    rel('MAL', 'Malaisie', ['Malaysia'], 'authoritarian', '#a46e60'),
+    rel('CEY', 'Ceylan', ['Ceylan'], 'democratic', '#b0855f'),
+    rel('SUD', 'Soudan', ['Sudan', 'S. Sudan'], 'authoritarian', '#9a8458'),
+    rel('RHO', 'Rhodésie', ['Rhodésie du Sud', 'Rhodésie du Nord'], 'authoritarian', '#7d8e63'),
+    rel('CYP', 'Chypre', ['Cyprus'], 'democratic', '#c09b6b'),
+    rel('INS', 'Indonésie', ['Indes néerlandaises'], 'authoritarian', '#b06c5e'),
+    rel('COG', 'Congo', ['Congo belge'], 'authoritarian', '#6f8c6c'),
+    rel('LBA', 'Libye', ['Libya'], 'authoritarian', '#9f9b6a'),
+    rel('SOM', 'Somalie', ['Somalia', 'Somaliland'], 'authoritarian', '#6f9fb3'),
+    rel('ERI', 'Érythrée', ['Eritrea'], 'authoritarian', '#90a066'),
+    rel('KOR', 'Corée', ['Corée'], 'authoritarian', '#8f8fb4'),
+    rel('ANG', 'Angola', ['Angola'], 'authoritarian', '#a5765e'),
+    rel('MZB', 'Mozambique', ['Mozambique'], 'authoritarian', '#6e9a77'),
+    rel('BRM', 'Birmanie', ['Birmanie'], 'authoritarian', '#a99a5a'),
+    rel('PAK', 'Pakistan', ['Pakistan'], 'authoritarian', '#5f8a5b'),
+]
+
 CATALOG.write_text(json.dumps(catalog, separators=(',', ':'), ensure_ascii=False), encoding='utf-8')
 print('catalog keys', sorted(catalog))
