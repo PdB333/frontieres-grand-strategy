@@ -314,7 +314,12 @@ frontieres-grand-strategy/
 ├── README.md              # Project overview and roadmap
 ├── LICENSE                # MIT license for original code
 ├── THIRD_PARTY.md         # Geographic data and image credits
+├── .github/workflows/    # CI: syntax, build freshness, engine smoke test
+├── tools/
+│   ├── build.mjs          # Rebuilds index.html from src/ and data/
+│   └── smoke.mjs          # Headless engine smoke test (Node.js)
 ├── src/
+│   ├── shell.html         # Page template; build.mjs inlines the files below
 │   ├── engine.js          # Simulation engine source
 │   ├── worker.js          # Background simulation worker
 │   ├── ui.js              # Interface and user actions
@@ -337,7 +342,17 @@ frontieres-grand-strategy/
 - The game uses deterministic, seeded simulation logic for repeatable internal testing.
 - Save files and mod packages use structured JSON.
 
-**Repository snapshot limitation:** `index.html` is the **ready-to-play artifact**. The split `src/` and `data/` files are published as inspectable modules and datasets; **the complete build pipeline, historical test fixtures, automated browser tests, and development ZIP tools have not all been uploaded to this GitHub repository yet**. Editing those files does not automatically rebuild `index.html`. Reproducible builds and GitHub Actions are roadmap tasks. Do not assume the test commands mentioned in older development notes can be run from this repository as it stands.
+### Building and testing
+
+`index.html` is generated from `src/shell.html`, which inlines `src/` and `data/`. After editing any of these files, rebuild it with [Node.js](https://nodejs.org/) 18 or newer (no dependencies to install):
+
+```bash
+node tools/build.mjs           # rebuild index.html
+node tools/build.mjs --check   # fail if index.html is stale
+node tools/smoke.mjs           # headless engine test: 1936/1939 campaigns, invariants, save/load, determinism
+```
+
+GitHub Actions runs all three checks on every push and pull request. Historical test fixtures, automated browser tests, and development ZIP tools are not yet published.
 
 ## Development roadmap
 
@@ -388,7 +403,7 @@ These are **project development milestones**, not a claim that each version is s
 - [ ] A well-balanced, documented solo campaign experience across the main playable nations.
 - [ ] More consistent military, air, naval, diplomatic, and economic AI.
 - [ ] Polished onboarding, tutorial, notifications, accessibility, and map feedback.
-- [ ] Release packaging, changelog discipline, reproducible build scripts, and CI checks.
+- [ ] Release packaging and changelog discipline (reproducible build script and CI checks are in place).
 - [ ] A stable mod format with compatibility guidelines and documented examples.
 - [ ] Better historical data review, portrait handling, citations, and asset-license auditing.
 - [ ] Clear win/lose states, campaign objectives, and post-campaign reporting.
@@ -418,7 +433,7 @@ Please read this section before reporting a feature as broken:
 7. **The UI is currently French.** This README is English; full UI localization is a future goal.
 8. **Browser support needs broader testing.** Development testing has focused on Chromium. The original automated environment did not certify real `file://` behavior or persistence across normal user browser sessions.
 9. **Some portraits require Internet access.** Portrait files are generally referenced rather than bundled. Third-party licensing varies.
-10. **The GitHub source snapshot is not yet a full developer SDK.** It needs build tooling, published test fixtures, and CI for complete source-to-release reproducibility.
+10. **The GitHub source snapshot is not yet a full developer SDK.** The build script and CI are available (see [Building and testing](#building-and-testing)), but historical test fixtures and browser tests are not published yet.
 
 ## Contributing and bug reports
 
