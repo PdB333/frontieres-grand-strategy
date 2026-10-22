@@ -156,3 +156,129 @@ panelExtras16('diplomacy',()=>{
 });
 
 renderMapModes();renderPanel();
+
+/* ---- Divisions, equipment generations and designs ---- */
+Rules.useCatalog16(CATALOG);
+const BAT_GROUPS16={inf:'Infanterie',motor:'Mobile',tank:'Blindés',art:'Artillerie et appui'};
+const DOMAINS16={land:'Équipement terrestre',air:'Aviation',naval:'Constructions navales'};
+const STAT_LABELS16={attack:'Attaque',defense:'Défense',armor:'Blindage',piercing:'Perforation',speed:'Vitesse',reliability:'Fiabilité',air:'Combat aérien',ground:'Attaque au sol',naval:'Attaque navale',hp:'Résistance',subAttack:'Lutte anti-sous-marine',stealth:'Discrétion',detection:'Détection',range:'Rayon d’action',breakthrough:'Percée'};
+const techName16=id=>technologies().find(t=>t.id===id)?.name||id;
+const hasTech16=id=>!id||nation()?.tech.includes(id);
+const models16=(c,type)=>[...(CATALOG.models?.[type]||[]),...(c.designs||[]).filter(d=>d.type===type)];
+const lineModel16=(c,type)=>{const list=models16(c,type).filter(m=>hasTech16(m.tech));return list.find(m=>m.id===c.lines?.[type])||list.filter(m=>!m.design).at(-1)||list.at(-1)||null;};
+const statText16=stats=>Object.entries(stats||{}).filter(([,v])=>Math.abs(v-1)>.004).map(([k,v])=>`${STAT_LABELS16[k]||k} ${v>1?'+':''}${Math.round((v-1)*100)} %`).join(' / ')||'Référence';
+const quality16=(c,key)=>{const s=c.eqStats?.[key]||{},keys=['attack','defense','armor','piercing','air','ground','naval','hp'].filter(k=>s[k]!==undefined);return keys.length?total(keys.map(k=>s[k]))/keys.length:1;};
+INDUSTRY16.production=function(c){
+  const used=naval=>total(Object.keys(c.allocation).filter(k=>!!CATALOG.equipment[k]?.naval===naval).map(k=>c.allocation[k]));
+  const card=(key,e)=>{
+    const m=lineModel16(c,key),choices=models16(c,key).filter(x=>hasTech16(x.tech)),q=quality16(c,key),res=Object.keys(RES16).filter(r=>e[r]).map(r=>`${e[r]} ${RES16[r].toLowerCase()}`).join(', ');
+    const shortage=Math.min(1,...Object.keys(RES16).filter(r=>e[r]).map(r=>c.stats.shortage?.[r]??1));
+    return `<div class="card equipment-card"><div class="row"><div class="eq-icon">${icon(e.icon)}</div><div class="grow"><h4 style="font-size:12px;font-weight:500">${esc(e.name)}</h4><small>${m?esc(m.name):'Technologie requise'} / qualité du stock ${Math.round(q*100)} %</small></div><div class="stock">${num(c.stock[key])}</div></div>
+      ${choices.length>1?`<select id="prod-model-${key}" class="prod-model" data-key="${key}" style="margin-top:8px">${choices.map(x=>`<option value="${esc(x.id)}" ${x.id===m?.id?'selected':''}>${esc(x.name)}${x.design?' (conception)':''}</option>`).join('')}</select>`:''}
+      <div class="row between" style="margin-top:9px"><span class="mono" style="font-size:10px">${c.allocation[key]||0} affecté(s) / ${Math.round((c.efficiency[key]||0)*100)} % eff.${shortage<1?` / <span class="bad">pénurie ${Math.round(shortage*100)} %</span>`:''}</span><div class="row">${btn('−','production',{key,delta:-1},'small',!c.allocation[key])}${btn('+','production',{key,delta:1},'small',!m)}</div></div>${bar((c.efficiency[key]||0)*100)}
+      <div class="row wrap" style="margin-top:7px">${res?`<small class="grow">Ressources par ligne : ${esc(res)}</small>`:''}${btn(c.modernize?.[key]?'Modernisation : OUI':'Modernisation : NON','modernize',{key,value:!c.modernize?.[key]},'small')}${e.family?btn('Concevoir','designer16',{type:key},'small'):''}</div></div>`;
+  };
+  return `<div class="row between" style="margin-bottom:12px"><small>${c.stats.mil-used(false)} usine(s) militaire(s) et ${c.stats.dock-used(true)} chantier(s) non affecté(s)</small>${btn('Répartir auto.','autoProduction',{},'small')}</div>
+    ${Object.entries(DOMAINS16).map(([domain,label])=>`<div class="sectionlabel">${label}</div><div class="stack">${Object.entries(CATALOG.equipment).filter(([,e])=>e.domain===domain).map(([k,e])=>card(k,e)).join('')}</div>`).join('')}
+    <p class="note" style="margin-top:13px">Chaque ligne produit le modèle choisi ; changer de modèle réduit l’efficacité de 30 %. La qualité du stock est la moyenne des modèles produits. La modernisation consacre la moitié de la ligne à mettre à niveau le matériel existant.</p>`;
+};
+function showDesigner16(type,keep={}){
+  const c=nation(),designable=Object.entries(CATALOG.equipment).filter(([,e])=>e.family);
+  if(!CATALOG.equipment[type]?.family)type=designable[0][0];
+  const e=CATALOG.equipment[type],slots=CATALOG.designSlots[e.family],bases=(CATALOG.models[type]||[]).filter(m=>hasTech16(m.tech));
+  const base=bases.find(m=>m.id===keep.base)||bases.at(-1);
+  const options=slot=>CATALOG.modules.filter(m=>m.slot===slot&&m.families.includes(e.family)&&(!m.types||m.types.includes(type)));
+  pauseGame();
+  modal(`${modalHead('Bureau d’études','INDUSTRIE / CONCEPTION DE MATÉRIEL')}
+    <div class="grid2"><div class="stack">
+      ${field('Type de matériel',`<select id="design-type">${designable.map(([k,x])=>`<option value="${k}" ${k===type?'selected':''}>${esc(x.name)}</option>`).join('')}</select>`)}
+      ${base?field('Châssis / coque / cellule',`<select id="design-base" class="design-input">${bases.map(m=>`<option value="${esc(m.id)}" ${m.id===base.id?'selected':''}>${esc(m.name)}</option>`).join('')}</select>`):'<p class="bad">Aucun châssis disponible : recherchez la technologie correspondante.</p>'}
+      ${base?slots.map(slot=>field({gun:'Armement principal',turret:'Tourelle',armor:'Blindage',engine:'Moteur',special:'Équipement spécial',armament:'Armement',battery:'Batterie principale',secondary:'Armement secondaire',torpedo:'Torpilles'}[slot]||slot,`<select id="design-slot-${slot}" class="design-input">${options(slot).map(m=>`<option value="${esc(m.id)}" ${!hasTech16(m.tech)?'disabled':''} ${(keep.modules?.[slot]||defaultModule16(options(slot)))===m.id?'selected':''}>${esc(m.name)}${m.tech&&!hasTech16(m.tech)?' — '+esc(techName16(m.tech)):''}</option>`).join('')}</select>`)).join(''):''}
+      ${field('Nom',`<input id="design-name" maxlength="60" value="${esc(keep.name||(base?base.name+' modifié':''))}">`)}
+      <label class="row"><input id="design-produce" type="checkbox" checked> Produire ce modèle sur la ligne existante</label>
+    </div><div class="card" id="design-preview"></div></div>
+    <div class="row" style="margin-top:14px">${btn('Enregistrer la conception','saveDesign16',{type},'primary',!base)}${btn('Fermer','close')}</div>
+    <div class="sectionlabel">Conceptions de ce type</div><div class="stack">${(c.designs||[]).filter(d=>d.type===type).map(d=>`<div class="card row between"><div><strong>${esc(d.name)}</strong><small style="display:block">${esc(statText16(d.stats))} / coût ×${d.cost}</small></div>${btn('×','deleteDesign16',{id:d.id,type},'small ghost')}</div>`).join('')||'<p class="note">Aucune conception enregistrée.</p>'}</div>
+    <p class="note" style="margin-top:12px">Les modules débloqués par la recherche modifient les caractéristiques du châssis. Le coût de production est multiplié par celui de chaque module.</p>`,'designer','wide');
+  updateDesignPreview16();
+}
+// Reference module of a slot: the neutral one (no modifier, cost 1), else the first unlocked.
+const defaultModule16=list=>(list.find(m=>hasTech16(m.tech)&&(m.cost||1)===1&&!Object.keys(m.stats||{}).length)||list.find(m=>hasTech16(m.tech)))?.id;
+function designForm16(){
+  const type=$('design-type').value,e=CATALOG.equipment[type],modules={};
+  for(const slot of CATALOG.designSlots[e.family]||[])if($('design-slot-'+slot))modules[slot]=$('design-slot-'+slot).value;
+  return {type,base:$('design-base')?.value,modules,name:$('design-name').value,produce:$('design-produce').checked};
+}
+function updateDesignPreview16(){
+  if(!$('design-preview')||!$('design-base'))return;
+  try{const f=designForm16(),r=Rules.designStats16(f.type,f.base,f.modules);
+    $('design-preview').innerHTML=`<div class="eyebrow">CARACTÉRISTIQUES</div>${Object.entries(r.stats).map(([k,v])=>metric(esc(STAT_LABELS16[k]||k),Math.round(v*100)+' %',v>1?'good':v<1?'bad':'')).join('')||'<p class="note">Valeurs de référence.</p>'}<hr>${metric('Coût de production',Math.round(r.cost*100)+' %',r.cost>1.3?'bad':'')}<small>Pourcentages relatifs au premier modèle du type.</small>`;
+  }catch(e){$('design-preview').innerHTML=`<p class="bad">${esc(e.message)}</p>`;}
+}
+const BAT_LIST16=()=>CATALOG.battalions||[];
+templateEditor=function(id=null){
+  pauseGame();const c=nation(),current=c.templates.find(t=>t.id===id)||null,{bat,sup}=Rules.normalizeTemplate16(current||{bat:{infantry:7,artillery:2},sup:['engineer']});
+  modal(`${modalHead(current?'Modifier : '+current.name:'Concevoir une division','ARMÉE / MODÈLE DE DIVISION')}
+    <div class="grid2"><div class="stack">
+      ${field('Partir d’un modèle',`<select id="tmpl-base"><option value="">Nouveau modèle</option>${c.templates.map(t=>`<option value="${esc(t.id)}" ${t.id===current?.id?'selected':''}>${esc(t.name)}</option>`).join('')}</select>`)}
+      ${field('Nom du modèle',`<input id="tmpl-name" class="tmpl-stat" maxlength="70" value="${esc(current?.name||'Division personnalisée')}">`)}
+      ${Object.entries(BAT_GROUPS16).map(([g,label])=>`<div class="sectionlabel">${label}</div>${BAT_LIST16().filter(b=>b.group===g).map(b=>`<div class="row between"><span>${esc(b.name)}${b.tech&&!hasTech16(b.tech)?`<small style="display:block" class="faint">${icon('lock')} ${esc(techName16(b.tech))}</small>`:''}</span><input class="tmpl-stat tmpl-bat" data-id="${b.id}" type="number" min="0" max="25" value="${bat[b.id]||0}" ${b.tech&&!hasTech16(b.tech)&&!bat[b.id]?'disabled':''}></div>`).join('')}`).join('')}
+      <div class="sectionlabel">Compagnies de soutien (5 au maximum)</div>
+      ${(CATALOG.supports||[]).map(s=>`<label class="row"><input class="tmpl-stat tmpl-sup" data-id="${s.id}" type="checkbox" ${sup.includes(s.id)?'checked':''} ${s.tech&&!hasTech16(s.tech)&&!sup.includes(s.id)?'disabled':''}> ${esc(s.name)}${s.tech&&!hasTech16(s.tech)?` <small class="faint">(${esc(techName16(s.tech))})</small>`:''}</label>`).join('')}
+    </div><div class="card" id="template-preview" style="align-self:start;position:sticky;top:0"></div></div><hr>
+    <div class="row wrap">${btn('Créer le modèle / 15 XP','saveTemplate',{},'primary',c.xp<15)}${current?btn('Mettre à jour ce modèle / 5 XP','editTemplate16',{id:current.id},'',c.xp<5)+btn('Supprimer','deleteTemplate16',{id:current.id},'danger small'):''}${btn('Annuler','close')}</div>
+    <p class="note" style="margin-top:13px">Jusqu’à 25 bataillons et 5 compagnies de soutien. Les divisions déjà déployées conservent leur composition jusqu’à un rééquipement. Largeur autorisée : 2 à 45.</p>`,'template','wide');
+  updateTemplatePreview();
+};
+templateForm=function(){
+  const bat={},sup=[];
+  document.querySelectorAll('.tmpl-bat').forEach(el=>{const n=Number(el.value)||0;if(n>0)bat[el.dataset.id]=Math.min(25,Math.floor(n));});
+  document.querySelectorAll('.tmpl-sup').forEach(el=>{if(el.checked)sup.push(el.dataset.id);});
+  return {name:$('tmpl-name').value,bat,sup};
+};
+updateTemplatePreview=function(){
+  if(!$('template-preview'))return;
+  const f=templateForm(),s=Rules.templateStats(f),count=total(Object.values(f.bat));
+  $('template-preview').innerHTML=`<div class="eyebrow">CAPACITÉS DU MODÈLE</div>
+    ${metric('Bataillons / soutiens',count+' / '+f.sup.length,count>25||f.sup.length>5?'bad':'')}${metric('Effectifs',num(s.men))}${metric('Largeur de combat',String(s.width),s.width>45||s.width<2?'bad':'')}
+    ${metric('Organisation',Math.round(s.orgMax))}${metric('Vitesse',s.speed.toFixed(2))}
+    ${metric('Attaque douce / dure',Math.round(s.soft)+' / '+Math.round(s.hard))}${metric('Défense / percée',Math.round(s.defense)+' / '+Math.round(s.breakthrough))}
+    ${metric('Blindage / perforation',s.armor.toFixed(1)+' / '+s.piercing.toFixed(1),s.armor>s.piercing?'good':'')}${metric('Attaque antiaérienne',Math.round(s.ap))}${metric('Dureté',Math.round(s.hardness*100)+' %')}
+    ${s.special?.amphibious?metric('Aptitude amphibie',Math.round(s.special.amphibious*100)+' %'):''}${s.special?.paradrop?metric('Parachutable','Oui'):''}
+    <hr><div class="label">Équipement requis</div>${Object.entries(s.eq).filter(([,v])=>v>0).map(([k,n])=>metric(esc(CATALOG.equipment[k]?.name||k),num(n),nation()&&nation().stock[k]<n?'bad':'')).join('')}`;
+};
+PANELS16.research=function(){
+  const c=nation(),unlockText=u=>{const [kind,id]=u.split(':');const name=kind==='battalion'?CATALOG.battalions.find(b=>b.id===id)?.name:kind==='support'?CATALOG.supports.find(b=>b.id===id)?.name:kind==='model'?Object.values(CATALOG.models).flat().find(m=>m.id===id)?.name:kind==='module'?CATALOG.modules.find(m=>m.id===id)?.name:CATALOG.buildings[id]?.name;return ({battalion:'Bataillon',support:'Soutien',model:'Modèle',module:'Module',building:'Bâtiment'}[kind]||kind)+' : '+(name||id);};
+  return panelHeader('Recherche et doctrines',`${c.research.length} / ${c.slots} équipes occupées / +${Math.round(c.bonus.research*100)} % de vitesse`)+`
+    <div class="stack">${c.research.map(r=>{const t=technologies().find(t=>t.id===r.id);return `<div class="card"><div class="row between"><h4 style="font-size:12px">${esc(t.name)}</h4>${btn('×','cancelResearch',{id:r.id},'small ghost')}</div><div style="margin:8px 0">${bar(r.progress/t.days*100)}</div><small>${Math.floor(r.progress)} / ${t.days} points</small></div>`;}).join('')||'<div class="empty">Vos équipes attendent un programme de recherche.</div>'}</div>
+    <div class="sectionlabel">Domaine technologique</div><select id="tech-group">${Object.entries(TECHGROUPS).map(([id,n])=>`<option value="${id}" ${techGroup===id?'selected':''}>${esc(n)}</option>`).join('')}</select>
+    <div class="stack" style="margin-top:13px">${technologies().filter(t=>t.group===techGroup).sort((a,b)=>a.year-b.year||a.name.localeCompare(b.name,'fr')).map(t=>{
+      const done=c.tech.includes(t.id),running=c.research.some(r=>r.id===t.id),ready=t.req.every(r=>c.tech.includes(r)),year=1936+S.day/365.25;
+      return `<div class="card tech-card ${done?'done':''}"><div class="row between"><h4>${esc(t.name)}</h4>${tag(done?'ACQUIS':String(t.year),done?'good':'')}</div><p class="note" style="margin:7px 0">${effectText(t.effect)}</p>${(t.unlock||[]).length?`<small style="display:block" class="gold">${t.unlock.map(u=>esc(unlockText(u))).join(' / ')}</small>`:''}<small>${t.days} points${t.year>year?' / en avance sur son temps':''}</small>${t.req.length?`<small style="display:block">Prérequis : ${t.req.map(k=>esc(technologies().find(t=>t.id===k)?.name||k)).join(', ')}</small>`:''}<div style="margin-top:9px">${btn(done?'Acquis':running?'Recherche en cours':ready?'Lancer la recherche':icon('lock')+' Verrouillé','research',{id:t.id},'small wide',done||running||!ready||c.research.length>=c.slots)}</div></div>`;
+    }).join('')}</div><p class="note" style="margin-top:14px">Une technologie future subit une pénalité de recherche. Annuler un programme perd sa progression.</p>`;
+};
+['modernize','productionModel','templateDelete','designDelete'].forEach(a=>direct.add(a));
+const releaseAction15=releaseAction;
+releaseAction=async function(action,p){
+  for(const handler of ACTIONS16){const r=await handler(action,p);if(r)return true;}
+  return releaseAction15(action,p);
+};
+const ACTIONS16=[];
+ACTIONS16.push(async(action,p)=>{
+  switch(action){
+    case 'designer16':showDesigner16(p.type);return true;
+    case 'saveDesign16':{const f=designForm16();await cmd('design',f);toast('Conception enregistrée.');showDesigner16(f.type);return true;}
+    case 'deleteDesign16':if(confirm('Supprimer cette conception ?')){await cmd('designDelete',{id:p.id});showDesigner16(p.type);}return true;
+    case 'editTemplate16':await cmd('templateEdit',{id:p.id,...templateForm()});closeModal();renderPanel(true);toast('Modèle mis à jour.');return true;
+    case 'deleteTemplate16':if(confirm('Supprimer ce modèle ?')){await cmd('templateDelete',{id:p.id});closeModal();renderPanel(true);}return true;
+  }
+  return false;
+});
+document.addEventListener('change',ev=>{
+  const el=ev.target;
+  if(el.classList?.contains('prod-model'))fire('productionModel',{key:el.dataset.key,model:el.value});
+  if(el.id==='design-type')showDesigner16(el.value);
+  if(el.id==='design-base')showDesigner16($('design-type').value,{...designForm16(),base:el.value});
+  if(el.classList?.contains('design-input'))updateDesignPreview16();
+  if(el.id==='tmpl-base')templateEditor(el.value||null);
+});
