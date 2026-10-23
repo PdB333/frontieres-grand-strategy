@@ -3288,6 +3288,8 @@ function installSystems16(Engine,H){
     const c=createNation15.call(this,d);
     for(const k of NEW_BONUS)c.bonus[k]??=0;
     c.trade??=DEFAULT_TRADE[d.id]||'export';c.designs??=[];c.lines??={};c.modernize??={};c.eqStats??={};
+    // A country created during a day (release, civil war) is complete at once.
+    c.spirits16??=[];c.advisors16??={};c.decisions16??={};
     return c;
   };
   const newGame15=Engine.prototype.newGame;
