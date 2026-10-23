@@ -5,7 +5,7 @@
 function installSystems16(Engine,H){
   'use strict';
   const {clone,clamp,sum,assert,finite,distance,hash}=H;
-  const RELEASE='1.10';
+  const RELEASE='1.11';
 
   // ---------------------------------------------------------------------------
   // Shared helpers
@@ -239,13 +239,13 @@ function installSystems16(Engine,H){
     const held={},totals={},coreHeld={},nonCore={},wars=new Set(this.s.wars.flatMap(w=>[w.a+'|'+w.b,w.b+'|'+w.a]));
     // Most provinces carry no factory, resource or victory point: skip them.
     if(this._resWorld!==this.world){this._resWorld=this.world;this._resFlag=Uint8Array.from(this.prov,p=>RESOURCES.some(k=>p[k])?1:0);}
-    const resFlag=this._resFlag,S=this.s.provinces;
+    const resFlag=this._resFlag,S=this.s.provinces,extract=Object.create(null);
     for(let i=0;i<this.prov.length;i++){
       const p=this.prov[i],q=S[i];
       if(!p.vp&&!resFlag[i]&&!q.civ&&!q.mil&&!q.dock&&!q.refinery)continue;
       const c=this.s.countries[q.ctrl];if(!c)continue;
       const atWar=q.ctrl!==p.owner&&wars.has(q.ctrl+'|'+p.owner);
-      const occupation=q.ctrl===p.owner?1:.3+q.compliance/200;
+      const occupation=q.ctrl===p.owner?1:Math.min(.9,(extract[q.ctrl]??=this.occupationLaw16(c).extraction)+q.compliance/250);
       const output=occupation*(1-q.damage)*Math.max(.3,1-q.resistance/150);
       for(const k of ['civ','mil','dock'])c.stats[k]+=q[k]*output;
       for(const k of RESOURCES)if(p[k])c.stats[k]+=p[k]*occupation*(1+(c.bonus.resources||0));
@@ -342,11 +342,9 @@ function installSystems16(Engine,H){
     }
     for(const p of this.ownedToday16(id)){
       const st=this.s.provinces[p.id];st.damage=Math.max(0,st.damage-.003-c.stats.freeCiv*.00002);
-      if(st.ctrl===p.owner){st.resistance=Math.max(0,st.resistance-.3);continue;}
+      if(st.ctrl===p.owner||st.ctrl===st.own||this.isCore(id,p.id)){st.resistance=Math.max(0,st.resistance-.3);continue;}
       const stationed=(this.unitsAt.get(p.id)||[]).filter(u=>u.owner===id).length;
-      const policy={civil:{gain:.045,compliance:.08,loss:0},police:{gain:.02,compliance:.03,loss:.02},military:{gain:-.03,compliance:-.01,loss:.07}}[c.occupation];
-      st.resistance=clamp(st.resistance+policy.gain-stationed*.2,0,100);st.compliance=clamp(st.compliance+policy.compliance,0,100);
-      if(st.resistance>40){st.damage=clamp(st.damage+.002*(st.resistance/40),0,.8);const losses=Math.min(c.manpower,Math.ceil(st.resistance*policy.loss));c.manpower-=losses;c.casualties+=losses;}
+      this.occupationStep16(c,st,stationed);
     }
   };
   // Production and transfers keep a stock-weighted average of the equipment
@@ -648,7 +646,7 @@ function installSystems16(Engine,H){
   Engine.requirePP16=pp;
 
   Engine.command16('law',function(p,id,c){
-    if(p.kind==='occupation')return NOT_HANDLED;
+    if(p.kind==='occupation')return this.setOccupation16(id,c,p.value);
     const kinds=this.catalog.laws||{};
     assert(['economy','conscription','trade'].includes(p.kind)&&kinds[p.kind],'Type de loi inconnu.');
     const list=kinds[p.kind];
@@ -2746,6 +2744,9 @@ function installSystems16(Engine,H){
     if(!MAJORS.includes(id))target=Math.min(target,atWar?base*2+6:base*1.4+4);
     // In a civil war, both camps raise armies from their manpower.
     if(this.hasSpirit16(c,'civil_war'))target=Math.max(target,base*1.5+6);
+    // A secondary country at war with men to spare but few arms raises militia.
+    const levy=atWar&&c.manpower>500000&&!MAJORS.includes(id);
+    if(levy)target=Math.max(target,Math.min(base*3,c.manpower/60000));
     target=Math.min(300,Math.round(target));
     // Large industries train several divisions at a time.
     const batch=clamp(Math.round(c.stats.mil/15),1,5);
@@ -2757,7 +2758,12 @@ function installSystems16(Engine,H){
     const front=this.ownedToday16(id).find(p=>this.s.provinces[p.id].ctrl===id&&p.neighbors.some(n=>this.war(id,this.s.provinces[n].ctrl)));
     const site=front?front.id:this.cap(id);
     for(const n of [Math.min(batch+1,target-count),2,1]){if(n<1)continue;try{this.recruit(id,template.id,site,n);return;}catch{}}
-    if(template.id!=='infantry')try{this.recruit(id,c.templates[0].id,site,1);}catch{}
+    if(template.id!=='infantry')try{this.recruit(id,c.templates[0].id,site,1);return;}catch{}
+    if(levy){
+      let militia=c.templates.find(t=>t.id==='militia16');
+      if(!militia&&c.templates.length<24){militia={id:'militia16',name:'Division de milice',bat:{militia:6},sup:[],...Engine.legacyFields16({militia:6},[])};c.templates.push(militia);}
+      if(militia)for(const n of [2,1])try{this.recruit(id,militia.id,site,n);return;}catch{}
+    }
   };
   // Army fronts: the border with each enemy is split into connected sectors;
   // each sector gets an army sized by its length and by the enemy forces
@@ -3511,7 +3517,7 @@ function installSystems16(Engine,H){
     const tactics=this.chooseTactics16(pid,attackPool,defendPool,ga,gd),ctrl=this.s.provinces[pid].ctrl;
     const fort=this.s.provinces[pid].fort>0||sum(defendPool.map(u=>u.entrench))/Math.max(1,defendPool.length)>=5;
     const river=attackPool.some(u=>!u.landing16&&this.riverAttackFactor(u,pid)<1),weather=this.weather(pid);
-    this.battle16={tactics,loss:new Map()};
+    this.battle16={tactics,loss:new Map(),a:attackPool[0]?.owner,d:defendPool[0]?.owner};
     let b;
     try{b=resolveBattle18.call(this,pid,attackPool,defendPool,old,armies,busy);}finally{this.battle16=null;}
     const taken=this.s.provinces[pid].ctrl!==ctrl;
@@ -3871,6 +3877,268 @@ function installSystems16(Engine,H){
     for(const l of links)assert(Array.isArray(l)&&l.length===2&&this.prov[l[0]]&&this.prov[l[1]]&&this.prov[l[0]].neighbors.includes(l[1]),'Voie ferrée invalide.');
     for(const c of Object.values(state.countries))for(const b of c.build)if(b.kind==='railLine')
       assert(Array.isArray(b.pids)&&b.pids.length>=2&&b.pids.length<=RAIL_ROUTE_MAX&&b.pids.every(pid=>this.prov[pid]),'Chantier ferroviaire invalide.');
+  });
+
+  // ---------------------------------------------------------------------------
+  // Intelligence and occupation. An agency (100 PP) recruits operatives who
+  // weave networks abroad, hunt foreign agents at home, spread propaganda or
+  // arm resistance movements; a network opens covert operations (sabotage,
+  // stolen plans, captured ciphers, collaboration governments). Occupied
+  // provinces need garrisons drawn from the manpower pool; the occupation
+  // law sets what they yield and how fast resistance grows.
+  // ---------------------------------------------------------------------------
+  const AGENCY_COST=100,AGENT_COST=25,UPGRADE_GAP=30,BASE_SLOTS=2,MAX_SLOTS=6,CIPHER_DAYS=120,CIPHER_BONUS=.06,GARRISON_PEOPLE=400,GARRISON_MIN=100;
+  const intelMaps=new WeakMap();
+  const intelCatalog=cat=>{
+    let m=intelMaps.get(cat);
+    if(!m){m={upgrades:new Map((cat.agencyUpgrades||[]).map(u=>[u.id,u])),missions:new Map((cat.agentMissions||[]).map(x=>[x.id,x])),ops:new Map((cat.operations16||[]).map(o=>[o.id,o])),laws:new Map((cat.occupationLaws||[]).map(l=>[l.id,l]))};intelMaps.set(cat,m);}
+    return m;
+  };
+  Engine.prototype.intel16=function(){return intelCatalog(this.catalog);};
+  Engine.prototype.agencyEffect16=function(c,key){let v=0;for(const id of c?.agency16?.upgrades||[])v+=this.intel16().upgrades.get(id)?.effect[key]||0;return v;};
+  Engine.prototype.agentSlots16=function(c){return c.agency16?Math.min(MAX_SLOTS,BASE_SLOTS+this.agencyEffect16(c,'slots')):0;};
+  const OLD_OCCUPATION={civil:{resistance:.03,compliance:.07,extraction:.3,garrison:.75,losses:0},police:{resistance:.01,compliance:.03,extraction:.4,garrison:1,losses:.02},military:{resistance:-.02,compliance:-.01,extraction:.5,garrison:1.3,losses:.05}};
+  Engine.prototype.occupationLaw16=function(c){return this.intel16().laws.get(c?.occupation)||OLD_OCCUPATION[c?.occupation]||OLD_OCCUPATION.civil;};
+  Engine.prototype.setOccupation16=function(id,c,value){
+    assert(this.intel16().laws.has(value)||(!this.intel16().laws.size&&OLD_OCCUPATION[value]),'Politique d’occupation inconnue.');
+    assert(c.occupation!==value,'Loi déjà en vigueur.');c.occupation=value;
+  };
+  // The strength of a country's counter-intelligence at home.
+  Engine.prototype.counterPower16=function(id){
+    const c=this.nation(id);if(!c?.agency16)return 0;
+    let v=this.agencyEffect16(c,'counter');for(const a of c.agency16.agents)if(a.mission==='counter')v+=.15*a.skill;
+    return v;
+  };
+  Engine.prototype.agentName16=function(id){
+    const names=this.catalog.commanderNames,lang=names?.lang?.[id]||'generic',pool=names?.pools?.[lang]||names?.pools?.generic||['Martin'];
+    const used=new Set((this.nation(id).agency16?.agents||[]).map(a=>a.name));
+    for(let i=0;i<pool.length;i++){const n=pool[Math.floor(this.random()*pool.length)];if(!used.has(n))return n;}
+    return pool[0]+' '+(used.size+1);
+  };
+  Engine.prototype.foundAgency16=function(id){
+    const c=this.nation(id);assert(!c.agency16,'L’agence existe déjà.');pp(c,AGENCY_COST);c.pp-=AGENCY_COST;
+    c.agency16={founded:this.s.day,upgrades:[],lastUpgrade:-UPGRADE_GAP,agents:[],ops:[],networks:{},cipher:{}};
+  };
+  Engine.prototype.recruitAgent16=function(id){
+    const c=this.nation(id),A=c.agency16;assert(A,'Fondez d’abord une agence de renseignement.');
+    assert(A.agents.length<this.agentSlots16(c),'Tous les postes d’agents sont pourvus ('+this.agentSlots16(c)+').');
+    pp(c,AGENT_COST);c.pp-=AGENT_COST;
+    const a={id:this.s.uid++,name:this.agentName16(id),skill:Math.min(5,1+this.agencyEffect16(c,'skill')),mission:null,target:null,days:0};
+    A.agents.push(a);return a;
+  };
+  Engine.prototype.assignAgent16=function(id,aid,mission,target){
+    const c=this.nation(id),a=c.agency16?.agents.find(a=>a.id===aid);assert(a,'Agent inconnu.');
+    assert(!c.agency16.ops.some(o=>o.agents.includes(aid)),'Cet agent est engagé dans une opération.');
+    if(mission===null){a.mission=null;a.target=null;return;}
+    const m=this.intel16().missions.get(mission);assert(m,'Mission inconnue.');
+    if(m.foreign)assert(this.nation(target)?.alive&&target!==id,'Pays cible invalide.');else target=id;
+    a.mission=mission;a.target=target;
+  };
+  Engine.prototype.startOperation16=function(id,kind,target){
+    const c=this.nation(id),A=c.agency16,op=this.intel16().ops.get(kind);
+    assert(A,'Fondez d’abord une agence de renseignement.');assert(op,'Opération inconnue.');
+    assert(this.nation(target)?.alive&&target!==id,'Pays cible invalide.');
+    assert((A.networks[target]||0)>=op.network,'Il faut un réseau de '+op.network+' % dans ce pays.');
+    assert(!A.ops.some(o=>o.kind===kind&&o.target===target),'Cette opération est déjà en cours.');
+    if(kind==='collaboration')assert(this.s.provinces.some(q=>q.ctrl===id&&q.own===target),'Vous n’occupez aucun territoire de ce pays.');
+    if(kind==='steal_plans')assert(this.stealable16(id,target).length,'Ce pays ne maîtrise aucune technologie qui vous manque.');
+    const busy=new Set(A.ops.flatMap(o=>o.agents)),free=A.agents.filter(a=>!busy.has(a.id)).sort((x,y)=>y.skill-x.skill||x.id-y.id);
+    assert(free.length>=op.agents,'Il faut '+op.agents+' agent(s) disponible(s).');
+    pp(c,op.cost);c.pp-=op.cost;
+    const team=free.slice(0,op.agents);for(const a of team){a.mission=null;a.target=null;}
+    A.ops.push({id:this.s.uid++,kind,target,progress:0,days:op.days,agents:team.map(a=>a.id)});
+  };
+  Engine.prototype.stealable16=function(id,target){
+    const c=this.nation(id),t=this.nation(target);
+    return this.catalog.techs.filter(x=>t.tech.includes(x.id)&&!c.tech.includes(x.id)&&x.req.every(r=>c.tech.includes(r)));
+  };
+  Engine.prototype.finishOperation16=function(id,o){
+    const c=this.nation(id),A=c.agency16,op=this.intel16().ops.get(o.kind),t=this.nation(o.target),S=this.s.provinces;
+    const team=A.agents.filter(a=>o.agents.includes(a.id)),skill=sum(team.map(a=>a.skill))/Math.max(1,team.length);
+    const chance=clamp((op?.chance||.5)+this.agencyEffect16(c,'success')+.05*(skill-1)-.15*this.counterPower16(o.target),.05,.95);
+    const mine=id===this.s.player,theirs=o.target===this.s.player,name=op?.name||o.kind;
+    if(!t?.alive||this.random()>chance){
+      for(const a of team)if(this.random()<.4){A.agents=A.agents.filter(x=>x.id!==a.id);if(mine)this.log('Agent '+a.name+' capturé en '+this.info(o.target).name+'.','war');}
+      if(mine)this.log('Échec de l’opération « '+name+' » en '+this.info(o.target).name+'.','war');
+      if(theirs)this.log('Opération étrangère déjouée : '+name+' ('+this.info(id).name+').','success');
+      return;
+    }
+    if(o.kind==='sabotage_industry'){
+      const sites=this.ownedToday16(o.target).filter(p=>S[p.id].ctrl===o.target&&S[p.id].mil>0).sort((a,b)=>S[b.id].mil-S[a.id].mil||a.id-b.id).slice(0,3);
+      for(const p of sites)S[p.id].damage=clamp(S[p.id].damage+.35,0,.8);
+    }else if(o.kind==='sabotage_rail'){
+      // The lines nearest the enemy's fronts, else the busiest ones.
+      const lines=this.ownedToday16(o.target).filter(p=>S[p.id].ctrl===o.target&&S[p.id].rail>0);
+      const front=lines.filter(p=>p.neighbors.some(n=>this.war(o.target,S[n].ctrl)));
+      for(const p of (front.length?front:lines).sort((a,b)=>S[b.id].rail-S[a.id].rail||a.id-b.id).slice(0,6))S[p.id].damage=clamp(S[p.id].damage+.3,0,.8);
+    }else if(o.kind==='steal_plans'){
+      const list=this.stealable16(id,o.target);
+      if(list.length){const tech=list.sort((a,b)=>a.year-b.year||a.id.localeCompare(b.id))[0];c.researchBonus16??=[];c.researchBonus16.push({group:tech.group,value:clamp(.5+this.agencyEffect16(c,'steal'),0,3),uses:1});if(c.researchBonus16.length>12)c.researchBonus16.shift();}
+    }else if(o.kind==='capture_cipher'){
+      A.cipher[o.target]=this.s.day+Math.round(CIPHER_DAYS*(1+this.agencyEffect16(c,'cipher')));c.intel[o.target]=100;
+    }else if(o.kind==='collaboration'){
+      for(const q of S)if(q.ctrl===id&&q.own===o.target){q.compliance=clamp(q.compliance+25,0,100);q.resistance=clamp(q.resistance-30,0,100);}
+    }
+    if(mine)this.log('Opération réussie : '+name+' en '+this.info(o.target).name+'.','success');
+    if(theirs)this.log('Opération ennemie : '+name+' ('+this.info(id).name+').','war');
+  };
+  // Daily work of the agencies: missions, networks, captures and operations.
+  Engine.prototype.intelDay16=function(){
+    const day=this.s.day,ids=this.active().filter(id=>this.nation(id).agency16),counter=new Map();
+    const power=id=>{let v=counter.get(id);if(v===undefined){v=this.counterPower16(id);counter.set(id,v);}return v;};
+    let occupied=null;
+    const occupiedBy=t=>{if(!occupied){occupied=new Map();this.s.provinces.forEach((q,i)=>{if(q.own!==q.ctrl){if(!occupied.has(q.ctrl))occupied.set(q.ctrl,[]);occupied.get(q.ctrl).push(i);}});}return occupied.get(t)||[];};
+    for(const id of ids){
+      const c=this.nation(id),A=c.agency16,mine=id===this.s.player,assigned=new Set();
+      for(const a of [...A.agents]){
+        if(!a.mission)continue;
+        const t=a.target;
+        if(a.mission!=='counter'&&!this.nation(t)?.alive){a.mission=null;a.target=null;continue;}
+        a.days++;if(a.days%180===0&&a.skill<5)a.skill++;
+        if(a.mission==='counter')continue;
+        assigned.add(t);
+        const net=A.networks[t]||0;
+        if(a.mission==='network')A.networks[t]=Math.min(100,net+.25*(1+.25*(a.skill-1))/(1+power(t)));
+        else if(a.mission==='propaganda'&&net>=30){
+          const v=.015*a.skill*(1+this.agencyEffect16(c,'propaganda')),x=this.nation(t);
+          x.stability=clamp(x.stability-v,0,100);x.support=clamp(x.support-v,0,100);
+        }else if(a.mission==='resistance'&&net>=20){
+          for(const pid of occupiedBy(t)){const q=this.s.provinces[pid];if(q.own===id||this.allies(id,q.own))q.resistance=clamp(q.resistance+.04*a.skill,0,100);}
+        }
+        // Agents abroad risk arrest, more so where counter-intelligence works.
+        if(this.random()<.0006*(1+power(t)*3)){
+          A.agents=A.agents.filter(x=>x.id!==a.id);
+          if(mine)this.log('Agent '+a.name+' arrêté en '+this.info(t).name+'.','war');
+          if(t===this.s.player)this.log('Un agent de '+this.info(id).name+' a été arrêté sur notre territoire.','success');
+        }
+      }
+      // Networks fade without agents and under the target's counter-intelligence.
+      for(const [t,v] of Object.entries(A.networks)){
+        const left=v-(assigned.has(t)?0:.05)-power(t)*.08;
+        if(left<=0||!this.nation(t)?.alive)delete A.networks[t];else A.networks[t]=left;
+        if(A.networks[t])c.intel[t]=Math.max(c.intel[t]||0,Math.min(100,A.networks[t]*.9));
+      }
+      for(const [t,until] of Object.entries(A.cipher)){if(until<=day||!this.nation(t)?.alive)delete A.cipher[t];else c.intel[t]=100;}
+      const speed=1+this.agencyEffect16(c,'speed');
+      for(const o of [...A.ops]){
+        o.progress+=speed;
+        if(o.progress>=o.days){A.ops=A.ops.filter(x=>x!==o);this.finishOperation16(id,o);}
+      }
+    }
+  };
+  // Garrisons: each occupied province needs one soldier per 400 inhabitants,
+  // more with resistance and under harsh laws. They come from the manpower pool and use small arms.
+  Engine.prototype.garrisons16=function(){
+    const need=Object.create(null),S=this.s.provinces,pop=this.provincePopulation16();
+    for(let i=0;i<S.length;i++){
+      const q=S[i];if(q.ctrl===q.own||this.isCore(q.ctrl,i))continue;
+      const c=this.s.countries[q.ctrl];if(!c?.alive)continue;
+      need[q.ctrl]=(need[q.ctrl]||0)+Math.max(GARRISON_MIN,pop[i]/GARRISON_PEOPLE)*(.5+q.resistance/100)*this.occupationLaw16(c).garrison;
+    }
+    for(const id of this.active()){
+      const c=this.nation(id),n=Math.round(need[id]||0),g=c.garrison16??={men:0,need:0,ratio:1};
+      g.need=n;
+      if(g.men<n){const take=Math.min(c.manpower,Math.max(50,n*.05),n-g.men);c.manpower-=take;g.men+=take;}
+      else if(g.men>n){const back=g.men-n;g.men=n;c.manpower+=back;}
+      g.men=Math.round(g.men);g.ratio=n?clamp(g.men/n,0,1):1;
+      if(g.men)c.stock.rifles=Math.max(0,c.stock.rifles-g.men/40000);
+    }
+  };
+  // Resistance and compliance of one occupied province (economics, daily).
+  Engine.prototype.occupationStep16=function(c,st,stationed){
+    const law=this.occupationLaw16(c),g=c.garrison16?.ratio??1;
+    // A government still fighting (or in exile) keeps calling to resist.
+    const fighting=st.own!==st.ctrl&&this.nation(st.own)?.alive&&this.war(st.own,st.ctrl)?.03:0;
+    const growth=.03+fighting+law.resistance-st.compliance/2500,suppression=g*.05*law.garrison+stationed*.15;
+    st.resistance=clamp(st.resistance+growth-suppression,0,100);
+    st.compliance=clamp(st.compliance+law.compliance+(st.resistance<20?.01:st.resistance>60?-.03:0),0,100);
+    if(st.resistance>40){
+      st.damage=clamp(st.damage+.002*(st.resistance/40),0,.8);
+      const losses=Math.min(c.garrison16?.men||0,Math.ceil(st.resistance*law.losses*(1.5-g)));
+      if(losses>0){c.garrison16.men-=losses;c.casualties+=losses;}
+    }
+  };
+  Engine.onDay16(function(){
+    this.intelDay16();this.garrisons16();
+    const ids=this.active();
+    ids.forEach((id,i)=>{if(id!==this.s.player&&(this.s.day+i)%10===7&&!this.nation(id).capitulated16){try{this.aiIntel16(id);this.aiOccupation16(id);}catch(error){if(typeof console!=='undefined')console.warn('[IA]',id,error.message);}}});
+    // Uprisings: a province in open revolt and left without garrison returns
+    // to its rightful owner when that owner is still at war with the occupier.
+    if(this.s.day%5===0)this.s.provinces.forEach((q,i)=>{
+      if(q.resistance<95||q.ctrl===q.own)return;
+      const c=this.nation(q.ctrl),owner=this.nation(q.own);
+      if(!owner?.alive||!this.war(q.own,q.ctrl)||(c.garrison16?.ratio??1)>=.5||(this.unitsAt.get(i)||[]).some(u=>u.owner===q.ctrl))return;
+      const was=q.ctrl;q.ctrl=q.own;q.resistance=40;q.compliance=60;
+      if(was===this.s.player||q.own===this.s.player)this.log('Soulèvement : '+this.prov[i].name+' se libère de l’occupation.','war');
+    });
+  });
+  const combatProfile20=Engine.prototype.combatProfile16;
+  Engine.prototype.combatProfile16=function(u,pid,offense,ctx){
+    const p=combatProfile20.call(this,u,pid,offense,ctx),b=this.battle16;
+    const enemy=b?(offense?b.d:b.a):null,until=enemy&&this.nation(u.owner).agency16?.cipher?.[enemy];
+    if(until>this.s.day){p.soft*=1+CIPHER_BONUS;p.hard*=1+CIPHER_BONUS;p.defense*=1+CIPHER_BONUS;p.breakthrough*=1+CIPHER_BONUS;}
+    return p;
+  };
+  // AI: majors found an agency, keep one agent at home in wartime, weave
+  // networks against their enemies or rivals, then capture their ciphers,
+  // sabotage their railways or steal their plans.
+  Engine.prototype.aiIntel16=function(id){
+    const c=this.nation(id),major=MAJORS.includes(id),atWar=this.enemies(id).length>0;
+    if(!c.agency16){if((major||atWar&&c.stats.mil>=5)&&this.s.day>=200&&c.pp>=AGENCY_COST+20)this.foundAgency16(id);return;}
+    const A=c.agency16;
+    const next=(this.catalog.agencyUpgrades||[]).find(u=>!A.upgrades.includes(u.id));
+    if(next&&c.pp>=next.cost+100&&this.s.day-A.lastUpgrade>=UPGRADE_GAP){c.pp-=next.cost;A.upgrades.push(next.id);A.lastUpgrade=this.s.day;}
+    if(A.agents.length<this.agentSlots16(c)&&c.pp>=AGENT_COST+70)this.recruitAgent16(id);
+    const enemies=this.enemies(id).filter(e=>this.nation(e)?.alive&&!this.nation(e).capitulated16);
+    const plans=this.plansFor16?.(id)||[],rivals=plans.map(p=>p.target).filter(t=>this.nation(t)?.alive&&t!==id);
+    const targets=[...new Set([...enemies,...rivals])].slice(0,3);
+    const busy=new Set(A.ops.flatMap(o=>o.agents)),free=A.agents.filter(a=>!busy.has(a.id));
+    if(atWar&&free.length>=2&&!A.agents.some(a=>a.mission==='counter')){const a=free.shift();a.mission='counter';a.target=id;}
+    else if(!atWar){const home=A.agents.find(a=>a.mission==='counter');if(home&&targets.length){home.mission=null;}}
+    for(const a of free)if(!a.mission&&targets.length){const t=targets[a.id%targets.length];a.mission='network';a.target=t;}
+    if(c.pp<60)return;
+    for(const t of enemies){
+      const net=A.networks[t]||0;
+      try{
+        if(net>=60&&!(A.cipher[t]>this.s.day))this.startOperation16(id,'capture_cipher',t);
+        else if(net>=30&&c.pp>=80)this.startOperation16(id,'sabotage_rail',t);
+      }catch{}
+    }
+    for(const t of rivals)if((A.networks[t]||0)>=50&&c.pp>=120)try{this.startOperation16(id,'steal_plans',t);}catch{}
+  };
+  // AI occupation laws follow the regime, harsher when garrisons run short.
+  Engine.prototype.aiOccupation16=function(id){
+    const c=this.nation(id),g=c.garrison16;if(!g?.need)return;
+    const harsh=['fascist','communist'].includes(c.ideology),order=['autonomy','civil','police','military','terror'];
+    let law=harsh?'military':c.ideology==='democratic'?'civil':'police';
+    if(g.ratio<.6)law=order[Math.max(0,order.indexOf(law)-1)];
+    if(this.intel16().laws.has(law)&&c.occupation!==law)c.occupation=law;
+  };
+  Engine.command16('foundAgency',function(p,id){this.foundAgency16(id);});
+  Engine.command16('agencyUpgrade',function(p,id,c){
+    const A=c.agency16,u=this.intel16().upgrades.get(p.id);assert(A,'Fondez d’abord une agence de renseignement.');assert(u,'Département inconnu.');
+    assert(!A.upgrades.includes(u.id),'Département déjà créé.');assert(this.s.day-A.lastUpgrade>=UPGRADE_GAP,'Un seul département par mois.');
+    pp(c,u.cost);c.pp-=u.cost;A.upgrades.push(u.id);A.lastUpgrade=this.s.day;
+  });
+  Engine.command16('recruitAgent',function(p,id){return this.recruitAgent16(id).id;});
+  Engine.command16('agentMission',function(p,id){this.assignAgent16(id,p.id,p.mission??null,p.target??null);});
+  Engine.command16('dismissAgent',function(p,id,c){
+    const A=c.agency16;assert(A?.agents.some(a=>a.id===p.id),'Agent inconnu.');
+    for(const o of A.ops)if(o.agents.includes(p.id))o.agents=o.agents.filter(x=>x!==p.id);
+    A.agents=A.agents.filter(a=>a.id!==p.id);
+  });
+  Engine.command16('operation',function(p,id){this.startOperation16(id,p.kind,p.target);});
+  Engine.invariant16(function(state){
+    const I=this.intel16();
+    for(const [id,c] of Object.entries(state.countries)){
+      if(c.garrison16)assert(finite(c.garrison16.men,0,1e9)&&finite(c.garrison16.need,0,1e9)&&finite(c.garrison16.ratio,0,1),'Garnisons invalides.');
+      const A=c.agency16;if(!A)continue;
+      assert(Array.isArray(A.upgrades)&&A.upgrades.every(u=>I.upgrades.has(u))&&Array.isArray(A.agents)&&A.agents.length<=MAX_SLOTS&&Array.isArray(A.ops)&&A.networks&&A.cipher,'Agence de renseignement invalide : '+id+'.');
+      for(const a of A.agents)assert(Number.isInteger(a.id)&&typeof a.name==='string'&&Number.isInteger(a.skill)&&a.skill>=1&&a.skill<=5&&(a.mission===null||I.missions.has(a.mission))&&(a.mission===null||state.countries[a.target]),'Agent invalide.');
+      for(const o of A.ops)assert(I.ops.has(o.kind)&&state.countries[o.target]&&finite(o.progress,0,1e4)&&Array.isArray(o.agents),'Opération invalide.');
+      for(const v of Object.values(A.networks))assert(finite(v,0,100),'Réseau invalide.');
+      for(const [t,v] of Object.entries(A.cipher))assert(state.countries[t]&&Number.isInteger(v),'Chiffre invalide.');
+    }
   });
 
   // ---------------------------------------------------------------------------

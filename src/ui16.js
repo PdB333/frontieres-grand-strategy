@@ -853,11 +853,63 @@ ACTIONS16.push(async(action,p)=>{
   return false;
 });
 
+/* ---- Intelligence agency and occupation ---- */
+const STARS16=n=>'★'.repeat(n)+'☆'.repeat(Math.max(0,5-n));
+let intelTarget16=null;
+function occupationCard16(c){
+  const laws=CATALOG.occupationLaws||[],g=c.garrison16||{men:0,need:0,ratio:1};
+  const occ=S.provinces.map((q,i)=>[q,i]).filter(([q,i])=>q.ctrl===S.player&&q.own!==S.player&&!isCore16(S.player,i));
+  const avg=k=>occ.length?Math.round(total(occ.map(([q])=>q[k]))/occ.length):0;
+  const worst=[...occ].sort((a,b)=>b[0].resistance-a[0].resistance).slice(0,5);
+  return `<div class="sectionlabel">Territoires occupés / ${occ.length}</div>
+    <div class="grid2"><div class="card stat">${avg('resistance')} %<small>RÉSISTANCE MOYENNE</small></div><div class="card stat">${avg('compliance')} %<small>CONFORMITÉ MOYENNE</small></div></div>
+    <div class="card" style="margin-top:9px">${metric('Garnisons',num(g.men)+' / '+num(g.need)+' hommes')}${bar(g.ratio*100,'#a7b58f')}<small>Les garnisons sont prélevées sur la réserve d’effectifs et consomment de l’armement d’infanterie. Sans garnison, la résistance grandit et peut soulever une province.</small></div>
+    <div class="sectionlabel">Loi d’occupation</div><div class="stack">${laws.map(l=>`<div class="card"><div class="row between"><strong style="font-size:12px">${esc(l.name)}</strong>${c.occupation===l.id?tag('EN VIGUEUR','gold'):btn('Adopter','law',{kind:'occupation',value:l.id},'small')}</div><small>${esc(l.desc)} Exploitation ${Math.round(l.extraction*100)} % / garnisons ×${l.garrison} / résistance ${l.resistance>=0?'+':''}${l.resistance} par jour${l.losses?' / représailles':''}</small></div>`).join('')}</div>
+    ${worst.length?`<div class="stack" style="margin-top:9px">${worst.map(([q,i])=>`<div class="card"><div class="row between"><strong style="font-size:12px">${esc(pname(i))}</strong><small>${esc(countryName(q.own))}</small></div>${metric('Résistance / conformité',Math.round(q.resistance)+' % / '+Math.round(q.compliance)+' %')}${bar(q.resistance,'#ae6958')}</div>`).join('')}</div>`:''}`;
+}
+PANELS16.intel=function(){
+  const c=nation(),A=c.agency16,M=CATALOG.agentMissions||[],O=CATALOG.operations16||[],U=CATALOG.agencyUpgrades||[];
+  const foes=Object.keys(S.countries).filter(id=>id!==S.player&&S.countries[id].alive);
+  intelTarget16=foes.includes(intelTarget16)?intelTarget16:(foes.find(id=>war(S.player,id))||foes[0]);
+  const dossiers=`<div class="sectionlabel">Dossiers nationaux</div><div class="stack">${Object.entries(c.intel).filter(([,v])=>v>=1).sort((a,b)=>b[1]-a[1]).slice(0,12).map(([id,v])=>`<div class="card">${metric(esc(countryName(id)),Math.round(v)+' %'+(A?.networks?.[id]?' / réseau '+Math.round(A.networks[id])+' %':'')+(A?.cipher?.[id]>S.day?' / chiffre lu':''))}${bar(v,'#94b6bb')}</div>`).join('')||'<div class="empty">Aucun dossier : vos agents construiront des réseaux.</div>'}</div>`;
+  if(!A)return panelHeader('Renseignement','Agence, agents, opérations clandestines et occupation.')+`
+    <div class="card stack"><h3>Agence de renseignement</h3><p class="note">Une agence recrute des agents qui tissent des réseaux à l’étranger, traquent les espions ennemis, répandent la propagande ou arment les résistances. Les réseaux ouvrent les opérations : sabotage, vol de plans, capture du chiffre, gouvernement de collaboration.</p>${btn('Fonder l’agence / 100 PP','foundAgency16',{},'primary small',c.pp<100)}</div>
+    ${dossiers}${occupationCard16(c)}`;
+  const slots=Math.min(6,2+total(A.upgrades.map(id=>U.find(u=>u.id===id)?.effect.slots||0)));
+  const busy=new Set(A.ops.flatMap(o=>o.agents)),free=A.agents.filter(a=>!busy.has(a.id)).length,net=A.networks[intelTarget16]||0;
+  const missionSelect=a=>`<select id="agent-mission-${a.id}"><option value="">Au repos</option>${M.map(m=>`<option value="${m.id}" ${a.mission===m.id?'selected':''}>${esc(m.name)}</option>`).join('')}</select>`;
+  return panelHeader('Renseignement',`${A.agents.length} / ${slots} agents / ${Object.keys(A.networks).length} réseau(x) / ${A.ops.length} opération(s)`)+`
+    <div class="sectionlabel">Agents</div><div class="stack">${A.agents.map(a=>`<div class="card stack"><div class="row between"><strong>${esc(a.name)}</strong><span class="gold" title="Niveau ${a.skill}">${STARS16(a.skill)}</span></div>
+      <small>${busy.has(a.id)?'Engagé dans une opération':a.mission?esc(M.find(m=>m.id===a.mission)?.name||a.mission)+(a.mission!=='counter'?' / '+esc(countryName(a.target)):''):'Au repos'}</small>
+      ${busy.has(a.id)?'':`${missionSelect(a)}${selectCountries(a.target&&a.target!==S.player?a.target:intelTarget16,'agent-target-'+a.id,S.player)}<div class="row wrap">${btn('Affecter','agentMission16',{id:a.id},'small')}${btn('Renvoyer','dismissAgent16',{id:a.id},'small ghost')}</div>`}</div>`).join('')||'<div class="empty">Aucun agent.</div>'}</div>
+    <div style="margin:10px 0">${btn('Recruter un agent / 25 PP','recruitAgent16',{},'small wide',A.agents.length>=slots||c.pp<25)}</div>
+    <div class="sectionlabel">Opérations</div><div class="card stack">${selectCountries(intelTarget16,'intel-target',S.player)}${btn('Choisir la cible','intelTarget16',{},'small')}
+      ${metric('Réseau dans ce pays',Math.round(net)+' %')}${bar(net,'#94b6bb')}
+      </div><div class="stack" style="margin-top:9px">${O.map(o=>`<div class="card"><div class="row between"><strong style="font-size:12px">${esc(o.name)}</strong>${btn('Lancer','operation16',{kind:o.id,target:intelTarget16},'small',net<o.network||free<o.agents||c.pp<o.cost||A.ops.some(x=>x.kind===o.id&&x.target===intelTarget16))}</div><small>${esc(o.desc)}</small><small style="display:block" class="${net>=o.network?'gold':''}">Réseau ${o.network} % / ${o.cost} PP / ${o.days} jours / ${o.agents} agent(s)</small></div>`).join('')}</div>
+    ${A.ops.length?`<div class="stack" style="margin-top:9px">${A.ops.map(o=>`<div class="card"><div class="row between"><strong style="font-size:12px">${esc(O.find(x=>x.id===o.kind)?.name||o.kind)}</strong><small>${esc(countryName(o.target))}</small></div>${bar(o.progress/o.days*100)}<small>${Math.floor(o.progress)} / ${o.days} jours</small></div>`).join('')}</div>`:''}
+    <div class="sectionlabel">Départements</div><div class="stack">${U.map(u=>{const has=A.upgrades.includes(u.id);return `<div class="card"><div class="row between"><strong style="font-size:12px">${esc(u.name)}</strong>${has?tag('CRÉÉ','good'):btn(u.cost+' PP','agencyUpgrade16',{id:u.id},'small',c.pp<u.cost||S.day-A.lastUpgrade<30)}</div><small>${esc(u.desc)}</small></div>`;}).join('')}</div>
+    <small style="display:block;margin-top:6px">Un département par mois au plus.</small>
+    ${dossiers}${occupationCard16(c)}
+    <p class="note" style="margin-top:15px">Un réseau grandit avec les agents qui y travaillent et décline sans eux ou sous le contre-espionnage adverse. Les agents à l’étranger peuvent être arrêtés ; un agent gagne un niveau tous les six mois de mission.</p>`;
+};
+ACTIONS16.push(async(action,p)=>{
+  switch(action){
+    case 'foundAgency16':await cmd('foundAgency',{});toast('Agence de renseignement fondée.');renderPanel(true);return true;
+    case 'recruitAgent16':await cmd('recruitAgent',{});renderPanel(true);return true;
+    case 'agentMission16':{const mission=$('agent-mission-'+p.id).value||null;await cmd('agentMission',{id:p.id,mission,target:$('agent-target-'+p.id).value});toast(mission?'Mission affectée.':'Agent au repos.');renderPanel(true);return true;}
+    case 'dismissAgent16':if(confirm('Renvoyer cet agent ?')){await cmd('dismissAgent',{id:p.id});renderPanel(true);}return true;
+    case 'intelTarget16':intelTarget16=$('intel-target').value;renderPanel(true);return true;
+    case 'operation16':await cmd('operation',{kind:p.kind,target:p.target});toast('Opération lancée.');renderPanel(true);return true;
+    case 'agencyUpgrade16':await cmd('agencyUpgrade',{id:p.id});renderPanel(true);return true;
+  }
+  return false;
+});
+
 /* ---- Manual ---- */
 showHelp=function(){
   pauseGame();
   const card=(title,text)=>`<div class="card"><h3>${title}</h3><p class="note" style="margin-top:10px">${text}</p></div>`;
-  modal(`${modalHead('Manuel de campagne','FRONTIÈRES 1.10 / PRISE EN MAIN')}<div class="grid2">
+  modal(`${modalHead('Manuel de campagne','FRONTIÈRES 1.11 / PRISE EN MAIN')}<div class="grid2">
     ${card('1. Préparer l’État','Choisissez une priorité nationale et affectez vos équipes de recherche. Les usines, chantiers et raffineries partagent les emplacements de chaque État. Six ressources stratégiques alimentent les lignes de production ; la loi commerciale fixe la part exportée.')}
     ${card('2. Lois, conseillers, décisions','L’économie, la conscription et le commerce se règlent par des lois. Nommez des conseillers et des chefs d’état-major, prenez des décisions ponctuelles et surveillez vos esprits nationaux. Les voies politiques de l’arbre peuvent changer le régime.')}
     ${card('3. Former les forces','Composez vos divisions à partir de bataillons et de compagnies de soutien. Concevez chars, avions et navires, puis modernisez vos stocks. Le recrutement consomme matériel et effectifs.')}
@@ -866,6 +918,7 @@ showHelp=function(){
     ${card('6. Guerre et paix','Justifiez un but de guerre, puis déclarez la guerre. Un pays capitule quand il a perdu l’essentiel de ses points de victoire et de son territoire ; certains esprits repoussent ce seuil. Un gouvernement allié peut poursuivre la lutte en exil. La conférence de paix répartit les États selon la contribution de chacun.')}
     ${card('7. Généraux et maréchaux','Chaque armée reçoit un général, chaque groupe d’armées un maréchal. Ils gagnent de l’expérience au combat, montent de niveau et apprennent des traits de terrain ou d’armes. Chaque jour de bataille, les commandants choisissent une tactique que l’adversaire peut contrer. Ouvrez l’état-major depuis Armées.')}
     ${card('8. Logistique','Le ravitaillement emprunte les voies ferrées, bien moins coûteuses que les routes, puis les routes. Produisez assez de locomotives pour votre réseau et de camions pour vos divisions, et tracez de nouvelles lignes vers vos fronts (Industrie → Logistique). La vue Ravitaillement montre les voies et les dépôts.')}
+    ${card('9. Renseignement et occupation','Fondez une agence (Renseignement), recrutez des agents et tissez des réseaux : ils ouvrent sabotages, vols de plans, capture du chiffre et gouvernements de collaboration. Les territoires occupés exigent des garnisons ; la loi d’occupation arbitre entre exploitation et résistance.')}
   </div><div class="card" style="margin-top:18px"><h3>Raccourcis</h3><p class="note" style="margin-top:10px"><span class="hotkey">Espace</span> Pause / <span class="hotkey">1–5</span> Vitesse / <span class="hotkey">A</span> Armées / <span class="hotkey">I</span> Industrie / <span class="hotkey">R</span> Recherche / <span class="hotkey">D</span> Diplomatie / <span class="hotkey">P</span> Priorités / <span class="hotkey">F</span> Recentrer / <span class="hotkey">Échap</span> Fermer.</p></div>
   <p class="note" style="margin-top:18px">Limites de cette version : simulation journalière avec combats horaires, carte d’environ 11 600 provinces terrestres (régions Natural Earth 1:10m), 226 régions maritimes et 158 régions aériennes, réseau ferré schématique, IA heuristique, contenu original moins abondant que celui des grands jeux commerciaux. Pas de multijoueur ni de compatibilité avec les mods d’autres jeux.</p>`,'help','wide');
 };

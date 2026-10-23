@@ -1181,7 +1181,7 @@ function createEngineClass() {
         assert(c.identity?.id===id&&typeof c.identity.name==='string'&&this.prov[c.identity.capital],'Identit\u00e9 nationale invalide.');
         for(const k of ['tech','research','focusDone','build','training','templates','relations_PLACEHOLDER','access','guarantees','pacts','trades','justifications','spies','lendLease','history','achievements'].filter(k=>k!=='relations_PLACEHOLDER'))assert(Array.isArray(c[k]),'Donn\u00e9e nationale invalide : '+k);
         for(const k of ['manpower','pool','pp','stability','support','casualties','xp','slots'])assert(finite(c[k]),'Ressource nationale invalide : '+k);
-        assert((this.catalog.laws?.economy?.map(l=>l.id)||['civilian','partial','war']).includes(c.economy)&&['civil','police','military'].includes(c.occupation),'Loi invalide.');
+        assert((this.catalog.laws?.economy?.map(l=>l.id)||['civilian','partial','war']).includes(c.economy)&&(this.catalog.occupationLaws?.map(l=>l.id)||['civil','police','military']).includes(c.occupation),'Loi invalide.');
         assert(c.stock&&c.bonus&&c.allocation&&c.efficiency&&c.relations&&c.intel&&c.parties&&c.policyCooldown,'Structures nationales manquantes.');
         for(const k of Object.keys(this.catalog.equipment))assert(finite(c.stock[k])&&Number.isInteger(c.allocation[k])&&c.allocation[k]>=0&&finite(c.efficiency[k],0,1),'Stock ou allocation invalide : '+k);
         assert(finite(c.stock.fuel),'Carburant invalide.');
