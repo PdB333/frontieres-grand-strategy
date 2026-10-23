@@ -59,7 +59,16 @@ const buildProvince=()=>pid!==null&&control(pid)===S?.player?pid:owned().find(p=
 const availableCountries=()=>S?Object.values(S.countries).filter(c=>c.alive).map(c=>c.identity):previewWorld14().countries;
 function selectCountries(value,id,exclude=null){return `<select id="${id}">${availableCountries().filter(c=>c.id!==exclude).sort((a,b)=>a.name.localeCompare(b.name,'fr')).map(c=>`<option value="${c.id}" ${c.id===value?'selected':''}>${esc(c.name)}</option>`).join('')}</select>`;}
 function selectProvinces(id,value,filter=()=>true){return `<select id="${id}">${owned().filter(filter).sort((a,b)=>(b.city-a.city)||a.name.localeCompare(b.name,'fr')).map(p=>`<option value="${p.id}" ${p.id===value?'selected':''}>${esc(p.name)}</option>`).join('')}</select>`;}
-function zoneOptions(value,seas=false){return (seas?WORLD.seas:WORLD.zones).map(z=>`<option value="${z.id}" ${z.id===value?'selected':''}>${esc(z.name)}</option>`).join('');}
+function zoneOptions(value,seas=false){
+  // Regions grouped by theatre (the 1.7 zones), alphabetically.
+  const list=seas?WORLD.seas:WORLD.zones,legacy=(seas?WORLD.legacySeas:WORLD.legacyZones)||[],names=Object.fromEntries(legacy.map(z=>[z.id,z.name])),groups=new Map();
+  for(const z of list){const t=z.theatre||'';if(!groups.has(t))groups.set(t,[]);groups.get(t).push(z);}
+  const option=z=>`<option value="${z.id}" ${z.id===value?'selected':''}>${esc(z.name)}</option>`;
+  if(groups.size<2)return list.map(option).join('');
+  return [...groups].sort((a,b)=>(names[a[0]]||a[0]).localeCompare(names[b[0]]||b[0],'fr')).map(([t,zs])=>`<optgroup label="${esc(names[t]||t)}">${zs.sort((a,b)=>a.name.localeCompare(b.name,'fr')).map(option).join('')}</optgroup>`).join('');
+}
+let seaLabels=null;
+function seaLabelOrder(){if(!seaLabels||seaLabels.src!==WORLD.seas)seaLabels={src:WORLD.seas,list:[...WORLD.seas].sort((a,b)=>(b.provinces?.length||0)-(a.provinces?.length||0)||a.id.localeCompare(b.id))};return seaLabels.list;}
 function toast(message,error=false){const el=document.createElement('div');el.className='toast'+(error?' error':'');el.textContent=message;$('toasts').append(el);setTimeout(()=>el.remove(),error?8500:5000);}
 function send(type,p={}){return new Promise((resolve,reject)=>{const request=++requestId;pendingRequests.set(request,{resolve,reject});worker.postMessage({type,request,...p});if(type==='diagnostics'){pendingRequests.delete(request);resolve();}});}
 function cmd(action,params={}){return send('command',{action,params}).catch(e=>{toast(e.message,true);throw e;});}
@@ -540,7 +549,7 @@ function showStart(){
   if((CATALOG.bookmarks.find(b=>b.id===startBookmark)?.unavailable||[]).includes(selectedCountry))selectedCountry='FRA';
   const d=previewIdentity(startDefs[selectedCountry]),resume=(()=>{try{return !!(localStorage.getItem('frontieres-v4-autosave')||localStorage.getItem('frontieres-v4-autosave'));}catch{return false;}})();
   pauseGame();modalKind='start';
-  modal(`<div class="start-grid"><section class="start-intro"><div class="start-brand"><span class="badge-square">F</span>FRONTI\u00c8RES</div><div class="eyebrow">UN MONDE \u00c0 LA CROIS\u00c9E DES CHEMINS</div><h1>L\u2019histoire n\u2019est<br>pas encore <em>\u00e9crite.</em></h1><p>Industrialisez votre pays. Organisez vos arm\u00e9es. Tissez vos alliances. Le monde de 1936 entre dans une nouvelle \u00e8re d\u2019incertitude.</p><div class="start-stats"><div class="stat">${startWorld.countries.length}<small>PAYS JOUABLES</small></div><div class="stat">${startWorld.provinces.length.toLocaleString('fr-FR')}<small>PROVINCES</small></div><div class="stat">01<small>MONDE PERSISTANT</small></div></div>${tag('VERSION 1.7 / GRANDE STRATÉGIE','gold')}${mod?.scenario?`<p class="note" style="margin-top:10px;color:var(--gold)">${esc(mod.scenario.title)} · ${dateText(mod.scenario.startDay??(mod.scenario.bookmark==='1939'?1338:0))}. ${esc(mod.scenario.description||'')}</p>`:''}<p class="note" style="margin-top:12px">Jeu original de grande strat\u00e9gie. G\u00e9ographie r\u00e9elle ; provinces, fronti\u00e8res de 1936 et valeurs militaires simplifi\u00e9es. Aucun fichier de Hearts of Iron IV.</p><div style="margin-top:11px">${btn('Ouvrir l\u2019atlas 1936-1945 \u2197','atlas',{},'small ghost')}${btn('Sources et portraits','sources',{},'small ghost')}</div></section>
+  modal(`<div class="start-grid"><section class="start-intro"><div class="start-brand"><span class="badge-square">F</span>FRONTI\u00c8RES</div><div class="eyebrow">UN MONDE \u00c0 LA CROIS\u00c9E DES CHEMINS</div><h1>L\u2019histoire n\u2019est<br>pas encore <em>\u00e9crite.</em></h1><p>Industrialisez votre pays. Organisez vos arm\u00e9es. Tissez vos alliances. Le monde de 1936 entre dans une nouvelle \u00e8re d\u2019incertitude.</p><div class="start-stats"><div class="stat">${startWorld.countries.length}<small>PAYS JOUABLES</small></div><div class="stat">${startWorld.provinces.length.toLocaleString('fr-FR')}<small>PROVINCES</small></div><div class="stat">01<small>MONDE PERSISTANT</small></div></div>${tag('VERSION 1.8 / GRANDE STRATÉGIE','gold')}${mod?.scenario?`<p class="note" style="margin-top:10px;color:var(--gold)">${esc(mod.scenario.title)} · ${dateText(mod.scenario.startDay??(mod.scenario.bookmark==='1939'?1338:0))}. ${esc(mod.scenario.description||'')}</p>`:''}<p class="note" style="margin-top:12px">Jeu original de grande strat\u00e9gie. G\u00e9ographie r\u00e9elle ; provinces, fronti\u00e8res de 1936 et valeurs militaires simplifi\u00e9es. Aucun fichier de Hearts of Iron IV.</p><div style="margin-top:11px">${btn('Ouvrir l\u2019atlas 1936-1945 \u2197','atlas',{},'small ghost')}${btn('Sources et portraits','sources',{},'small ghost')}</div></section>
     <section class="start-right"><div class="eyebrow">NOUVELLE CAMPAGNE</div><h2>Choisissez votre nation</h2><p class="note">Vous dirigez l\u2019\u00c9tat, pas seulement son arm\u00e9e.</p><div class="start-countries">${[...['FRA','GER','GBR','SOV','USA','ITA','JPN','CHI'],...((mod?.newCountries||[]).map(c=>c.id))].map(id=>btn(`<span class="code">${id}</span><strong>${esc(startDefs[id].name)}</strong>`,'chooseCountry',{id},'country-choice '+(selectedCountry===id?'selected':''))).join('')}</div><div class="start-select"><span class="label">TOUS LES PAYS</span><select id="start-country">${[...startWorld.countries].sort((a,b)=>a.name.localeCompare(b.name,'fr')).map(c=>`<option value="${c.id}" ${selectedCountry===c.id?'selected':''} ${(CATALOG.bookmarks.find(b=>b.id===startBookmark)?.unavailable||[]).includes(c.id)?'disabled':''}>${esc(c.name)}</option>`).join('')}</select></div>
       <div class="start-profile"><div class="row" style="gap:15px">${portrait(selectedCountry,'large',d)}<div><h3 style="font-size:26px">${esc(d.leader)}</h3><small style="display:block;margin:7px 0">${esc(d.role)}</small>${tag(IDEO[d.ideology])}</div></div><div class="profile-stats"><div class="stat">${d.civ+d.mil}<small>USINES</small></div><div class="stat">${d.divisions}<small>DIVISIONS</small></div><div class="stat">${num(d.manpower)}<small>R\u00c9SERVES</small></div><div class="stat">${d.mil>17?3:2}<small>RECHERCHE</small></div></div><p class="note" style="font-size:10px">${esc(d.description)}</p></div>
       <div class="start-options"><label><span class="label">POINT DE D\u00c9PART</span><select id="start-bookmark">${CATALOG.bookmarks.map(b=>`<option value="${b.id}" ${b.id===startBookmark?'selected':''}>${esc(b.name)}</option>`).join('')}</select></label><div class="note bookmark-note">${esc(CATALOG.bookmarks.find(b=>b.id===startBookmark)?.description||'')}</div></div><div class="start-options"><label><span class="label">CHRONOLOGIE</span><select id="start-scenario"><option value="historical" ${startHistorical==='historical'?'selected':''}>Dynamique historique conditionnelle</option><option value="sandbox" ${startHistorical==='sandbox'?'selected':''}>Diplomatie libre</option></select></label><label><span class="label">MOD DE DONN\u00c9ES</span>${btn(esc(mod?.name||'Aucun mod actif')+' \u2197','mods',{},'wide small')}</label></div>
@@ -589,7 +598,7 @@ function showMods(){
   const active=mod?Rules.validateMod(mod,BASE_WORLD,CATALOG):null;
   const extra=active?(active.newCountries?.length||0):0;
   const territorial=active?.territories?.length||0;
-  modal(`${modalHead('Atelier de mondes','FRONTIÈRES 1.7 / MODS JSON SANS SCRIPTS')}
+  modal(`${modalHead('Atelier de mondes','FRONTIÈRES 1.8 / MODS JSON SANS SCRIPTS')}
     <p class="note">Creez ou combinez des univers alternatifs : Etats jouables, dirigeants, territoires, scenarios, technologies, arbres et evenements conditionnels. Le format historique 1 reste accepte. Le champ map peut dessiner des provinces et leurs liaisons. Un mod se charge avant une nouvelle campagne.</p>
     <div class="card" style="margin:14px 0"><div class="row between"><strong>${esc(active?.name||'Aucun mod selectionne')}</strong>${tag(active?'FORMAT '+active.version:'BASE','gold')}</div>
       <div class="row wrap" style="margin-top:10px">${tag(extra+' pays ajoutes')}${tag(territorial+' transferts')}${tag((active?.events||[]).length+' evenements')}${tag((active?.technologies||[]).length+' technologies')}${tag((active?.map?.addProvinces||[]).length+' nouvelles provinces')}</div>
@@ -794,8 +803,9 @@ function visibleUnits(){
   return S.units.filter(u=>u.owner===S.player||allied(S.player,u.owner)||nearby.has(u.pid)||(nation().intel[u.owner]||0)>=70);
 }
 const BASE_LOD_ZOOM=1.5,BASE_SCALE=2,baseCache=document.createElement('canvas'),baseCacheCtx=baseCache.getContext('2d');
-let baseCacheKey=null;
+let baseCacheKey=null,baseCacheRevision=null,baseCacheTime=0,baseCacheTimer=0;
 function drawProvinceLayer(g,list,zoom){
+  if(typeof window.drawSeaLayer16==='function')window.drawSeaLayer16(g,zoom,list===WORLD.provinces);
   for(const p of list){g.fillStyle=colorOf(p);g.fill(geometries[p.id].path,'evenodd');g.strokeStyle='#1b38334b';g.lineWidth=.42/zoom;g.stroke(geometries[p.id].path);}
   // Country boundaries from real province segments. Shared boundary lines are thicker.
   g.strokeStyle='#213b3be0';g.lineWidth=.9/zoom;
@@ -817,12 +827,13 @@ function drawMap(){
   // Zoomed out, the province layer comes from a bitmap redrawn when the day,
   // the map mode or the map changes; zoomed in, provinces are drawn directly.
   if(camera.zoom<BASE_LOD_ZOOM){
-    const key=WORLD.mapId+'|'+WORLD.provinces.length+'|'+mapMode+'|'+atlasRegion+'|'+(S?S.player+'|'+S.revision:'-');
-    if(baseCacheKey!==key){
-      baseCacheKey=key;baseCache.width=Math.round(1800*BASE_SCALE);baseCache.height=Math.round(820*BASE_SCALE);
+    // The view key changes at once; daily changes refresh it at most every 1.5 s.
+    const key=WORLD.mapId+'|'+WORLD.provinces.length+'|'+mapMode+'|'+atlasRegion+'|'+(S?S.player:'-'),now=performance.now();
+    if(baseCacheKey!==key||S&&baseCacheRevision!==S.revision&&now-baseCacheTime>1500){
+      baseCacheKey=key;baseCacheRevision=S?.revision;baseCacheTime=now;baseCache.width=Math.round(1800*BASE_SCALE);baseCache.height=Math.round(820*BASE_SCALE);
       baseCacheCtx.setTransform(BASE_SCALE,0,0,BASE_SCALE,0,0);baseCacheCtx.clearRect(0,0,1800,820);
       drawProvinceLayer(baseCacheCtx,WORLD.provinces,BASE_SCALE);
-    }
+    }else if(S&&baseCacheRevision!==S.revision&&!baseCacheTimer)baseCacheTimer=setTimeout(()=>{baseCacheTimer=0;dirty=true;},1600-(now-baseCacheTime));
     ctx.drawImage(baseCache,0,0,1800,820);
   }else drawProvinceLayer(ctx,visible,camera.zoom);
   if(showRoutes||mapMode==='navy'){
@@ -832,7 +843,6 @@ function drawMap(){
   }
   drawHistoricalLayers(ctx,camera.zoom);
   ctx.textAlign='center';ctx.textBaseline='middle';
-  for(const sea of WORLD.seas){const p=project(sea.x,sea.y);if(p.x<l||p.x>r||p.y<t||p.y>b)continue;ctx.font=`italic ${11/camera.zoom}px Georgia`;ctx.fillStyle=mapMode==='navy'?'#c6cebc':'#c0cebb52';ctx.fillText(sea.name.toUpperCase(),p.x,p.y);if(mapMode==='navy'){ctx.strokeStyle='#aebc9670';ctx.lineWidth=1/camera.zoom;ctx.beginPath();ctx.arc(p.x,p.y,19/camera.zoom,0,Math.PI*2);ctx.stroke();}}
   // Army planning lines and movement orders.
   if(S){
     const a=S.armies.find(a=>a.id===army);drawOperations(ctx,camera.zoom);
@@ -860,7 +870,13 @@ function drawMap(){
     const v=centers[p.id];ctx.fillStyle=p.capital?'#e7c887':'#d5d7b9';ctx.strokeStyle='#34493b';ctx.lineWidth=.8/camera.zoom;ctx.beginPath();ctx.arc(v.x,v.y,(p.capital?2.3:1.7)/camera.zoom,0,Math.PI*2);ctx.fill();ctx.stroke();
     if(camera.zoom>2.3)label(p.name,v.x+2/camera.zoom,v.y+9/camera.zoom,10,'#edf0d4','system-ui',3);
   }
-  if(mapMode==='air')for(const z of WORLD.zones){const ps=visible.filter(p=>p.zone===z.id);if(ps.length){const x=total(ps.map(p=>centers[p.id].x))/ps.length,y=total(ps.map(p=>centers[p.id].y))/ps.length;label(z.name.toUpperCase(),x,y,14,'#eee4c8');}}
+  if(mapMode==='air')for(const z of WORLD.zones){const p=project(z.x,z.y);if(p.x<l||p.x>r||p.y<t||p.y>b)continue;label(z.name.toUpperCase(),p.x,p.y,12,'#eee4c8');}
+  // Sea regions, largest first; small seas appear when zooming in.
+  if(mapMode==='navy'||camera.zoom>1.3)for(const sea of seaLabelOrder()){
+    const p=project(sea.x,sea.y);if(p.x<l||p.x>r||p.y<t||p.y>b)continue;
+    if((sea.provinces?.length||10)*camera.zoom*camera.zoom<(mapMode==='navy'?6:14))continue;
+    label(sea.name.toUpperCase(),p.x,p.y,mapMode==='navy'?10:9,mapMode==='navy'?'#d7e2d4':'#b9cbc591','Georgia',4);
+  }
   if(S&&camera.zoom>1.55){
     const stacks=new Map();for(const u of visibleUnits()){if(!onScreen(u.pid))continue;const key=u.pid+'-'+u.owner;if(!stacks.has(key))stacks.set(key,[]);stacks.get(key).push(u);}
     for(const units of stacks.values()){
@@ -1018,7 +1034,7 @@ function showSaveSlots(){pauseGame();let entries=[];for(let i=1;i<=3;i++){let ra
 function showPerformance15(){
   pauseGame();
   const p=lastWorkerPerf;
-  modal(`${modalHead('Performance et diagnostic','FRONTIÈRES 1.7 / TÉLÉMÉTRIE LOCALE')}
+  modal(`${modalHead('Performance et diagnostic','FRONTIÈRES 1.8 / TÉLÉMÉTRIE LOCALE')}
     <p class="note">Mesures observées sur cet appareil ; elles ne proviennent pas d'un benchmark universel.</p>
     <div class="grid2" style="margin:16px 0">
       <div class="card stat">${p.avgMs??'—'} ms<small>Temps moyen par jour simulé</small></div>

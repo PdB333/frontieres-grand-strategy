@@ -425,18 +425,69 @@ PANELS16.navy=function(){
 const SHIP_CLASS_LABELS16={destroyers:'Destroyer',cruisers:'Croiseur',battleships:'Cuirassé',carriers:'Porte-avions',submarines:'Sous-marin'};
 const colorOfAir15=colorOf;
 colorOf=function(p){
-  if(mapMode==='air'&&S){const share=S.airControl16?.[p.zone]?.[S.player];if(share!==undefined)return `hsl(${Math.round(share*110)},32%,${34+share*14}%)`;}
+  if(mapMode==='air'){const share=S?.airControl16?.[p.zone]?.[S.player];if(share!==undefined)return `hsl(${Math.round(share*110)},32%,${34+share*14}%)`;return airColour16(p.zone);}
   return colorOfAir15(p);
 };
+// Sea provinces and regions (1.8): drawn under the land. In the naval view the
+// regions are tinted by the sea control of the player's side.
+let seaGeo16=null;
+function regionPaths16(list){
+  return (list||[]).map(z=>{
+    const path=new Path2D();let minx=Infinity,miny=Infinity,maxx=-Infinity,maxy=-Infinity;
+    for(const ring of z.polygons||[]){ring.forEach(([x,y],i)=>{const v=project(x,y);if(!i)path.moveTo(v.x,v.y);else path.lineTo(v.x,v.y);minx=Math.min(minx,v.x);miny=Math.min(miny,v.y);maxx=Math.max(maxx,v.x);maxy=Math.max(maxy,v.y);});path.closePath();}
+    return {path,bbox:{minx,miny,maxx,maxy}};
+  });
+}
+function seaGeometry16(){
+  if(!seaGeo16||seaGeo16.src!==WORLD.seaProvinces||seaGeo16.zones!==WORLD.zones)seaGeo16={src:WORLD.seaProvinces,zones:WORLD.zones,cells:regionPaths16(WORLD.seaProvinces),seas:regionPaths16(WORLD.seas),air:regionPaths16(WORLD.zones)};
+  return seaGeo16;
+}
+function viewBox16(){const z=camera.zoom;return {l:camera.x-mapWidth/2/z,r:camera.x+mapWidth/2/z,t:camera.y-mapHeight/2/z,b:camera.y+mapHeight/2/z};}
+const inView16=(bb,v)=>!v||bb.maxx>=v.l&&bb.minx<=v.r&&bb.maxy>=v.t&&bb.miny<=v.b;
+window.drawSeaLayer16=function(g,zoom,all){
+  if(!WORLD.seaProvinces?.length)return;
+  const G=seaGeometry16(),v=all?null:viewBox16(),navy=mapMode==='navy';
+  if(navy){
+    WORLD.seas.forEach((z,i)=>{const b=G.seas[i];if(!inView16(b.bbox,v))return;const share=S?sideShare16(S.seaControl16?.[z.id],S.player):null;g.fillStyle=share===null?'#1c3a46':`hsl(${Math.round(share*110)},32%,${25+share*12}%)`;g.fill(b.path,'evenodd');});
+    g.strokeStyle='#2b4f5e';g.lineWidth=.3/zoom;
+    WORLD.seaProvinces.forEach((c,i)=>{const b=G.cells[i];if(inView16(b.bbox,v))g.stroke(b.path);});
+  }
+  if(navy||zoom>1.2){g.strokeStyle=navy?'#86a8ab':'#2f58667a';g.lineWidth=(navy?.9:.6)/zoom;WORLD.seas.forEach((z,i)=>{const b=G.seas[i];if(inView16(b.bbox,v))g.stroke(b.path);});}
+};
+// Air regions: outlined in the air view.
 DRAW16.push((ctx,zoom)=>{
-  if(!S||mapMode!=='navy')return;
-  for(const sea of WORLD.seas){
-    const share=sideShare16(S.seaControl16?.[sea.id],S.player),p=project(sea.x,sea.y);
-    if(share===null)continue;
-    ctx.fillStyle=`hsla(${Math.round(share*110)},45%,55%,.35)`;ctx.beginPath();ctx.arc(p.x,p.y,24/zoom,0,Math.PI*2);ctx.fill();
-    ctx.fillStyle='#f2ecd2';ctx.font=`600 ${10/zoom}px system-ui`;ctx.fillText(Math.round(share*100)+' %',p.x,p.y+14/zoom);
+  if(mapMode!=='air'||!WORLD.zones?.[0]?.polygons)return;
+  const G=seaGeometry16(),v=viewBox16();ctx.strokeStyle='#efe3b8b0';ctx.lineWidth=1.1/zoom;
+  WORLD.zones.forEach((z,i)=>{const b=G.air[i];if(inView16(b.bbox,v))ctx.stroke(b.path);});
+});
+// Fleets at sea, by region (own, allied and enemies within intelligence reach).
+DRAW16.push((ctx,zoom)=>{
+  if(!S||mapMode!=='navy'||zoom<.9)return;
+  const seas=new Map(WORLD.seas.map(z=>[z.id,z])),groups=new Map();
+  for(const f of S.fleets){
+    if(f.mission==='port'||f.eta>0||!seas.has(f.zone))continue;
+    const side=f.owner===S.player?'own':allied(S.player,f.owner)?'ally':war(S.player,f.owner)&&(nation().intel[f.owner]||0)>=40?'foe':null;if(!side)continue;
+    const key=f.zone+'|'+side;if(!groups.has(key))groups.set(key,{zone:seas.get(f.zone),side,ships:0});groups.get(key).ships+=total(Object.values(f.ships));
+  }
+  const offset={own:0,ally:1,foe:-1};
+  for(const g of groups.values()){
+    const p=project(g.zone.x,g.zone.y),w=26/zoom,h=14/zoom,x=p.x-w/2,y=p.y+(10+offset[g.side]*16)/zoom;
+    ctx.fillStyle=g.side==='own'?'#d1cfaa':g.side==='ally'?'#a2c0c2':'#c69a88';ctx.strokeStyle='#22343a';ctx.lineWidth=1/zoom;ctx.fillRect(x,y,w,h);ctx.strokeRect(x,y,w,h);
+    ctx.fillStyle='#1b352e';ctx.font=`600 ${9/zoom}px ui-monospace,monospace`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('⚓ '+Math.round(g.ships),p.x,y+h/2);
   }
 });
+// Distinct colours for neighbouring air regions.
+let airColours16=null;
+function airColour16(zone){
+  if(!airColours16||airColours16.src!==WORLD.zones){
+    const ids=WORLD.zones.map(z=>z.id),adj=new Map(ids.map(id=>[id,new Set()]));
+    for(const p of WORLD.provinces)for(const n of p.neighbors){const a=p.zone,b=WORLD.provinces[n]?.zone;if(a&&b&&a!==b){adj.get(a)?.add(b);adj.get(b)?.add(a);}}
+    const colour=new Map();
+    for(const id of ids){const used=new Set([...(adj.get(id)||[])].map(n=>colour.get(n)));let c=0;while(used.has(c))c++;colour.set(id,c);}
+    airColours16={src:WORLD.zones,colour};
+  }
+  return ['#9fac84','#ae9b7e','#849da6','#ae8374','#a6a083','#929a74','#9d89a3','#8a9f95','#b0937f'][(airColours16.colour.get(zone)||0)%9];
+}
 direct.add('cancelInvasion');
 function beginTargetTool16(kind){
   closeModal();operationTool={kind,points:[]};document.body.classList.remove('panel-open');
@@ -668,7 +719,7 @@ showEvent=function(){
 showHelp=function(){
   pauseGame();
   const card=(title,text)=>`<div class="card"><h3>${title}</h3><p class="note" style="margin-top:10px">${text}</p></div>`;
-  modal(`${modalHead('Manuel de campagne','FRONTIÈRES 1.7 / PRISE EN MAIN')}<div class="grid2">
+  modal(`${modalHead('Manuel de campagne','FRONTIÈRES 1.8 / PRISE EN MAIN')}<div class="grid2">
     ${card('1. Préparer l’État','Choisissez une priorité nationale et affectez vos équipes de recherche. Les usines, chantiers et raffineries partagent les emplacements de chaque État. Six ressources stratégiques alimentent les lignes de production ; la loi commerciale fixe la part exportée.')}
     ${card('2. Lois, conseillers, décisions','L’économie, la conscription et le commerce se règlent par des lois. Nommez des conseillers et des chefs d’état-major, prenez des décisions ponctuelles et surveillez vos esprits nationaux. Les voies politiques de l’arbre peuvent changer le régime.')}
     ${card('3. Former les forces','Composez vos divisions à partir de bataillons et de compagnies de soutien. Concevez chars, avions et navires, puis modernisez vos stocks. Le recrutement consomme matériel et effectifs.')}
@@ -676,6 +727,6 @@ showHelp=function(){
     ${card('5. Ciel et mers','Les escadres reçoivent des missions selon leur type : supériorité, interception, appui, bombardement, frappes navales, parachutages. Les flottes patrouillent, frappent, escortent, mouillent des mines et disputent le contrôle des mers, indispensable aux invasions navales.')}
     ${card('6. Guerre et paix','Justifiez un but de guerre, puis déclarez la guerre. Un pays capitule quand il a perdu l’essentiel de ses points de victoire et de son territoire ; certains esprits repoussent ce seuil. Un gouvernement allié peut poursuivre la lutte en exil. La conférence de paix répartit les États selon la contribution de chacun.')}
   </div><div class="card" style="margin-top:18px"><h3>Raccourcis</h3><p class="note" style="margin-top:10px"><span class="hotkey">Espace</span> Pause / <span class="hotkey">1–5</span> Vitesse / <span class="hotkey">A</span> Armées / <span class="hotkey">I</span> Industrie / <span class="hotkey">R</span> Recherche / <span class="hotkey">D</span> Diplomatie / <span class="hotkey">P</span> Priorités / <span class="hotkey">F</span> Recentrer / <span class="hotkey">Échap</span> Fermer.</p></div>
-  <p class="note" style="margin-top:18px">Limites de cette version : simulation journalière avec combats horaires, carte d’environ 11 600 provinces terrestres (régions Natural Earth 1:10m), déplacements aériens et navals par zones, IA heuristique, contenu original moins abondant que celui des grands jeux commerciaux. Pas de multijoueur ni de compatibilité avec les mods d’autres jeux.</p>`,'help','wide');
+  <p class="note" style="margin-top:18px">Limites de cette version : simulation journalière avec combats horaires, carte d’environ 11 600 provinces terrestres (régions Natural Earth 1:10m), 226 régions maritimes et 158 régions aériennes, IA heuristique, contenu original moins abondant que celui des grands jeux commerciaux. Pas de multijoueur ni de compatibilité avec les mods d’autres jeux.</p>`,'help','wide');
 };
 renderRail();

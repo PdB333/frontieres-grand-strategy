@@ -1584,9 +1584,9 @@ function createEngineClass() {
           case 'operation':if(this.nation(a.country)?.alive&&this.nation(a.target)?.alive&&this.war(a.country,a.target)){
             for(const army of this.s.armies.filter(x=>x.owner===a.country)){army.target=a.target;army.order='attack';army.auto=true;army.stance='balanced';}
           }break;
-          case 'airOperation':for(const w of this.s.wings.filter(w=>w.owner===a.country&&w.kind==='fighters')){w.zone=a.zone;w.mission=a.mission;}break;
+          case 'airOperation':{const zone=this.airRegionFor16?this.airRegionFor16(a.zone,a.country):a.zone;for(const w of this.s.wings.filter(w=>w.owner===a.country&&w.kind==='fighters')){w.zone=zone;w.mission=a.mission;}}break;
           case 'aid':if(this.nation(a.fromCountry)?.alive&&this.nation(a.toCountry)?.alive){const amount=Math.min(a.amount,this.nation(a.fromCountry).stock[a.equipment]||0);this.nation(a.fromCountry).stock[a.equipment]-=amount;this.nation(a.toCountry).stock[a.equipment]+=amount;}break;
-          case 'pacificRaid':for(const f of this.s.fleets.filter(f=>f.owner==='USA'&&['NPAC','JAPANSEA','SPAC','CORAL'].includes(f.zone))){this.fleetLoss(f,Math.min(4,sum(Object.values(f.ships))*.15));}break;
+          case 'pacificRaid':for(const f of this.s.fleets.filter(f=>f.owner==='USA'&&['NPAC','JAPANSEA','SPAC','CORAL'].includes(this.seaTheatre16?this.seaTheatre16(f.zone):f.zone))){this.fleetLoss(f,Math.min(4,sum(Object.values(f.ships))*.15));}break;
           case 'torch':{const target=this.nation('VIC')?.alive?'VIC':'GER';this.applyHistoryActions([ {type:'war',a:'USA',b:target}, {type:'operation',country:'USA',target} ],eventId);}break;
           case 'overlord':{
             const coast=this.historyRegion('north_france').map(i=>this.prov[i]).filter(p=>p.port&&this.s.provinces[p.id].ctrl==='GER');
@@ -2133,7 +2133,7 @@ function createEngineClass() {
       assert((map.edits?.length||0)+(map.addProvinces?.length||0)>0,'Une carte personnalisee doit modifier la geometrie ou ajouter une province.');
       const keys=new Set(base.provinces.map(p=>p.geoKey));
       const ids=new Set([...base.countries.map(c=>c.id),...extraIds]);
-      const zones=new Set(base.zones.map(z=>z.id)),seas=new Set(base.seas.map(z=>z.id));
+      const zones=new Set([...base.zones,...(base.legacyZones||[])].map(z=>z.id)),seas=new Set([...base.seas,...(base.legacySeas||[])].map(z=>z.id));
       const added=[];
       for(const p of map.addProvinces||[]){
         assert(p&&typeof p==='object'&&!Array.isArray(p),'Nouvelle province invalide.');
@@ -2217,8 +2217,10 @@ function createEngineClass() {
           const ring=edit.polygons[0];p.y=ring.reduce((a,b)=>a+b[1],0)/ring.length;
         }
       }
+      // Zones named after the 1.7 theatres are moved to the nearest 1.8 region.
+      if(Engine.regionFor16)for(const edit of changes){const p=world.provinces[keys.get(edit.geoKey)];p.zone=Engine.regionFor16(world,'air',p.zone,p);if(p.seaZone)p.seaZone=Engine.regionFor16(world,'sea',p.seaZone,p);}
       const graph=world.provinces.map(p=>new Set(p.neighbors));
-      const marine=world.provinces.map(p=>new Map(p.sea.map(e=>[e.to,e.days])));
+      const marine=world.provinces.map(p=>new Map(p.sea.map(e=>[e.to,e])));
       for(const edit of changes){
         const id=keys.get(edit.geoKey);
         if(edit.neighbors!==undefined){
@@ -2229,12 +2231,13 @@ function createEngineClass() {
         if(edit.sea!==undefined){
           for(const to of marine[id].keys())marine[to].delete(id);
           marine[id].clear();
-          for(const e of edit.sea){const to=keys.get(e.to);marine[id].set(to,e.days);marine[to].set(id,e.days);}
+          for(const e of edit.sea){const to=keys.get(e.to);marine[id].set(to,{to,days:e.days});marine[to].set(id,{to:id,days:e.days});}
         }
       }
       for(const p of world.provinces){
         p.neighbors=[...graph[p.id]].sort((a,b)=>a-b);
-        p.sea=[...marine[p.id]].map(([to,days])=>({to,days})).sort((a,b)=>a.to-b.to);
+        // Routes keep the sea regions they cross (computed for new routes).
+        p.sea=[...marine[p.id].values()].map(e=>({to:e.to,days:e.days,zones:e.zones||(Engine.seaPath16?Engine.seaPath16(world,p.seaZone,world.provinces[e.to].seaZone):[])})).sort((a,b)=>a.to-b.to);
         assert(p.neighbors.length<=250&&p.sea.length<=100,'Trop de liaisons sur la province '+p.id);
       }
       for(const r of map.regions||[]){

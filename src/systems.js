@@ -5,7 +5,7 @@
 function installSystems16(Engine,H){
   'use strict';
   const {clone,clamp,sum,assert,finite,distance,hash}=H;
-  const RELEASE='1.7';
+  const RELEASE='1.8';
 
   // ---------------------------------------------------------------------------
   // Shared helpers
@@ -152,9 +152,9 @@ function installSystems16(Engine,H){
     if(r<.14)return 'rain';if(r<.18)return 'storm';return 'clear';
   };
   const STORMY={NATL:[10,11,0,1],NSEA:[10,11,0,1],CHANNEL:[10,11,0,1],BALTIC:[10,11,0,1],NPAC:[6,7,8,9],SCHINA:[6,7,8,9],JAPANSEA:[6,7,8,9],INDIAN:[5,6,7,8],ARABIAN:[5,6,7,8]};
-  Engine.seaWeatherKey=function(zone,day,month=monthOf(day)){
+  Engine.seaWeatherKey=function(zone,day,month=monthOf(day),theatre=zone){
     const index=[...String(zone)].reduce((n,ch)=>n*31+ch.charCodeAt(0),7),r=unit01(index*977+Math.floor(day/2)*7151);
-    const season=(STORMY[zone]||[]).includes(month);
+    const season=(STORMY[theatre]||[]).includes(month);
     if(r<(season?.33:.05))return 'gale';
     if(r<(season?.6:.2))return 'swell';
     return 'calm';
@@ -172,7 +172,7 @@ function installSystems16(Engine,H){
     return this._weatherTable[code];
   };
   Engine.prototype.seaWeather=function(zone){
-    const key=Engine.seaWeatherKey(zone,this.s.day);
+    const key=Engine.seaWeatherKey(zone,this.s.day,monthOf(this.s.day),this.seaTheatre16(zone));
     return {key,...(this.catalog.seaWeather?.[key]||{name:key,naval:1,air:1,invasion:true})};
   };
 
@@ -1245,6 +1245,85 @@ function installSystems16(Engine,H){
     return true;
   };
   // ---------------------------------------------------------------------------
+  // Sea and air regions (1.8). About 230 sea regions (named seas and pieces of
+  // the oceans, made of sea provinces) and 160 air regions. Each region keeps
+  // the 1.7 zone it covers as its theatre (seasonal storms, history).
+  // ---------------------------------------------------------------------------
+  const regionCache=new WeakMap();
+  Engine.regions16=function(world){
+    let r=regionCache.get(world);if(r)return r;
+    const seas=new Map((world.seas||[]).map(z=>[z.id,z])),zones=new Map((world.zones||[]).map(z=>[z.id,z]));
+    // Sea routes crossing each region: [port, port] pairs, for convoy raiding.
+    const traffic=new Map();
+    for(const p of world.provinces)for(const e of p.sea||[])if(e.to>p.id)for(const z of e.zones||[]){if(!traffic.has(z))traffic.set(z,[]);traffic.get(z).push([p.id,e.to]);}
+    r={seas,zones,traffic,routes:new Map()};regionCache.set(world,r);return r;
+  };
+  // Static helpers for map building (mods): region of a 1.7 theatre id, and
+  // the sea regions between two regions.
+  Engine.regionFor16=function(world,kind,id,pt){
+    const list=(kind==='sea'?world.seas:world.zones)||[];if(!id||list.some(z=>z.id===id))return id;
+    const pool=list.filter(z=>z.theatre===id);
+    return [...(pool.length?pool:list)].sort((a,b)=>distance(a,pt)-distance(b,pt)||String(a.id).localeCompare(String(b.id)))[0]?.id??id;
+  };
+  Engine.seaPath16=function(world,from,to){
+    const seas=new Map((world.seas||[]).map(z=>[z.id,z]));if(!seas.has(from)||!seas.has(to))return [];
+    const dist=new Map([[from,0]]),prev=new Map(),todo=[[0,from]];
+    while(todo.length){
+      todo.sort((a,b)=>b[0]-a[0]);const [d,u]=todo.pop();if(u===to)break;if(d>dist.get(u))continue;
+      for(const v of seas.get(u).neighbors||[]){const b=seas.get(v);if(!b)continue;const nd=d+distance(seas.get(u),b);if(nd<(dist.get(v)??Infinity)){dist.set(v,nd);prev.set(v,u);todo.push([nd,v]);}}
+    }
+    if(!dist.has(to))return [];
+    const path=[to];while(path[path.length-1]!==from)path.push(prev.get(path[path.length-1]));return path.reverse();
+  };
+  Engine.prototype.seaTheatre16=function(zone){return Engine.regions16(this.world).seas.get(zone)?.theatre||zone;};
+  Engine.prototype.airTheatre16=function(zone){return Engine.regions16(this.world).zones.get(zone)?.theatre||zone;};
+  // Shortest path between two sea regions (km between region centres).
+  Engine.prototype.seaRoute16=function(from,to){
+    const R=Engine.regions16(this.world);if(!R.seas.has(from)||!R.seas.has(to))return null;
+    if(from===to)return {path:[from],km:0};
+    let tree=R.routes.get(from);
+    if(!tree){
+      const dist=new Map([[from,0]]),prev=new Map(),todo=[[0,from]];
+      while(todo.length){
+        todo.sort((a,b)=>b[0]-a[0]);const [d,u]=todo.pop();if(d>dist.get(u))continue;
+        const a=R.seas.get(u);
+        for(const v of a.neighbors||[]){const b=R.seas.get(v);if(!b)continue;const nd=d+distance(a,b);if(nd<(dist.get(v)??Infinity)){dist.set(v,nd);prev.set(v,u);todo.push([nd,v]);}}
+      }
+      tree={dist,prev};R.routes.set(from,tree);
+    }
+    if(!tree.dist.has(to))return null;
+    const path=[to];while(path[path.length-1]!==from)path.push(tree.prev.get(path[path.length-1]));
+    return {path:path.reverse(),km:tree.dist.get(to)};
+  };
+  // Fleets steam about 800 km a day between regions.
+  Engine.prototype.seaDays16=function(from,to){
+    if(!from||from===to)return 1;const r=this.seaRoute16(from,to);
+    return r?clamp(Math.ceil(r.km/800),1,40):5;
+  };
+  // Convoy traffic of a country through a region (0 to 1): raiders only sink
+  // ships on the routes that cross their region.
+  Engine.prototype.traffic16=function(id,zone){
+    const list=Engine.regions16(this.world).traffic.get(zone);if(!list)return 0;
+    let n=0;for(const [a,b] of list){const ka=this.s.provinces[a].ctrl,kb=this.s.provinces[b].ctrl;if(ka===id||kb===id||this.allies(id,ka)&&this.allies(id,kb))n++;}
+    return clamp(n/4,0,1);
+  };
+  // An air region for a theatre of the 1.7 map (historical scripts): the one
+  // holding the most enemy victory points, else the one nearest the capital.
+  Engine.prototype.airRegionFor16=function(zone,id){
+    const R=Engine.regions16(this.world);if(R.zones.has(zone))return zone;
+    const list=[...R.zones.values()].filter(z=>z.theatre===zone);if(!list.length)return this.prov[this.cap(id)].zone;
+    const ids=new Set(list.map(z=>z.id)),score=new Map();
+    for(const p of this.prov)if(p.vp&&ids.has(p.zone)&&this.war(id,this.s.provinces[p.id].ctrl))score.set(p.zone,(score.get(p.zone)||0)+p.vp);
+    const cap=this.prov[this.cap(id)];
+    return list.sort((a,b)=>(score.get(b.id)||0)-(score.get(a.id)||0)||distance(a,cap)-distance(b,cap)||a.id.localeCompare(b.id))[0].id;
+  };
+  Engine.prototype.seaRegionFor16=function(zone,near){
+    const R=Engine.regions16(this.world);if(R.seas.has(zone))return zone;
+    const list=[...R.seas.values()].filter(z=>z.theatre===zone);const pool=list.length?list:[...R.seas.values()];
+    return pool.sort((a,b)=>distance(a,near)-distance(b,near)||a.id.localeCompare(b.id))[0].id;
+  };
+
+  // ---------------------------------------------------------------------------
   // Individual ships. Each fleet keeps a list of named vessels with their hull
   // state; f.ships stays as the count per class for the rest of the engine.
   // Counts raised elsewhere (production, reinforcement) become new vessels;
@@ -1406,7 +1485,8 @@ function installSystems16(Engine,H){
           const raiding=this.navalPower(f.owner,f.zone,'raid')*(1+c.bonus.raiding)*sv(c.eqStats?.submarines,'stealth');
           const escort=this.navalPower(target,f.zone,'escort')*(1+this.nation(target).bonus.convoy);
           const victim=this.nation(target);if(!victim)continue;
-          const sunk=Math.max(0,raiding-escort)*.025*weather.naval;
+          const traffic=this.traffic16(target,f.zone);if(!traffic)continue;
+          const sunk=Math.max(0,raiding-escort)*.025*weather.naval*traffic;
           victim.stock.convoys=Math.max(0,victim.stock.convoys-sunk);
           if(escort>0&&f.ships.submarines){const asw=escort*.002*sv(this.nation(target).eqStats?.destroyers,'subAttack');this.fleetLoss(f,asw,'submarines');}
         }
@@ -1424,7 +1504,7 @@ function installSystems16(Engine,H){
     const f=this.s.fleets.find(f=>f.id===p.id&&f.owner===id);assert(f,'Flotte inconnue.');
     assert(this.world.seas.some(z=>z.id===p.zone),'Région maritime inconnue.');assert(FLEET_MISSIONS.includes(p.mission),'Mission navale inconnue.');
     if(p.mission==='mines'||p.mission==='sweep')assert((f.ships.destroyers||0)+(f.ships.cruisers||0)>0,'Il faut des destroyers ou des croiseurs.');
-    if(f.zone!==p.zone){f.eta=5;f.zone=p.zone;}f.mission=p.mission;
+    if(f.zone!==p.zone){f.eta=this.seaDays16(f.zone,p.zone);f.zone=p.zone;}f.mission=p.mission;
   });
   // Naval invasions: preparation in a port, then a landing once the sea
   // zones are under control and the weather allows it.
@@ -1441,7 +1521,8 @@ function installSystems16(Engine,H){
     const range=1800*(1+c.bonus.invasion*2);assert(distance(this.prov[from],target)<=range,'Cible hors de portée ('+Math.round(range)+' km).');
     assert(c.stock.convoys>=10*units.length,'Il faut 10 convois par division.');
     assert(!(this.s.invasions16||[]).some(i=>i.units.some(uid=>p.ids.includes(uid))),'Une division est déjà affectée à un débarquement.');
-    const zones=[...new Set([this.prov[from].seaZone,target.seaZone].filter(Boolean))];
+    const route=this.seaRoute16(this.prov[from].seaZone,target.seaZone);
+    const zones=route?route.path:[...new Set([this.prov[from].seaZone,target.seaZone].filter(Boolean))];
     this.s.invasions16??=[];
     const inv={id:this.s.uid++,owner:id,units:units.map(u=>u.id),from,to:p.target,zones,progress:0,days:Math.max(6,12+2*units.length-Math.round(10*c.bonus.invasion)),status:'preparing'};
     for(const u of units){u.path=[];const a=this.s.armies.find(a=>a.id===u.army);if(a)a.auto=false;}
@@ -2964,13 +3045,49 @@ function installSystems16(Engine,H){
         this.s.wings.push(w);wings.push(w);
       }
     }
+    // Air regions worth fighting for: ground fronts (own divisions engaged)
+    // and the capital region when enemy aircraft are within reach.
+    const R=Engine.regions16(this.world),capital=this.prov[this.cap(id)],value=new Map(),add=(z,v)=>value.set(z,(value.get(z)||0)+v);
+    if(enemies.length){
+      // Divisions in contact with the enemy, wherever they fight.
+      for(const u of this.units(id)){const p=this.prov[u.pid];if(p.neighbors.some(n=>this.war(id,this.s.provinces[n].ctrl)))add(p.zone,1);}
+      // Home air defence counts for at most a third of the ground fighting.
+      const fronts=sum([...value.values()]),threat=sum(this.s.wings.filter(x=>this.war(id,x.owner)&&x.kind!=='transportPlanes'&&distance(this.prov[x.base],capital)<1300).map(x=>x.size))/30;
+      if(threat>0)add(capital.zone,fronts>0?Math.min(threat,fronts*.33):threat);
+    }
+    const ranked=[...value].sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0])),picks=ranked.filter(t=>t[1]>=(ranked[0]?.[1]||0)*.25).slice(0,4);
+    // Wings of each kind are shared out in proportion to the value of the
+    // regions, the largest wings going to the main effort.
+    const plan={};
+    for(const kind of ['fighters','cas','bombers']){
+      const list=wings.filter(w=>w.kind===kind).sort((a,b)=>b.size-a.size||a.id-b.id),total=sum(picks.map(t=>t[1]));
+      if(!list.length||!picks.length)continue;
+      const quota=picks.map(t=>Math.floor(list.length*t[1]/total));quota[0]=Math.max(1,quota[0]);
+      for(let k=0;sum(quota)<list.length;k=(k+1)%picks.length)quota[k]++;
+      let i=0;picks.forEach((t,k)=>{for(let n=0;n<quota[k]&&i<list.length;n++)plan[list[i++].id]=t[0];});
+    }
+    // No hopeless air battle: where enemy fighters outnumber ours by half
+    // again, fighters fall back to defend the homeland and bombers stay out.
+    const enemyFighters={},ownFighters={};
+    for(const x of this.s.wings)if(x.kind==='fighters'&&['superiority','intercept'].includes(x.mission)&&this.war(id,x.owner))enemyFighters[x.zone]=(enemyFighters[x.zone]||0)+x.size;
+    for(const w of wings)if(w.kind==='fighters'&&plan[w.id])ownFighters[plan[w.id]]=(ownFighters[plan[w.id]]||0)+w.size;
+    const lost=zone=>(enemyFighters[zone]||0)>(ownFighters[zone]||0)*1.5;
+    for(const w of wings)if(plan[w.id]&&lost(plan[w.id]))plan[w.id]=w.kind==='fighters'?capital.zone:null;
+    const baseFor=(zone,kind)=>{const z=R.zones.get(zone)||capital;return bases.slice().sort((a,b)=>distance(a,z)-distance(b,z)||a.id-b.id).find(b=>distance(b,z)<(AIR_RANGE[kind]||1600)*.7)||null;};
     for(const w of wings){
       w.autoReinforce=true;w.targetSize=Math.max(w.targetSize||100,200);
       if(!enemies.length){w.mission='reserve';continue;}
-      const zone=front?front.zone:this.prov[this.cap(id)].zone;
+      if(['fighters','cas','bombers'].includes(w.kind)){
+        if(!picks.length){w.zone=capital.zone;w.mission='reserve';continue;}
+        if(plan[w.id]===null){w.zone=capital.zone;w.mission='reserve';continue;}
+        const zone=plan[w.id]||picks[0][0],home=zone===capital.zone&&!this.ownedToday16(id).some(p=>p.zone===zone&&p.neighbors.some(n=>this.war(id,this.s.provinces[n].ctrl)));
+        const b=baseFor(zone,w.kind);if(b)w.base=b.id;
+        w.zone=zone;
+        w.mission=w.kind==='fighters'?(home?'intercept':'superiority'):home?'reserve':'support';
+        continue;
+      }
       if(distance(this.prov[w.base],focus)>(AIR_RANGE[w.kind]||1600)*.7){w.base=base.id;}
-      if(w.kind==='fighters'){w.zone=zone;w.mission='superiority';}
-      else if(w.kind==='cas'||w.kind==='bombers'){w.zone=zone;w.mission=front?'support':'reserve';}
+      if(false){}
       else if(w.kind==='strategicBombers'){
         const target=this.prov.filter(p=>enemies.includes(this.s.provinces[p.id].ctrl)&&this.s.provinces[p.id].civ+this.s.provinces[p.id].mil>0&&distance(p,this.prov[w.base])<AIR_RANGE.strategicBombers*.9).sort((a,b)=>(this.s.provinces[b.id].civ+this.s.provinces[b.id].mil)-(this.s.provinces[a.id].civ+this.s.provinces[a.id].mil))[0];
         if(target){w.zone=target.zone;w.mission='strategic';}else w.mission='reserve';
@@ -3027,7 +3144,10 @@ function installSystems16(Engine,H){
       else if(f===strongest&&myPower>=theirPower*.7){const target=enemyFleets.sort((a,b)=>this.fleetRating(b)-this.fleetRating(a))[0];zone=target&&this.world.seas.some(z=>z.id===target.zone&&distance(z,this.prov[f.base])<4000)?target.zone:home.seaZone;mission='strike';}
       else if(myPower<theirPower*.4&&(f.ships.destroyers||0)>2){zone=home.seaZone;mission='mines';}
       else {zone=home.seaZone;mission='escort';}
-      if(zone&&zone!==f.zone){f.zone=zone;f.eta=5;}
+      // A fleet in being: no sortie into a region held by a much stronger enemy.
+      const local=sum(enemyFleets.filter(e=>e.zone===zone&&e.mission!=='port'&&e.eta<=0).map(e=>this.fleetRating(e))),mine=this.fleetRating(f);
+      if(local>mine*(mission==='strike'?1.5:mission==='raid'?3:1.2)){zone=home.seaZone;mission='port';}
+      if(zone&&zone!==f.zone){f.eta=this.seaDays16(f.zone,zone);f.zone=zone;}
       f.mission=mission;
     }
   };
@@ -3222,11 +3342,25 @@ function installSystems16(Engine,H){
     if(raw.geoKeys===undefined&&raw.geoOrderFingerprint===this.world.geoOrderFingerprint)raw.geoKeys=this.prov.map(p=>p.geoKey);
     return raw;
   };
+  // Saves made before the 1.8 regions: fleets go to the region of their port,
+  // wings to the region of their base; per-zone tallies start afresh.
+  Engine.prototype.migrateRegions16=function(raw){
+    if(!raw||typeof raw!=='object'||!Array.isArray(raw.fleets))return raw;
+    const R=Engine.regions16(this.world);
+    const stale=(raw.fleets||[]).some(f=>!R.seas.has(f.zone))||(raw.wings||[]).some(w=>!R.zones.has(w.zone)||w.seaZone!=null&&!R.seas.has(w.seaZone));
+    if(!stale)return raw;
+    raw=clone(raw);
+    for(const f of raw.fleets){if(R.seas.has(f.zone))continue;const base=this.prov[f.base];f.zone=base?.seaZone&&R.seas.has(base.seaZone)?base.seaZone:this.seaRegionFor16(f.zone,base||{x:0,y:0});}
+    for(const w of raw.wings||[]){const base=this.prov[w.base];if(!R.zones.has(w.zone))w.zone=base?.zone||[...R.zones.keys()][0];if(w.seaZone!=null&&!R.seas.has(w.seaZone))w.seaZone=this.seaRegionFor16(w.seaZone,base||{x:0,y:0});}
+    for(const key of ['mines16','seaControl16','airControl16'])if(raw[key])raw[key]=Object.fromEntries(Object.entries(raw[key]).filter(([z])=>R.seas.has(z)||R.zones.has(z)));
+    for(const inv of raw.invasions16||[]){const r=this.seaRoute16(this.prov[inv.from]?.seaZone,this.prov[inv.to]?.seaZone);inv.zones=r?r.path:[];}
+    return raw;
+  };
   const load15=Engine.prototype.load;
   Engine.prototype.load=function(raw){
     Engine.useCatalog16(this.baseCatalog);
-    raw=this.unpackState16(raw);
-    if(raw?.release===RELEASE)assert(typeof raw.modManifestHash==='string'&&/^[a-f0-9]{16}$/.test(raw.modManifestHash),'La sauvegarde 1.7 ne contient pas d\'empreinte de mod valide.');
+    raw=this.migrateRegions16(this.unpackState16(raw));
+    if(raw?.release===RELEASE)assert(typeof raw.modManifestHash==='string'&&/^[a-f0-9]{16}$/.test(raw.modManifestHash),'La sauvegarde ne contient pas d\'empreinte de mod valide.');
     else if(raw&&typeof raw==='object'){
       // Older saves predate the 1.6 equipment types checked by the 1.5 loader.
       raw=clone(raw);

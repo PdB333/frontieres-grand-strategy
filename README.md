@@ -2,7 +2,7 @@
 
 **A single-player grand strategy game for the browser — build a nation, shape history, and command a world at war.**
 
-**Current playable version:** `1.7` &nbsp;|&nbsp; **Project status:** Alpha / actively developed &nbsp;|&nbsp; **Interface:** French &nbsp;|&nbsp; **Documentation:** English &nbsp;|&nbsp; **License:** MIT (original code)
+**Current playable version:** `1.8` &nbsp;|&nbsp; **Project status:** Alpha / actively developed &nbsp;|&nbsp; **Interface:** French &nbsp;|&nbsp; **Documentation:** English &nbsp;|&nbsp; **License:** MIT (original code)
 
 [Play / download `index.html`](./index.html) · [Source code](./src/) · [Game data](./data/) · [Roadmap](#development-roadmap) · [Modding](#modding-and-custom-scenarios) · [Report an issue](https://github.com/PdB333/frontieres-grand-strategy/issues)
 
@@ -58,7 +58,7 @@ The core simulation does **not** require a connection to a game server. Optional
 | Technology | **150** technologies across 10 research categories, including exclusive land, naval and air doctrines |
 | Production | **24** equipment types, **73** equipment models, tank/aircraft/ship designers, **13** building types |
 | Ground forces | **20** battalion and **15** support types, battle plans, reserves, combat width, weather and attrition |
-| Air and sea | Air superiority, interception, close support, strategic and naval bombing, paradrops, carriers; patrols, strike forces, raiding, mines, sea control and naval invasions |
+| Air and sea | **2,487** sea provinces in **226** named sea regions, **158** air regions; air superiority, interception, close support, strategic and naval bombing, paradrops, carriers; patrols, strike forces, convoy raiding along the sea routes, mines, sea control and naval invasions |
 | State management | **17** laws (economy, conscription, trade), **33** advisors, **59** national spirits, **76** decisions, budgets and elections |
 | Intelligence | Relations, espionage and intelligence-based information (abstracted) |
 | Modding | Declarative JSON scenarios, countries, territory changes, new provinces, technologies, focuses, and events |
@@ -66,6 +66,16 @@ The core simulation does **not** require a connection to a game server. Optional
 | Display | Canvas-based interactive map, overlays, minimap, accessibility and performance controls |
 | Online services | **None required for core gameplay** |
 | Multiplayer | **Not planned** |
+
+### What's new in 1.8 — seas and skies
+
+- **2,487 sea provinces** cover the world ocean: small along the coasts, large in the open ocean. Canals and narrow straits (Suez, Panama, Kiel, the Turkish straits, Kerch, the Øresund, Messina) are linked; inland waters such as the Caspian are left out.
+- **226 sea regions** named after the seas of Natural Earth (Manche, golfe de Gascogne, mer Tyrrhénienne, mer Égée, golfe de Botnie…); the oceans are split into pieces named after their nearest large port ("Atlantique Nord (large de Brest)").
+- **158 air regions** grouped like strategic regions (Région de Paris, de Brest, de Lyon…), outlined in the air view.
+- Fleets take days to cross regions (about 800 km a day); invasions and convoys need control of every region on the way; **raiders only sink the convoys whose routes cross their region**.
+- AI: a weaker navy stays in port as a fleet in being; air wings are shared out between fronts and home air defence and avoid hopeless air battles.
+- The naval view tints each region by sea control and shows fleets at sea; region lists are grouped by theatre.
+- 1.7 saves are converted on load (fleets go to the region of their port, wings to the region of their base); mods may still use the old zone names.
 
 ### What's new in 1.7 — the detailed map
 
@@ -199,14 +209,14 @@ The supply network is a gameplay model, **not** a full historical railroad or tr
 
 - Produce fighters, close-support aircraft, tactical, strategic and naval bombers and transport planes, and organise air wings.
 - Missions per aircraft type: air superiority, interception, close air support, strategic bombing, logistics strikes, naval strikes, port strikes, air supply and paradrops.
-- Air control per zone, anti-aircraft defences and aircraft range; air superiority penalises the enemy's land combat.
+- Air control in each of the 158 air regions, anti-aircraft defences and aircraft range; air superiority penalises the enemy's land combat.
 
-Air warfare remains **zone-based**: no individual aircraft or dogfights.
+Air wings count their planes and fight in waves, but they operate over regions rather than flying individual routes.
 
 ### 8. Navies and overseas warfare
 
 - Build fleets using destroyers, submarines, cruisers, battleships, and aircraft carriers, from designed ship models.
-- Fleet missions: patrol, strike force, convoy escort, raiding, minelaying, minesweeping and invasion support; detection and **sea control** per zone.
+- Fleet missions: patrol, strike force, convoy escort, raiding, minelaying, minesweeping and invasion support; detection and **sea control** in each of the 226 sea regions, crossed at about 800 km a day.
 - **Naval invasions** need sea control and convoys; landings fight at a penalty, marines reduce it.
 - Carriers project naval aircraft; mines and submarines threaten convoys and supply.
 
@@ -404,7 +414,7 @@ node tools/browser-smoke.mjs
 
 GitHub Actions runs all of these checks on every push and pull request. Historical test fixtures and development ZIP tools are not yet published.
 
-The map is generated by `python3 -I tools/data/map_1_7.py --ne DIR`, where `DIR` holds `ne_10m_admin_1_states_provinces.geojson` and `ne_10m_populated_places.geojson` from the `geojson/` folder of [natural-earth-vector](https://github.com/nvkelso/natural-earth-vector) (it needs `shapely`, `numpy`; about one minute). The 1936 reference (owners, borders, terrain, cities, ports, resources, regions, straits) is the 1.6 map in `tools/data/legacy/`, itself produced by `tools/data/world_1_6.py`, which only runs on that map. The catalogue comes from two idempotent scripts run in this order: `python3 tools/data/catalog_1_6.py` (buildings, laws, equipment, battalions, advisors, spirits, decisions, AI profiles) and `python3 tools/data/content_1_6.py` (focus trees, doctrines, events, AI plans).
+The map is generated by `python3 -I tools/data/map_1_7.py --ne DIR`, where `DIR` holds `ne_10m_admin_1_states_provinces.geojson` and `ne_10m_populated_places.geojson` from the `geojson/` folder of [natural-earth-vector](https://github.com/nvkelso/natural-earth-vector) (it needs `shapely`, `numpy`; about one minute), then `python3 -I tools/data/seas_1_8.py --ne DIR` adds the sea provinces, sea regions and air regions (it also needs `scipy` and `ne_10m_geography_marine_polys.geojson`; about two minutes). The 1936 reference (owners, borders, terrain, cities, ports, resources, regions, straits) is the 1.6 map in `tools/data/legacy/`, itself produced by `tools/data/world_1_6.py`, which only runs on that map. The catalogue comes from two idempotent scripts run in this order: `python3 tools/data/catalog_1_6.py` (buildings, laws, equipment, battalions, advisors, spirits, decisions, AI profiles) and `python3 tools/data/content_1_6.py` (focus trees, doctrines, events, AI plans).
 
 ## Development roadmap
 
@@ -422,11 +432,19 @@ Features listed as **planned** are goals, **not** claims about what the current 
 | `1.4 / 1.4.1` | JSON mod workshop, custom countries, conditional events, map extensions and validation | Completed in development |
 | `1.5` | Supply-path and map-rendering optimizations, graphics settings, diagnostic tools | Completed in development |
 | `1.6` | States, resources, weather, battalions and designers, hourly battles and plans, air and naval war, peace conferences, politics, AI, content | Completed in development |
-| **`1.7`** | Detailed map: 11,592 provinces from Natural Earth 1:10m regions, national content for 15 secondary powers | **Current public snapshot** |
+| `1.7` | Detailed map: 11,592 provinces from Natural Earth 1:10m regions, national content for 15 secondary powers | Completed in development |
+| **`1.8`** | Sea provinces and 226 sea regions, 158 air regions, regional naval and air AI | **Current public snapshot** |
 
 These are **project development milestones**, not a claim that each version is separately tagged as a GitHub release.
 
-### v1.7 — Detailed Map (current)
+### v1.8 — Seas and Skies (current)
+
+- [x] **Sea provinces and regions:** 2,487 sea provinces, 226 named sea regions, canals and straits.
+- [x] **Air regions:** 158 strategic air regions.
+- [x] **Naval and air rules:** travel times between regions, convoy raiding along the routes, control along invasion paths.
+- [x] **AI:** fleets in being, air wings shared between fronts and home defence.
+
+### v1.7 — Detailed Map
 
 - [x] **Map:** 11,592 provinces and 1,735 states cut from the Natural Earth 1:10m regions along the 1936 borders.
 - [x] **Distances:** supply and movement measured in kilometres.
@@ -446,8 +464,14 @@ These are **project development milestones**, not a claim that each version is s
 - [x] **Strategic AI:** front sectors, doctrine-driven production and research, air and naval missions, invasions, decisions.
 - [x] **Scale:** new starting countries and a faster simulation.
 
-### Next: v1.7.1 — Stability and Campaign Validation
+### Next: generals, logistics, intelligence, special weapons, presentation
 
+- [ ] **Generals:** traits, experience, field marshals, army groups and battle tactics.
+- [ ] **Logistics:** trucks and trains consumed by supply, railway lines.
+- [ ] **Intelligence and occupation:** an intelligence agency, operatives and operations, occupation laws and resistance.
+- [ ] **Special weapons:** atomic research, rockets, railway guns.
+- [ ] **Presentation:** flags, relief, sound, an English interface.
+- [ ] **Content:** fully unique national trees.
 - [ ] Resolve regressions introduced by the warfare update.
 - [ ] Test long-running 1936–1945 campaigns, including save/export/reload cycles.
 - [ ] Validate key historical decision chains and starting configurations.
@@ -484,11 +508,11 @@ Please read this section before reporting a feature as broken:
 
 1. **Historical accuracy is approximate.** Modern low-resolution base geography is adapted for gameplay; not all country borders, names, military deployments, or leaders are exhaustively researched. The 11,592 provinces follow modern administrative regions cut along schematic 1936 borders, so a border can be off by a province or two.
 2. **The AI is heuristic.** It manages fronts, production, research, air, navy and invasions, but long campaigns can still diverge strongly from history (a civil war can last seven months or three years depending on the seed).
-3. **Air and naval movement is zone-based.** Ships are tracked individually and air wings count their planes, but fleets and wings operate over sea and air zones rather than moving freely.
+3. **Air and naval movement is regional.** Ships are tracked individually and air wings count their planes, but fleets and wings are assigned to sea and air regions; they do not follow individual tracks inside a region.
 4. **The economy is game-scaled.** GDP, budgets, votes, demographics, and industrial outputs are not real-world historical datasets.
 5. **Modding extends the current world.** It cannot yet replace the 11,592 base provinces with a wholly independent map. Mod effects accept the 1.6 bonus keys (organization, breakthrough, entrench, attrition, surrender…), but mods cannot yet define new battalions, laws, advisors or decisions.
 6. **Content volume is limited.** Focus trees, events and decisions are original and playable, but far less numerous than in commercial games.
-7. **Save compatibility is conditional.** Saves made before 1.7 belong to the old map and cannot be opened; compact 1.7 saves weigh about 2 MB, so the browser's local storage only holds a few of them. Export backups and preserve the original mod data used for each campaign.
+7. **Save compatibility is conditional.** Saves made before 1.7 belong to the old map and cannot be opened; 1.7 saves are converted to the 1.8 regions on load. Compact saves weigh about 2 MB, so the browser's local storage only holds a few of them. Export backups and preserve the original mod data used for each campaign.
 8. **The UI is currently French.** This README is English; full UI localization is a future goal.
 9. **Browser support needs broader testing.** Development testing has focused on Chromium. The original automated environment did not certify real `file://` behavior or persistence across normal user browser sessions.
 10. **Some portraits require Internet access.** Portrait files are generally referenced rather than bundled. Third-party licensing varies.
