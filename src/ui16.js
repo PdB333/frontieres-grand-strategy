@@ -905,11 +905,63 @@ ACTIONS16.push(async(action,p)=>{
   return false;
 });
 
+/* ---- Special weapons: railway guns, rockets, atomic bombs ---- */
+function specialWeapons16(){
+  const c=nation(),bats=(S.batteries16||[]).filter(b=>b.owner===S.player),sites=S.provinces.filter(q=>q.ctrl===S.player&&q.rocketSite>0).reduce((n,q)=>n+q.rocketSite,0);
+  const reactors=S.provinces.filter(q=>q.ctrl===S.player&&q.reactor>0).length,atomic=c.tech.includes('atomic_bomb');
+  const stations=owned().filter(p=>S.provinces[p.id].rail>0);
+  return `<div class="sectionlabel">Armes spéciales</div>
+    <div class="card stack"><div class="row between"><strong>Canons sur rail</strong><small>${num(c.stock.railwayGuns||0)} en réserve</small></div>
+      ${bats.map(b=>`<div class="row between"><small>${esc(b.name)} / ${b.guns} canon(s) / ${esc(pname(b.pid))}${b.route.length?' / en route':''}</small><div class="row">${btn('Déplacer','batteryTool16',{id:b.id},'small ghost')}${btn('×','batteryDisband16',{id:b.id},'small ghost')}</div></div>`).join('')||'<small>Aucune batterie déployée.</small>'}
+      ${c.stock.railwayGuns>=1&&stations.length?`${selectProvinces('battery-station',null,p=>S.provinces[p.id].rail>0)}<div class="row"><input id="battery-guns" type="number" min="1" max="4" value="${Math.min(4,Math.floor(c.stock.railwayGuns))}">${btn('Former une batterie','batteryCreate16',{},'small')}</div>`:''}
+      <small>Une batterie appuie chaque bataille à moins de 180 km (+5 % d’attaque par canon, 20 % au plus) et circule sur les voies ferrées amies.</small></div>
+    <div class="card stack" style="margin-top:9px"><div class="row between"><strong>Missiles balistiques</strong><small>${num(c.stock.rockets||0)} en réserve</small></div>${metric('Bases de lancement (niveaux)',sites)}<small>${c.tech.includes('v_rockets')?'Chaque base tire un missile par jour sur l’industrie ennemie à moins de 650 km. Construisez des bases depuis Industrie → Bâtir.':'Recherchez les missiles balistiques (électronique).'}</small></div>
+    <div class="card stack" style="margin-top:9px"><div class="row between"><strong>Arme atomique</strong><small>${c.nukes16||0} bombe(s)</small></div>${metric('Réacteurs',reactors)}${atomic&&reactors?bar((c.bombProgress16||0)/240*100,'#c5a46e')+`<small>${Math.floor((c.bombProgress16||0)/Math.max(1,reactors))} / ${Math.ceil(240/Math.max(1,reactors))} jours avant la prochaine bombe</small>`:`<small>${atomic?'Construisez un réacteur nucléaire.':'Recherchez l’arme atomique (programme atomique, puis arme atomique), puis construisez un réacteur.'}</small>`}
+      ${btn('Larguer une bombe atomique','nukeTool16',{},'small danger',!(c.nukes16>=1))}<small>Il faut des bombardiers stratégiques et une base aérienne à moins de 2 500 km. La cible est dévastée ; le pays frappé perd stabilité et soutien à la guerre et capitule plus tôt.</small></div>`;
+}
+const warfarePanel21=warfarePanel;
+warfarePanel=function(){return warfarePanel21()+(S?specialWeapons16():'');};
+function beginWeaponTool16(kind,id){
+  closeModal();operationTool={kind,points:[],battery:id};document.body.classList.remove('panel-open');
+  const tool=$('operation-toolbar');tool.hidden=false;
+  tool.innerHTML=`<span>${kind==='nuke'?'ARME ATOMIQUE / Cliquez la province ennemie visée':'BATTERIE / Cliquez la gare de destination (voie ferrée amie)'}</span>${btn('Annuler','cancelOperation',{},'small')}`;
+}
+window.addEventListener('pointerup',ev=>{
+  if(!operationTool||!['nuke','battery'].includes(operationTool.kind)||ev.target!==canvas||!drag||drag.moved||ev.button!==0)return;
+  const r=canvas.getBoundingClientRect(),id=pointAt(ev.clientX-r.left,ev.clientY-r.top);
+  ev.stopImmediatePropagation();drag=null;if(id===null)return;
+  const {kind,battery}=operationTool;endOperationTool();
+  if(kind==='nuke'){if(!confirm('Larguer une bombe atomique sur '+pname(id)+' ?'))return;cmd('atomicBomb',{pid:id}).then(()=>renderPanel(true)).catch(()=>{});}
+  else cmd('batteryMove',{id:battery,pid:id}).then(()=>{toast('La batterie part pour '+pname(id)+'.');renderPanel(true);}).catch(()=>{});
+},true);
+// Batteries on the map.
+DRAW16.push((ctx,zoom)=>{
+  if(!S?.batteries16?.length||zoom<1.2)return;
+  ctx.save();ctx.font=`600 ${9/zoom}px system-ui`;ctx.textAlign='center';ctx.textBaseline='middle';
+  for(const b of S.batteries16){
+    if(b.owner!==S.player&&!allied(S.player,b.owner)&&(nation().intel[b.owner]||0)<50)continue;
+    const p=centers[b.pid];if(!p)continue;const w=16/zoom,h=10/zoom;
+    ctx.fillStyle=b.owner===S.player?'#e6d29a':allied(S.player,b.owner)?'#9fb8c0':'#c98a77';ctx.strokeStyle='#1b1712';ctx.lineWidth=1/zoom;
+    ctx.fillRect(p.x-w/2,p.y+8/zoom,w,h);ctx.strokeRect(p.x-w/2,p.y+8/zoom,w,h);
+    ctx.fillStyle='#1b1712';ctx.fillText('⊕'+b.guns,p.x,p.y+13/zoom);
+  }
+  ctx.restore();
+});
+ACTIONS16.push(async(action,p)=>{
+  switch(action){
+    case 'batteryCreate16':await cmd('batteryCreate',{pid:Number($('battery-station').value),guns:Number($('battery-guns').value)});toast('Batterie formée.');renderPanel(true);return true;
+    case 'batteryDisband16':await cmd('batteryDisband',{id:p.id});renderPanel(true);return true;
+    case 'batteryTool16':beginWeaponTool16('battery',p.id);return true;
+    case 'nukeTool16':beginWeaponTool16('nuke');return true;
+  }
+  return false;
+});
+
 /* ---- Manual ---- */
 showHelp=function(){
   pauseGame();
   const card=(title,text)=>`<div class="card"><h3>${title}</h3><p class="note" style="margin-top:10px">${text}</p></div>`;
-  modal(`${modalHead('Manuel de campagne','FRONTIÈRES 1.11 / PRISE EN MAIN')}<div class="grid2">
+  modal(`${modalHead('Manuel de campagne','FRONTIÈRES 1.12 / PRISE EN MAIN')}<div class="grid2">
     ${card('1. Préparer l’État','Choisissez une priorité nationale et affectez vos équipes de recherche. Les usines, chantiers et raffineries partagent les emplacements de chaque État. Six ressources stratégiques alimentent les lignes de production ; la loi commerciale fixe la part exportée.')}
     ${card('2. Lois, conseillers, décisions','L’économie, la conscription et le commerce se règlent par des lois. Nommez des conseillers et des chefs d’état-major, prenez des décisions ponctuelles et surveillez vos esprits nationaux. Les voies politiques de l’arbre peuvent changer le régime.')}
     ${card('3. Former les forces','Composez vos divisions à partir de bataillons et de compagnies de soutien. Concevez chars, avions et navires, puis modernisez vos stocks. Le recrutement consomme matériel et effectifs.')}
@@ -919,6 +971,7 @@ showHelp=function(){
     ${card('7. Généraux et maréchaux','Chaque armée reçoit un général, chaque groupe d’armées un maréchal. Ils gagnent de l’expérience au combat, montent de niveau et apprennent des traits de terrain ou d’armes. Chaque jour de bataille, les commandants choisissent une tactique que l’adversaire peut contrer. Ouvrez l’état-major depuis Armées.')}
     ${card('8. Logistique','Le ravitaillement emprunte les voies ferrées, bien moins coûteuses que les routes, puis les routes. Produisez assez de locomotives pour votre réseau et de camions pour vos divisions, et tracez de nouvelles lignes vers vos fronts (Industrie → Logistique). La vue Ravitaillement montre les voies et les dépôts.')}
     ${card('9. Renseignement et occupation','Fondez une agence (Renseignement), recrutez des agents et tissez des réseaux : ils ouvrent sabotages, vols de plans, capture du chiffre et gouvernements de collaboration. Les territoires occupés exigent des garnisons ; la loi d’occupation arbitre entre exploitation et résistance.')}
+    ${card('10. Armes spéciales','Les canons sur rail forment des batteries qui circulent sur vos voies et appuient les batailles proches. Les missiles balistiques partent de bases de lancement vers l’industrie ennemie. Un réacteur et la recherche atomique produisent des bombes, larguées par vos bombardiers stratégiques (Guerre → Armes spéciales).')}
   </div><div class="card" style="margin-top:18px"><h3>Raccourcis</h3><p class="note" style="margin-top:10px"><span class="hotkey">Espace</span> Pause / <span class="hotkey">1–5</span> Vitesse / <span class="hotkey">A</span> Armées / <span class="hotkey">I</span> Industrie / <span class="hotkey">R</span> Recherche / <span class="hotkey">D</span> Diplomatie / <span class="hotkey">P</span> Priorités / <span class="hotkey">F</span> Recentrer / <span class="hotkey">Échap</span> Fermer.</p></div>
   <p class="note" style="margin-top:18px">Limites de cette version : simulation journalière avec combats horaires, carte d’environ 11 600 provinces terrestres (régions Natural Earth 1:10m), 226 régions maritimes et 158 régions aériennes, réseau ferré schématique, IA heuristique, contenu original moins abondant que celui des grands jeux commerciaux. Pas de multijoueur ni de compatibilité avec les mods d’autres jeux.</p>`,'help','wide');
 };

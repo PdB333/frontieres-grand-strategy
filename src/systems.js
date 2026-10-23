@@ -5,7 +5,7 @@
 function installSystems16(Engine,H){
   'use strict';
   const {clone,clamp,sum,assert,finite,distance,hash}=H;
-  const RELEASE='1.11';
+  const RELEASE='1.12';
 
   // ---------------------------------------------------------------------------
   // Shared helpers
@@ -15,7 +15,7 @@ function installSystems16(Engine,H){
   const monthOf=day=>new Date(Date.UTC(1936,0,1+day)).getUTCMonth();
   const SHARED_KINDS=['civ','mil','dock','refinery'];
   const RESOURCES=['steel','oil','rubber','aluminium','tungsten','chromium'];
-  const NEW_PROVINCE_KEYS=['refinery','aa','coastalFort'];
+  const NEW_PROVINCE_KEYS=['refinery','aa','coastalFort','rocketSite','reactor'];
   // Bonus keys added in 1.6. Older saves receive them at 0 during migration.
   const NEW_BONUS=['buildingSlots','recruitment','ppGain','consumer','organization','airDefense','invasion','paradrop','reliability','attrition','breakthrough','entrench','mines','convoy','naval','casualties','resources','stabilityGrowth','supportGrowth','surrender'];
   Engine.RESOURCES16=RESOURCES;
@@ -203,7 +203,7 @@ function installSystems16(Engine,H){
       for(const k of NEW_BONUS)c.bonus[k]??=0;
       for(const k of RESOURCES)if(c.stats)c.stats[k]??=0;
       c.designs??=[];c.lines??={};c.modernize??={};c.eqStats??={};
-      s.mines16??={};s.invasions16??=[];s.seaControl16??={};s.airControl16??={};
+      s.mines16??={};s.invasions16??=[];s.batteries16??=[];s.seaControl16??={};s.airControl16??={};
       c.spirits16??=[];c.advisors16??={};c.decisions16??={};
       if(c.advisor){const map={economy:['construction',.12,'industrialist'],science:['research',.10,'scientist'],logistics:['supply',.12,'logistician']}[c.advisor];
         if(map&&this.catalog.advisors){c.bonus[map[0]]-=map[1];c.advisor=null;c.advisors16.political??=[];if(!c.advisors16.political.includes(map[2])){c.advisors16.political.push(map[2]);this.applyBonus16(c,this.catalog.advisors.find(a=>a.id===map[2]).effect,1);}}}
@@ -4139,6 +4139,186 @@ function installSystems16(Engine,H){
       for(const v of Object.values(A.networks))assert(finite(v,0,100),'Réseau invalide.');
       for(const [t,v] of Object.entries(A.cipher))assert(state.countries[t]&&Number.isInteger(v),'Chiffre invalide.');
     }
+  });
+
+  // ---------------------------------------------------------------------------
+  // Special weapons. Railway guns form batteries that run along the railway
+  // network and support every battle within their range. Ballistic rockets
+  // leave launch sites to strike enemy industry beyond the reach of fighters.
+  // A reactor and the atomic bomb technology produce atomic bombs, dropped by
+  // strategic bombers on an enemy province.
+  // ---------------------------------------------------------------------------
+  const RAILGUN_RANGE=180,RAILGUN_BONUS=.05,RAILGUN_CAP=.2,RAILGUN_MAX=4,RAILGUN_SPEED=6,ROCKET_RANGE=650,BOMB_DAYS=240,BOMBER_RANGE=2500;
+  // Route along railway lines through the country's or its allies' territory.
+  Engine.prototype.railTrack16=function(id,from,to){
+    const adj=this.railGraph16(),S=this.s.provinces,ok=k=>k===id||this.allies(id,k)&&this.access(id,k);
+    if(S[from].rail<=0||S[to].rail<=0||!ok(S[to].ctrl))return null;
+    const prev=new Map([[from,-1]]),queue=[from];
+    for(let h=0;h<queue.length;h++){
+      const i=queue[h];if(i===to)break;
+      for(const j of adj[i])if(!prev.has(j)&&S[j].rail>0&&ok(S[j].ctrl)){prev.set(j,i);queue.push(j);}
+    }
+    if(!prev.has(to))return null;
+    const route=[to];while(prev.get(route[route.length-1])!==-1)route.push(prev.get(route[route.length-1]));
+    return route.reverse().slice(1);
+  };
+  Engine.prototype.createBattery16=function(id,pid,guns){
+    const c=this.nation(id),S=this.s.provinces;
+    assert(this.prov[pid]&&S[pid].ctrl===id&&S[pid].rail>0,'Choisissez une gare sur votre territoire.');
+    assert(Number.isInteger(guns)&&guns>=1&&guns<=RAILGUN_MAX,'Une batterie compte de 1 à '+RAILGUN_MAX+' canons.');
+    assert((c.stock.railwayGuns||0)>=guns,'Canons sur rail en réserve insuffisants.');
+    assert(this.s.batteries16.filter(b=>b.owner===id).length<12,'Maximum : 12 batteries.');
+    c.stock.railwayGuns-=guns;c.batterySerial16=(c.batterySerial16||0)+1;
+    const b={id:this.s.uid++,owner:id,name:'Batterie sur rail '+c.batterySerial16,pid,guns,route:[],progress:0};
+    this.s.batteries16.push(b);return b;
+  };
+  Engine.prototype.moveBattery16=function(id,bid,pid){
+    const b=this.s.batteries16.find(b=>b.id===bid&&b.owner===id);assert(b,'Batterie inconnue.');
+    const route=this.railTrack16(id,b.pid,pid);assert(route,'Aucune voie ferrée ne mène à cette province.');
+    b.route=route;b.progress=0;
+  };
+  // Support of the batteries of a country to a battle in a province.
+  Engine.prototype.batterySupport16=function(id,pid){
+    let guns=0;
+    for(const b of this.s.batteries16)if(b.owner===id&&!b.route.length&&distance(this.prov[b.pid],this.prov[pid])<=RAILGUN_RANGE)guns+=b.guns;
+    if(!guns)return 0;
+    const quality=this.nation(id).eqStats?.railwayGuns?.attack||1;
+    return Math.min(RAILGUN_CAP,guns*RAILGUN_BONUS*quality);
+  };
+  const combatProfile21=Engine.prototype.combatProfile16;
+  Engine.prototype.combatProfile16=function(u,pid,offense,ctx){
+    const p=combatProfile21.call(this,u,pid,offense,ctx);
+    if(!this.s.batteries16?.length)return p;
+    ctx.guns16??=new Map();
+    let bonus=ctx.guns16.get(u.owner);if(bonus===undefined){bonus=this.batterySupport16(u.owner,pid);ctx.guns16.set(u.owner,bonus);}
+    if(bonus){p.soft*=1+bonus;p.hard*=1+bonus;if(offense)p.breakthrough*=1+bonus*.5;else p.defense*=1+bonus*.5;}
+    return p;
+  };
+  Engine.prototype.reactors16=function(id){let n=0;for(const p of this.ownedToday16(id))n+=this.s.provinces[p.id].reactor||0;return n;};
+  Engine.prototype.dropBomb16=function(id,pid){
+    const c=this.nation(id),S=this.s.provinces,ctrl=S[pid]?.ctrl;
+    assert((c.nukes16||0)>=1,'Aucune bombe atomique disponible.');
+    assert(this.prov[pid]&&this.war(id,ctrl),'La cible doit être une province ennemie.');
+    assert((c.stock.strategicBombers||0)+sum(this.s.wings.filter(w=>w.owner===id&&w.kind==='strategicBombers').map(w=>w.size))>=1,'Il faut des bombardiers stratégiques.');
+    const bases=this.ownedToday16(id).filter(p=>S[p.id].ctrl===id&&S[p.id].airbase>0);
+    assert(bases.some(p=>distance(p,this.prov[pid])<=BOMBER_RANGE),'Cible hors de portée des bombardiers ('+BOMBER_RANGE+' km d’une base aérienne).');
+    c.nukes16--;
+    S[pid].damage=.8;for(const n of this.prov[pid].neighbors)S[n].damage=clamp(S[n].damage+.3,0,.8);
+    for(const u of this.s.units){
+      if(u.pid===pid){this.loss(u,u.strength*.65,100);}
+      else if(this.prov[pid].neighbors.includes(u.pid))this.loss(u,u.strength*.2,40);
+    }
+    const t=this.nation(ctrl);t.stability=clamp(t.stability-20,0,100);t.support=clamp(t.support-35,0,100);
+    t.bonus.surrender=Math.max(-.25,(t.bonus.surrender||0)-.08);
+    this.s.tension=clamp(this.s.tension+20,0,100);
+    this.log('Une bombe atomique frappe '+this.prov[pid].name+' ('+this.info(ctrl).name+').','war');
+  };
+  Engine.prototype.weaponsDay16=function(){
+    const day=this.s.day,S=this.s.provinces;
+    // Batteries travel along the railways and are lost with their province.
+    for(const b of [...this.s.batteries16]){
+      if(b.route.length){b.progress+=RAILGUN_SPEED;while(b.route.length&&b.progress>=1){b.progress-=1;b.pid=b.route.shift();}if(!b.route.length)b.progress=0;}
+      const ctrl=S[b.pid].ctrl;
+      if(ctrl!==b.owner&&(this.war(b.owner,ctrl)||!this.nation(b.owner)?.alive)){
+        this.s.batteries16=this.s.batteries16.filter(x=>x!==b);
+        if(b.owner===this.s.player)this.log(b.name+' est perdue à '+this.prov[b.pid].name+'.','war');
+      }
+    }
+    for(const id of this.active()){
+      const c=this.nation(id);
+      // Atomic bombs: one per 240 days of work of a reactor.
+      if(c.tech.includes('atomic_bomb')){const r=this.reactors16(id);if(r){c.bombProgress16=(c.bombProgress16||0)+r;if(c.bombProgress16>=BOMB_DAYS){c.bombProgress16-=BOMB_DAYS;c.nukes16=(c.nukes16||0)+1;if(id===this.s.player)this.log('Une bombe atomique est prête.','success');}}}
+      // Rockets: each launch site fires one missile a day at the enemy
+      // industry within range.
+      if(!(c.stock.rockets>=1))continue;
+      const enemies=this.enemies(id);if(!enemies.length)continue;
+      const sites=this.ownedToday16(id).filter(p=>S[p.id].ctrl===id&&S[p.id].rocketSite>0);if(!sites.length)continue;
+      let fired=0,hit=null;
+      for(const site of sites)for(let k=0;k<S[site.id].rocketSite&&c.stock.rockets>=1;k++){
+        let best=null,score=0;
+        for(const e of enemies)for(const p of this.ownedToday16(e)){
+          const q=S[p.id];if(q.damage>=.75)continue;
+          const v=q.civ+q.mil*1.5+q.dock+p.vp*.3;if(v<=score||distance(site,p)>ROCKET_RANGE)continue;
+          best=p;score=v;
+        }
+        if(!best)break;
+        c.stock.rockets-=1;fired++;
+        const q=S[best.id];q.damage=clamp(q.damage+.08,0,.8);
+        const t=this.nation(q.ctrl);t.stability=clamp(t.stability-.05,0,100);
+        if(q.ctrl===this.s.player)hit=best;
+      }
+      if(hit&&day%7===0)this.log('Des missiles frappent '+hit.name+'.','war');
+      if(fired&&id===this.s.player&&day%30===0)this.log(fired+' missile(s) tiré(s) aujourd’hui.','tip');
+    }
+  };
+  Engine.onDay16(function(){
+    this.s.batteries16??=[];this.weaponsDay16();
+    this.active().forEach((id,i)=>{if(id!==this.s.player&&(this.s.day+i)%10===3&&!this.nation(id).capitulated16){try{this.aiWeapons16(id);}catch(error){if(typeof console!=='undefined')console.warn('[IA]',id,error.message);}}});
+  });
+  // AI: batteries follow the battles of the main front; atomic bombs strike
+  // the most valuable province of the strongest enemy.
+  Engine.prototype.aiWeapons16=function(id){
+    const c=this.nation(id),S=this.s.provinces,enemies=this.enemies(id);
+    if(!enemies.length)return;
+    while((c.stock.railwayGuns||0)>=2&&this.s.batteries16.filter(b=>b.owner===id).length<6){
+      const station=this.ownedToday16(id).filter(p=>S[p.id].ctrl===id&&S[p.id].rail>0).sort((a,b)=>b.vp-a.vp||a.id-b.id)[0];
+      if(!station)break;this.createBattery16(id,station.id,Math.min(RAILGUN_MAX,Math.floor(c.stock.railwayGuns)));
+    }
+    const battles=this.s.battles.filter(b=>b.a===id||b.b===id);
+    for(const b of this.s.batteries16.filter(b=>b.owner===id&&!b.route.length)){
+      if(!battles.length)break;
+      if(battles.some(x=>distance(this.prov[b.pid],this.prov[x.pid])<=RAILGUN_RANGE*.8))continue;
+      const goal=battles[(b.id+this.s.day)%battles.length];
+      const station=this.ownedToday16(id).filter(p=>S[p.id].ctrl===id&&S[p.id].rail>0&&distance(p,this.prov[goal.pid])<=RAILGUN_RANGE*.7).sort((x,y)=>distance(x,this.prov[goal.pid])-distance(y,this.prov[goal.pid])||x.id-y.id).at(-1);
+      if(station)try{this.moveBattery16(id,b.id,station.id);}catch{}
+    }
+    if((c.nukes16||0)>=1){
+      const target=enemies.map(e=>this.nation(e)).filter(t=>t?.alive).sort((x,y)=>y.stats.mil-x.stats.mil)[0];
+      const p=target&&this.ownedToday16(target.identity.id).filter(p=>S[p.id].ctrl===target.identity.id).sort((a,b)=>b.vp-a.vp||a.id-b.id).find(p=>{try{return this.ownedToday16(id).some(q=>S[q.id].airbase>0&&S[q.id].ctrl===id&&distance(q,p)<=BOMBER_RANGE);}catch{return false;}});
+      if(p)try{this.dropBomb16(id,p.id);}catch{}
+    }
+  };
+  // AI construction and production of the special weapons.
+  const aiConstruction21=Engine.prototype.aiConstruction16;
+  Engine.prototype.aiConstruction16=function(id){
+    const c=this.nation(id),S=this.s.provinces,atWar=this.enemies(id).length>0;
+    if(c.build.length<3&&MAJORS.includes(id)){
+      try{
+        if(c.tech.includes('el_atomic2')&&!this.reactors16(id)&&!c.build.some(b=>b.kind==='reactor'))this.construct(id,this.cap(id),'reactor');
+        else if(atWar&&c.tech.includes('v_rockets')&&!c.build.some(b=>b.kind==='rocketSite')&&this.ownedToday16(id).filter(p=>S[p.id].rocketSite>0).length<3){
+          const enemy=this.enemies(id).map(e=>this.prov[this.cap(e)]).filter(Boolean)[0];
+          const site=enemy&&this.ownedToday16(id).filter(p=>S[p.id].ctrl===id&&this.isCore(id,p.id)&&(S[p.id].rocketSite||0)<2).sort((a,b)=>distance(a,enemy)-distance(b,enemy)||a.id-b.id)[0];
+          if(site)this.construct(id,site.id,'rocketSite');
+        }
+      }catch{}
+    }
+    return aiConstruction21.call(this,id);
+  };
+  const aiProduction21=Engine.prototype.aiProduction16;
+  Engine.prototype.aiProduction16=function(id){
+    aiProduction21.call(this,id);
+    const c=this.nation(id),S=this.s.provinces,mil=c.stats.mil;if(!mil||!this.enemies(id).length)return;
+    const want=[];
+    if(this.lineModel16(c,'railwayGuns')&&(c.stock.railwayGuns||0)+this.s.batteries16.filter(b=>b.owner===id).reduce((n,b)=>n+b.guns,0)<12)want.push(['railwayGuns',Math.max(1,Math.round(mil*.03))]);
+    if(this.lineModel16(c,'rockets')&&this.ownedToday16(id).some(p=>S[p.id].rocketSite>0)&&(c.stock.rockets||0)<60)want.push(['rockets',Math.max(1,Math.round(mil*.05))]);
+    for(const [key,n] of want){
+      let left=n;
+      for(const [k] of Object.entries(c.allocation).filter(([k,v])=>k!==key&&v>0&&!this.catalog.equipment[k]?.naval).sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0]))){
+        const take=Math.min(left,Math.floor(c.allocation[k]/3));c.allocation[k]-=take;c.allocation[key]=(c.allocation[key]||0)+take;left-=take;if(!left)break;
+      }
+    }
+  };
+  Engine.command16('batteryCreate',function(p,id){return this.createBattery16(id,p.pid,p.guns).id;});
+  Engine.command16('batteryMove',function(p,id){this.moveBattery16(id,p.id,p.pid);});
+  Engine.command16('batteryDisband',function(p,id,c){
+    const b=this.s.batteries16.find(b=>b.id===p.id&&b.owner===id);assert(b,'Batterie inconnue.');
+    c.stock.railwayGuns=(c.stock.railwayGuns||0)+b.guns;this.s.batteries16=this.s.batteries16.filter(x=>x!==b);
+  });
+  Engine.command16('atomicBomb',function(p,id){this.dropBomb16(id,p.pid);});
+  Engine.invariant16(function(state){
+    assert(Array.isArray(state.batteries16)&&state.batteries16.length<=1000,'Batteries invalides.');
+    for(const b of state.batteries16)assert(Number.isInteger(b.id)&&state.countries[b.owner]&&this.prov[b.pid]&&Number.isInteger(b.guns)&&b.guns>=1&&b.guns<=RAILGUN_MAX&&Array.isArray(b.route)&&b.route.every(pid=>this.prov[pid]),'Batterie sur rail invalide.');
+    for(const c of Object.values(state.countries))if(c.nukes16!=null)assert(Number.isInteger(c.nukes16)&&c.nukes16>=0&&finite(c.bombProgress16||0,0,1e5),'Arsenal atomique invalide.');
   });
 
   // ---------------------------------------------------------------------------
