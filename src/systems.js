@@ -5,7 +5,7 @@
 function installSystems16(Engine,H){
   'use strict';
   const {clone,clamp,sum,assert,finite,distance,hash}=H;
-  const RELEASE='1.13';
+  const RELEASE='1.14';
 
   // ---------------------------------------------------------------------------
   // Shared helpers
@@ -4322,6 +4322,43 @@ function installSystems16(Engine,H){
   });
 
   // ---------------------------------------------------------------------------
+  // National trees (1.14). The focuses of the great powers may found the
+  // intelligence agency, recruit operatives, raise officers and upgrade the
+  // busiest railway lines; the equipment they deliver enters the stock even
+  // when the country holds none of it yet.
+  // ---------------------------------------------------------------------------
+  const effect113=Engine.prototype.effect;
+  Engine.prototype.effect=function(id,effect={}){
+    const c=this.nation(id);
+    if(c)for(const k in effect)if(this.catalog.equipment[k]&&!(k in c.stock))c.stock[k]=0;
+    return effect113.call(this,id,effect);
+  };
+  const choiceExtras113=Engine.prototype.choiceExtras16;
+  Engine.prototype.choiceExtras16=function(id,x){
+    choiceExtras113.call(this,id,x);
+    const c=this.nation(id);if(!c)return;
+    const mine=id===this.s.player;
+    if((x.agency||x.agents)&&!c.agency16){
+      c.agency16={founded:this.s.day,upgrades:[],lastUpgrade:-UPGRADE_GAP,agents:[],ops:[],networks:{},cipher:{}};
+      if(mine)this.log('Une agence de renseignement est fondée.','tip');
+    }
+    if(x.agents){
+      const A=c.agency16;
+      if(A.agents.length+x.agents>this.agentSlots16(c)&&!A.upgrades.includes('foreign_network')&&this.intel16().upgrades.has('foreign_network'))A.upgrades.push('foreign_network');
+      for(let i=0;i<x.agents&&A.agents.length<this.agentSlots16(c);i++)
+        A.agents.push({id:this.s.uid++,name:this.agentName16(id),skill:Math.min(5,2+this.agencyEffect16(c,'skill')),mission:null,target:null,days:0});
+    }
+    if(x.officers)for(let i=0;i<(x.officers.count||1)&&c.identity.commanders.length<COMMANDER_MAX;i++){
+      const g=this.raiseCommander16(id,clamp(x.officers.skill||1,1,5));c.identity.commanders.push(g);
+      if(mine)this.log(g.name+' rejoint l’état-major.','tip');
+    }
+    if(x.rail){
+      const S=this.s.provinces,lines=this.ownedToday16(id).filter(p=>S[p.id].ctrl===id&&S[p.id].rail>0&&S[p.id].rail<5).sort((a,b)=>b.vp-a.vp||S[b.id].rail-S[a.id].rail||a.id-b.id);
+      for(const p of lines.slice(0,x.rail))S[p.id].rail++;
+    }
+  };
+
+  // ---------------------------------------------------------------------------
   // Release identifier, saves and invariants
   // ---------------------------------------------------------------------------
   const createNation15=Engine.prototype.createNation;
@@ -4408,6 +4445,13 @@ function installSystems16(Engine,H){
       // Older saves predate the 1.6 equipment types checked by the 1.5 loader.
       raw=clone(raw);
       for(const c of Object.values(raw.countries||{}))for(const key in this.baseCatalog.equipment){if(c.stock)c.stock[key]??=0;if(c.allocation)c.allocation[key]??=0;if(c.efficiency)c.efficiency[key]??=.45;}
+      // 1.14 replaced the trees of the great powers: programmes that no longer
+      // exist are dropped (their effects stay acquired).
+      for(const [id,c] of Object.entries(raw.countries||{})){
+        const tree=raw.mod?.focus?.[id]||this.baseCatalog.focus[id]||raw.mod?.focus?.generic||this.baseCatalog.focus.generic,known=new Set((tree||[]).map(f=>f.id));
+        if(c.focus&&!known.has(c.focus.id))c.focus=null;
+        if(Array.isArray(c.focusDone))c.focusDone=c.focusDone.filter(k=>known.has(k));
+      }
     }
     const migrating=raw?.release!==RELEASE,state=load15.call(this,raw);
     this.init16(false);if(migrating)this.updateStats();this.checkInvariants();return this.s;

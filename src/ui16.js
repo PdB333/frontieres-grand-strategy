@@ -595,7 +595,7 @@ ACTIONS16.push(async(action,p)=>{
 TABS.decisions=['check','Décisions'];
 const spiritDef16=id=>(CATALOG.spirits||[]).find(s=>s.id===id);
 const advisorDef16=id=>(CATALOG.advisors||[]).find(a=>a.id===id);
-const effectText16=e=>{const labels={stabilityGrowth:'stabilité / jour',supportGrowth:'soutien / jour',consumer:'biens de consommation',organization:'organisation',airDefense:'défense antiaérienne',invasion:'débarquements',paradrop:'aéroporté',reliability:'fiabilité',surrender:'seuil de capitulation',casualties:'blessés récupérés',attrition:'résistance à l’attrition',breakthrough:'percée',entrench:'retranchement',mines:'guerre des mines',convoy:'escorte des convois',resources:'extraction',ppGain:'pouvoir politique',recruitment:'incorporation',buildingSlots:'emplacements'};
+const effectText16=e=>{const labels={stabilityGrowth:'stabilité / jour',supportGrowth:'soutien / jour',consumer:'biens de consommation',organization:'organisation',airDefense:'défense antiaérienne',invasion:'débarquements',paradrop:'aéroporté',reliability:'fiabilité',surrender:'seuil de capitulation',casualties:'blessés récupérés',attrition:'résistance à l’attrition',breakthrough:'percée',entrench:'retranchement',mines:'guerre des mines',convoy:'escorte des convois',resources:'extraction',ppGain:'pouvoir politique',recruitment:'incorporation',buildingSlots:'emplacements',naval:'combat naval'};
   return Object.entries(e||{}).map(([k,v])=>labels[k]?`${v>=0?'+':''}${Math.round(v*100)} % ${labels[k]}`:effectText({[k]:v})).join(' / ');};
 NATION_EXTRA16.push(()=>{
   const c=nation(),list=c.spirits16||[];
@@ -688,9 +688,32 @@ function extrasText16(x){
   if(x.claims)out.push(x.claims==='weakest'?'But de guerre contre le voisin le plus faible':'Buts de guerre : '+asList16(x.claims).map(countryName).join(', '));
   for(const b of asList16(x.researchBonus))out.push('+'+Math.round(b.value*100)+' % de vitesse pour '+(b.uses||1)+' recherche(s) : '+(TECHGROUPS[b.group]||b.group));
   if(x.orgLoss)out.push('-'+Math.round(x.orgLoss*100)+' % d’organisation des divisions');
+  if(x.agency)out.push('Fonde l’agence de renseignement (si elle n’existe pas)');
+  if(x.agents)out.push(x.agents+' agent(s) recruté(s) sans frais (niveau 2)');
+  if(x.officers)out.push((x.officers.count||1)+' officier(s) de niveau '+(x.officers.skill||1)+' rejoignent l’état-major');
+  if(x.rail)out.push('+1 niveau de voie ferrée sur les '+x.rail+' lignes les plus importantes');
   return out;
 }
-const focusIcon16=f=>f.path?'people':/^c16_(plan|survey|roads|synthetic|power|metals|basin|civilian|armament|labs|reserves)/.test(f.id)?'industry':/^c16_(ministry|intelligence|attaches|trade|propaganda)/.test(f.id)?'diplomacy':/^c16_/.test(f.id)?'army':f.id.includes('industry')||f.id==='arsenals'?'industry':f.id==='air'?'plane':f.id==='navy'?'anchor':'focus';
+// National trees (1.14) take their icon from what the programme gives.
+const FOCUS_ICON_KEYS16=[
+  ['research',['slots','research']],['industry',['civ','mil','production','construction','resources','fuel','consumer']],['train',['trains']],
+  ['tank',['tanks','armor']],['plane',['fighters','cas','bombers','strategicBombers','navalBombers','transportPlanes','air','airDefense','bombing']],
+  ['anchor',['dock','navy','naval','submarines','destroyers','cruisers','convoys','convoy','raiding']],['intel',['intel']]];
+const FOCUS_ICON_GROUPS16={electronics:'research',industry:'research',armor:'tank',air:'plane',air_doctrine:'plane',navy:'anchor',naval_doctrine:'anchor'};
+function focusIcon16(f){
+  if(f.path)return 'people';
+  if(/^c16_/.test(f.id))return /^c16_(plan|survey|roads|synthetic|power|metals|basin|civilian|armament|labs|reserves)/.test(f.id)?'industry':/^c16_(ministry|intelligence|attaches|trade|propaganda)/.test(f.id)?'diplomacy':'army';
+  if(!f.national)return f.id.includes('industry')||f.id==='arsenals'?'industry':f.id==='air'?'plane':f.id==='navy'?'anchor':'focus';
+  const e=f.effect||{};
+  if(f.agency||f.agents)return 'intel';
+  if(f.rail)return 'train';
+  for(const [name,keys] of FOCUS_ICON_KEYS16)if(keys.some(k=>e[k]>0))return name;
+  if(f.special?.build)return 'industry';
+  const g=asList16(f.researchBonus)[0]?.group;if(FOCUS_ICON_GROUPS16[g])return FOCUS_ICON_GROUPS16[g];
+  if(f.relations||f.claims||f.guarantee||f.faction||f.invite||e.tension>0||e.pp>0&&Object.keys(e).length===1)return 'diplomacy';
+  if(f.spirits||f.removeSpirits||e.stability||e.support)return 'people';
+  return 'army';
+}
 showTree=function(){
   if(!S)return;pauseGame();const tree=focusTree(),c=nation(),maxRow=Math.max(...tree.map(f=>f.row)),columns=Math.max(...tree.map(f=>f.col))+1,width=210,gap=50,rowh=109,rowgap=32;
   const W=columns*width+(columns-1)*gap,H=(maxRow+1)*(rowh+rowgap)-rowgap;
@@ -1109,7 +1132,7 @@ ACTIONS16.push(async(action)=>{
 showHelp=function(){
   pauseGame();
   const card=(title,text)=>`<div class="card"><h3>${title}</h3><p class="note" style="margin-top:10px">${text}</p></div>`;
-  modal(`${modalHead('Manuel de campagne','FRONTIÈRES 1.13 / PRISE EN MAIN')}<div class="grid2">
+  modal(`${modalHead('Manuel de campagne','FRONTIÈRES 1.14 / PRISE EN MAIN')}<div class="grid2">
     ${card('1. Préparer l’État','Choisissez une priorité nationale et affectez vos équipes de recherche. Les usines, chantiers et raffineries partagent les emplacements de chaque État. Six ressources stratégiques alimentent les lignes de production ; la loi commerciale fixe la part exportée.')}
     ${card('2. Lois, conseillers, décisions','L’économie, la conscription et le commerce se règlent par des lois. Nommez des conseillers et des chefs d’état-major, prenez des décisions ponctuelles et surveillez vos esprits nationaux. Les voies politiques de l’arbre peuvent changer le régime.')}
     ${card('3. Former les forces','Composez vos divisions à partir de bataillons et de compagnies de soutien. Concevez chars, avions et navires, puis modernisez vos stocks. Le recrutement consomme matériel et effectifs.')}
@@ -1121,6 +1144,7 @@ showHelp=function(){
     ${card('9. Renseignement et occupation','Fondez une agence (Renseignement), recrutez des agents et tissez des réseaux : ils ouvrent sabotages, vols de plans, capture du chiffre et gouvernements de collaboration. Les territoires occupés exigent des garnisons ; la loi d’occupation arbitre entre exploitation et résistance.')}
     ${card('10. Armes spéciales','Les canons sur rail forment des batteries qui circulent sur vos voies et appuient les batailles proches. Les missiles balistiques partent de bases de lancement vers l’industrie ennemie. Un réacteur et la recherche atomique produisent des bombes, larguées par vos bombardiers stratégiques (Guerre → Armes spéciales).')}
     ${card('11. Présentation','Les Préférences règlent les sons (signaux synthétisés pour l’interface, les batailles et les événements), leur volume et la langue : l’interface existe en français et en anglais ; les contenus historiques restent en français. La vue Terrain montre les déserts, les massifs sont dessinés en hachures sur toutes les vues terrestres.')}
+    ${card('12. Arbres nationaux','Les huit grandes puissances suivent un arbre qui leur est propre : industrie et recherche, armée, aviation, marine, renseignement et politique étrangère, puis les voies politiques à droite. Certains programmes fondent l’agence de renseignement, recrutent des agents ou des officiers, modernisent les grandes lignes ferroviaires ou livrent des locomotives et des canons sur rail ; d’autres s’excluent mutuellement.')}
   </div><div class="card" style="margin-top:18px"><h3>Raccourcis</h3><p class="note" style="margin-top:10px"><span class="hotkey">Espace</span> Pause / <span class="hotkey">1–5</span> Vitesse / <span class="hotkey">A</span> Armées / <span class="hotkey">I</span> Industrie / <span class="hotkey">R</span> Recherche / <span class="hotkey">D</span> Diplomatie / <span class="hotkey">P</span> Priorités / <span class="hotkey">F</span> Recentrer / <span class="hotkey">Échap</span> Fermer.</p></div>
   <p class="note" style="margin-top:18px">Limites de cette version : simulation journalière avec combats horaires, carte d’environ 11 600 provinces terrestres (régions Natural Earth 1:10m), 226 régions maritimes et 158 régions aériennes, réseau ferré schématique, IA heuristique, contenu original moins abondant que celui des grands jeux commerciaux. Pas de multijoueur ni de compatibilité avec les mods d’autres jeux.</p>`,'help','wide');
 };

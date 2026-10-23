@@ -2,7 +2,7 @@
 
 **A single-player grand strategy game for the browser — build a nation, shape history, and command a world at war.**
 
-**Current playable version:** `1.13` &nbsp;|&nbsp; **Project status:** Alpha / actively developed &nbsp;|&nbsp; **Interface:** French and English &nbsp;|&nbsp; **Documentation:** English &nbsp;|&nbsp; **License:** MIT (original code)
+**Current playable version:** `1.14` &nbsp;|&nbsp; **Project status:** Alpha / actively developed &nbsp;|&nbsp; **Interface:** French and English &nbsp;|&nbsp; **Documentation:** English &nbsp;|&nbsp; **License:** MIT (original code)
 
 [Play / download `index.html`](./index.html) · [Source code](./src/) · [Game data](./data/) · [Roadmap](#development-roadmap) · [Modding](#modding-and-custom-scenarios) · [Report an issue](https://github.com/PdB333/frontieres-grand-strategy/issues)
 
@@ -54,7 +54,7 @@ The core simulation does **not** require a connection to a game server. Optional
 | Starting scenarios | **1936** and **1939** historical bookmarks |
 | Campaign engine | Pausable, day-by-day simulation with 5 speed settings, hourly battles and AI-controlled countries |
 | Historical content | **71** historical event/government entries, **82** conditional events (45 of them national), **44** releasable nations |
-| National focus trees | **23** country-specific trees plus a generic tree; **64–70** focuses per tree with exclusive regime paths |
+| National focus trees | **23** country-specific trees plus a generic tree; **43–70** focuses per tree with exclusive regime paths; the eight great powers have trees of their own |
 | Technology | **150** technologies across 10 research categories, including exclusive land, naval and air doctrines |
 | Production | **24** equipment types, **73** equipment models, tank/aircraft/ship designers, **13** building types |
 | Ground forces | **20** battalion and **15** support types, battle plans, reserves, combat width, weather and attrition |
@@ -66,6 +66,13 @@ The core simulation does **not** require a connection to a game server. Optional
 | Display | Canvas-based interactive map, overlays, minimap, accessibility and performance controls |
 | Online services | **None required for core gameplay** |
 | Multiplayer | **Not planned** |
+
+### What's new in 1.14 — national trees
+
+- **Unique trees for the eight great powers:** Germany, the Soviet Union, the United Kingdom, France, the United States, Italy, Japan and China each get a tree of their own (43 to 66 focuses), with national branches for industry and research, the army, the air force, the navy, intelligence and foreign policy, followed by the regime paths. Focus names refer to the programmes and events of the period (the four-year plan, the shadow factories, the Maginot line, the five-year plans, the two-ocean navy...); their effects and the layout are original.
+- **Choices that exclude each other:** armoured warfare or mass infantry, a battle fleet or submarines, appeasement or guarantees, deep battle or mass assault, expansion to the north or to the south, German advisers or Soviet aid...
+- **Ties to the newer systems:** focuses can found the intelligence agency and recruit operatives, raise generals, upgrade the busiest railway lines and deliver locomotives, railway guns or rocket artillery; atomic and rocket research get dedicated research bonuses.
+- **Saves:** programmes of the former trees that no longer exist are dropped when an older save is loaded (their effects stay acquired).
 
 ### What's new in 1.13 — presentation
 
@@ -181,7 +188,7 @@ All rules, names and texts are original to Frontières; no file, text, icon or m
 - Political cooldowns and consequences for unpopular or disruptive decisions.
 - Civil unrest, tensions, strikes, and interactions with the national economy.
 - Economic organization and wartime laws that change the country's available capacity.
-- National focus trees for **France, Germany, the United Kingdom, the Soviet Union, the United States, Italy, Japan, and China**, plus a generic tree for other countries: 64 to 69 focuses each, with political, economic, military research and foreign policy branches.
+- National focus trees of their own for **France, Germany, the United Kingdom, the Soviet Union, the United States, Italy, Japan, and China** (43 to 66 focuses each): industry and research, army, air force, navy, intelligence and foreign policy branches with exclusive choices, followed by three regime paths; a generic tree (69 focuses) for the other countries.
 - National trees for **15 secondary powers** (Poland, Spain, Romania, Czechoslovakia, Turkey, Yugoslavia, Hungary, the Netherlands, Belgium, Sweden, Finland, Canada, Australia, India and Brazil): national names, three regime paths of their own and a branch of national priorities (fortified lines, strategic resources, alliances, claims, research), with three national events and two national decisions each, taken by the AI as well.
 - Mutually exclusive **regime paths** (democratic, fascist, communist, authoritarian) that can change the government, grant national spirits, join factions, guarantee neighbours or justify war goals; OR prerequisites and conditions.
 - **Laws** for the economy (6), conscription (7) and trade (4); **33 advisors** and chiefs of staff in six offices; **59 national spirits**; **76 decisions** in five categories.
@@ -462,7 +469,7 @@ node tools/browser-smoke.mjs
 
 GitHub Actions runs all of these checks on every push and pull request. Historical test fixtures and development ZIP tools are not yet published.
 
-The map is generated by `python3 -I tools/data/map_1_7.py --ne DIR`, where `DIR` holds `ne_10m_admin_1_states_provinces.geojson` and `ne_10m_populated_places.geojson` from the `geojson/` folder of [natural-earth-vector](https://github.com/nvkelso/natural-earth-vector) (it needs `shapely`, `numpy`; about one minute), then `python3 -I tools/data/seas_1_8.py --ne DIR` adds the sea provinces, sea regions and air regions (it also needs `scipy` and `ne_10m_geography_marine_polys.geojson`; about two minutes). The 1936 reference (owners, borders, terrain, cities, ports, resources, regions, straits) is the 1.6 map in `tools/data/legacy/`, itself produced by `tools/data/world_1_6.py`, which only runs on that map. The catalogue comes from two idempotent scripts run in this order: `python3 tools/data/catalog_1_6.py` (buildings, laws, equipment, battalions, advisors, spirits, decisions, AI profiles) and `python3 tools/data/content_1_6.py` (focus trees, doctrines, events, AI plans), then `python3 tools/data/generals_1_9.py` adds commander traits, rosters, name pools and battle tactics, `python3 -I tools/data/rails_1_10.py` adds the railway network, the supply hubs and the locomotive equipment (run it after `seas_1_8.py`), `python3 tools/data/intel_1_11.py` adds the intelligence agency, operations and occupation laws, `python3 tools/data/weapons_1_12.py` adds the special weapons, `python3 tools/data/flags_1_13.py` the flags and `python3 -I tools/data/relief_1_13.py --ne DIR` the relief (it needs `ne_50m_geography_regions_polys.geojson` and `shapely`).
+The map is generated by `python3 -I tools/data/map_1_7.py --ne DIR`, where `DIR` holds `ne_10m_admin_1_states_provinces.geojson` and `ne_10m_populated_places.geojson` from the `geojson/` folder of [natural-earth-vector](https://github.com/nvkelso/natural-earth-vector) (it needs `shapely`, `numpy`; about one minute), then `python3 -I tools/data/seas_1_8.py --ne DIR` adds the sea provinces, sea regions and air regions (it also needs `scipy` and `ne_10m_geography_marine_polys.geojson`; about two minutes). The 1936 reference (owners, borders, terrain, cities, ports, resources, regions, straits) is the 1.6 map in `tools/data/legacy/`, itself produced by `tools/data/world_1_6.py`, which only runs on that map. The catalogue comes from two idempotent scripts run in this order: `python3 tools/data/catalog_1_6.py` (buildings, laws, equipment, battalions, advisors, spirits, decisions, AI profiles) and `python3 tools/data/content_1_6.py` (focus trees, doctrines, events, AI plans), then `python3 tools/data/generals_1_9.py` adds commander traits, rosters, name pools and battle tactics, `python3 -I tools/data/rails_1_10.py` adds the railway network, the supply hubs and the locomotive equipment (run it after `seas_1_8.py`), `python3 tools/data/intel_1_11.py` adds the intelligence agency, operations and occupation laws, `python3 tools/data/weapons_1_12.py` adds the special weapons, `python3 tools/data/flags_1_13.py` the flags, `python3 -I tools/data/relief_1_13.py --ne DIR` the relief (it needs `ne_50m_geography_regions_polys.geojson` and `shapely`) and `python3 tools/data/trees_1_14.py` the national trees of the great powers.
 
 ## Development roadmap
 
@@ -486,11 +493,16 @@ Features listed as **planned** are goals, **not** claims about what the current 
 | `1.10` | Logistics: railway network and hubs, locomotives, trucks, railway construction | Completed in development |
 | `1.11` | Intelligence agency, operatives and covert operations; occupation laws and garrisons | Completed in development |
 | `1.12` | Special weapons: railway guns, ballistic missiles, atomic bombs | Completed in development |
-| **`1.13`** | Presentation: flags, relief, sound, English interface | **Current public snapshot** |
+| `1.13` | Presentation: flags, relief, sound, English interface | Completed in development |
+| **`1.14`** | Unique national trees for the eight great powers | **Current public snapshot** |
 
 These are **project development milestones**, not a claim that each version is separately tagged as a GitHub release.
 
-### v1.13 — Presentation (current)
+### v1.14 — National Trees (current)
+
+- [x] **Unique trees** for the eight great powers, tied to generals, logistics, intelligence and special weapons.
+
+### v1.13 — Presentation
 
 - [x] **Flags, relief and sound** without image or audio files.
 - [x] **English interface** for menus, panels and the map.
@@ -546,9 +558,8 @@ These are **project development milestones**, not a claim that each version is s
 - [x] **Strategic AI:** front sectors, doctrine-driven production and research, air and naval missions, invasions, decisions.
 - [x] **Scale:** new starting countries and a faster simulation.
 
-### Next: content
+### Next: testing and balance
 
-- [ ] **Content:** fully unique national trees.
 - [ ] Resolve regressions introduced by the warfare update.
 - [ ] Test long-running 1936–1945 campaigns, including save/export/reload cycles.
 - [ ] Validate key historical decision chains and starting configurations.
