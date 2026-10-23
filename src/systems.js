@@ -5,7 +5,7 @@
 function installSystems16(Engine,H){
   'use strict';
   const {clone,clamp,sum,assert,finite,distance,hash}=H;
-  const RELEASE='1.9';
+  const RELEASE='1.10';
 
   // ---------------------------------------------------------------------------
   // Shared helpers
@@ -318,9 +318,10 @@ function installSystems16(Engine,H){
     const construction=1+c.bonus.construction+(L.economy.construction||0)+(L.trade.construction||0);
     const capacity=c.stats.freeCiv*1.2*construction*(c.macro?.output||1),projects=c.build.slice(0,Math.max(1,Math.min(3,Math.floor(c.stats.freeCiv/10))));
     for(const b of projects){
-      if(this.s.provinces[b.pid].ctrl!==id){c.build=c.build.filter(x=>x.id!==b.id);continue;}
+      const lost=b.kind==='railLine'?!b.pids.some(pid=>this.s.provinces[pid].ctrl===id):this.s.provinces[b.pid].ctrl!==id;
+      if(lost){c.build=c.build.filter(x=>x.id!==b.id);continue;}
       b.progress+=capacity/projects.length;
-      if(b.progress>=b.cost){this.s.provinces[b.pid][b.kind]++;c.build=c.build.filter(x=>x.id!==b.id);if(id===this.s.player)this.log(this.catalog.buildings[b.kind].name+' achevé(e) : '+this.prov[b.pid].name+'.','success');}
+      if(b.progress>=b.cost){this.completeBuild16(id,b);c.build=c.build.filter(x=>x.id!==b.id);}
     }
     const year=1936+this.s.day/365.25;
     for(const r of [...c.research]){
@@ -405,15 +406,21 @@ function installSystems16(Engine,H){
       }
     }
     const bonus=new Map(),supplyBonus=k=>{let v=bonus.get(k);if(v===undefined){v=this.nation(k)?.bonus.supply||0;bonus.set(k,v);}return v;};
+    // Roads cost more without trucks; railway lines cost a fraction of a
+    // road, less on a busier line, more when locomotives are lacking.
+    const steps=this.supplySteps16(),factors=new Map(),factor=k=>{let f=factors.get(k);if(!f){f={train:steps.train(k),truck:steps.truck(k)};factors.set(k,f);}return f;};
     const move=new Float64Array(n),denom=new Float64Array(n);
-    for(let j=0;j<n;j++){const t=s.provinces[j];move[j]=.07*this.catalog.terrain[P[j].terrain].move;denom[j]=1+t.rail*.25+t.infra*.12;}
-    const done=new Uint8Array(n),span=this.edgeSpan16();
+    for(let j=0;j<n;j++){const t=s.provinces[j];move[j]=.07*this.catalog.terrain[P[j].terrain].move;denom[j]=1+t.infra*.12;}
+    const done=new Uint8Array(n),span=this.edgeSpan16(),S=s.provinces;
     while(heapIds.length){
       const i=pop();if(done[i])continue;done[i]=1;
-      const from=s.provinces[i].ctrl,row=permitted[from],extra=supplyBonus(from),vi=values[i],nb=P[i].neighbors,sp=span[i];
+      const from=S[i].ctrl,row=permitted[from],extra=supplyBonus(from),vi=values[i],nb=P[i].neighbors,sp=span[i],f=factor(from),ri=S[i].rail,rails=steps.adj[i];
       for(let k=0;k<nb.length;k++){
-        const j=nb[k];if(done[j]||!row?.[s.provinces[j].ctrl])continue;
-        const v=vi-move[j]*sp[k]/(denom[j]+extra);if(v>values[j]&&v>0){values[j]=v;push(j,v);}
+        const j=nb[k];if(done[j]||!row?.[S[j].ctrl])continue;
+        const rj=S[j].rail,onRail=ri>0&&rj>0&&(steps.legacy||rails.includes(j));
+        // Occupied lines run at half capacity (gauge, staff, sabotage).
+        const cost=onRail?.07*RAIL_COST*sp[k]*(1+S[j].damage*2)*(S[j].own!==S[j].ctrl?OCCUPIED_RAIL:1)/((1+.35*(Math.min(ri,rj)-1))*f.train+extra):move[j]*sp[k]*f.truck/(denom[j]+extra);
+        const v=vi-cost;if(v>values[j]&&v>0){values[j]=v;push(j,v);}
       }
     }
     for(let i=0;i<n;i++){const q=s.provinces[i];q.supply=clamp(values[i]*(1+q.hub*.08)*(1-q.damage*.4),0,1);}
@@ -3683,6 +3690,187 @@ function installSystems16(Engine,H){
       }
     }
     for(const g of state.groups||[])if(g.marshal)assert(state.countries[g.owner]?.identity.commanders.some(x=>x.id===g.marshal),'Maréchal inconnu.');
+  });
+
+  // ---------------------------------------------------------------------------
+  // Logistics. Supply travels along railway lines, cheaply when the country
+  // has enough locomotives, then by road, faster with trucks. The lines come
+  // from the map (world.railLinks) and from the lines built during the game
+  // (s.railLinks16). Trucks wear out at war and burn under enemy air power;
+  // a capitulating country leaves half of its rolling stock to the occupier.
+  // ---------------------------------------------------------------------------
+  const OCCUPIED_RAIL=2,TRAINS_PER_RAIL=.6,TRUCKS_PER_DIVISION=10,RAIL_COST=.22,RAIL_NEW=135,RAIL_UPGRADE=90,RAIL_ROUTE_MAX=60;
+  Engine.prototype.railGraph16=function(){
+    const extra=this.s.railLinks16||[];
+    if(this._railWorld===this.world&&this._railState===this.s&&this._railExtra===extra.length)return this._railAdj;
+    const adj=Array.from({length:this.prov.length},()=>[]);
+    const add=(a,b)=>{if(this.prov[a]&&this.prov[b]&&!adj[a].includes(b)){adj[a].push(b);adj[b].push(a);}};
+    for(const [a,b] of this.world.railLinks||[])add(a,b);
+    for(const [a,b] of extra)add(a,b);
+    this._railAdj=adj;this._railWorld=this.world;this._railState=this.s;this._railExtra=extra.length;
+    return adj;
+  };
+  // Locomotives needed for the controlled network, trucks for the divisions.
+  Engine.prototype.logistics16=function(){
+    const rail=Object.create(null),divs=Object.create(null);
+    for(const q of this.s.provinces)if(q.rail>0)rail[q.ctrl]=(rail[q.ctrl]||0)+q.rail;
+    for(const u of this.s.units)divs[u.owner]=(divs[u.owner]||0)+1;
+    const out=Object.create(null);
+    for(const id of this.active()){
+      const c=this.nation(id),trainNeed=Math.max(1,Math.round((rail[id]||0)*TRAINS_PER_RAIL)),truckNeed=Math.max(1,(divs[id]||0)*TRUCKS_PER_DIVISION);
+      const l={rail:rail[id]||0,trainNeed,truckNeed,trains:clamp((c.stock.trains||0)/trainNeed,0,1),trucks:clamp((c.stock.trucks||0)/truckNeed,0,1)};
+      out[id]=l;c.logistics16={rail:l.rail,trainNeed,truckNeed,trains:Math.round(l.trains*100)/100,trucks:Math.round(l.trucks*100)/100};
+    }
+    return out;
+  };
+  // Supply cost of one step: along a railway line, or by road.
+  Engine.prototype.supplySteps16=function(){
+    const L=this.logistics16(),legacy=!this.world.railLinks,adj=this.railGraph16(),S=this.s.provinces;
+    const train=id=>Math.max(.25,L[id]?.trains??1),truck=id=>1.4-.55*(L[id]?.trucks??1);
+    return {legacy,adj,train,truck,rail:(i,j)=>S[i].rail>0&&S[j].rail>0&&(legacy||adj[i].includes(j))};
+  };
+  Engine.prototype.initTrains16=function(){
+    const L=this.logistics16();
+    for(const [id,l] of Object.entries(L))this.nation(id).stock.trains=Math.max(this.nation(id).stock.trains||0,l.trainNeed);
+    this.logistics16();
+  };
+  const init19=Engine.prototype.init16;
+  Engine.prototype.init16=function(fresh){
+    const s=this.s,old=!fresh&&s.railLinks16===undefined;
+    init19.call(this,fresh);
+    if(fresh||old){
+      // Saves made before the railway network: the map's lines replace the
+      // uniform level, extensions built during the campaign are kept.
+      if(old&&this.world.railLinks)this.prov.forEach((p,i)=>{const q=s.provinces[i];if(p.rail==null)return;q.rail=Math.min(5,p.capital?Math.max(p.rail,q.rail):p.rail+Math.max(0,q.rail-1));q.hub=Math.max(q.hub,p.hub||0);});
+      s.railLinks16??=[];
+      this.initTrains16();
+    }
+  };
+  // Shortest land route through the country's own provinces (no straits).
+  Engine.prototype.railRoute16=function(id,from,to){
+    const S=this.s.provinces,n=this.prov.length,dist=new Float64Array(n).fill(Infinity),prev=new Int32Array(n).fill(-1),seen=new Uint8Array(n);
+    // Binary min-heap of [cost, province].
+    const heap=[],push=e=>{let i=heap.length;heap.push(e);while(i>0){const up=(i-1)>>1;if(heap[up][0]<=e[0])break;heap[i]=heap[up];i=up;}heap[i]=e;};
+    const pop=()=>{const top=heap[0],last=heap.pop();if(heap.length){let i=0;for(;;){let c=2*i+1;if(c>=heap.length)break;if(c+1<heap.length&&heap[c+1][0]<heap[c][0])c++;if(heap[c][0]>=last[0])break;heap[i]=heap[c];i=c;}heap[i]=last;}return top;};
+    dist[from]=0;push([0,from]);
+    let steps=0;
+    while(heap.length&&steps++<20000){
+      const [d,i]=pop();
+      if(seen[i])continue;seen[i]=1;if(i===to)break;
+      for(const j of this.prov[i].neighbors){
+        if(S[j].ctrl!==id||seen[j]||this.strait16(i,j))continue;
+        const t=this.catalog.terrain[this.prov[j].terrain]?.move||1,v=d+distance(this.prov[i],this.prov[j])*t;
+        if(v<dist[j]){dist[j]=v;prev[j]=i;push([v,j]);}
+      }
+    }
+    if(!seen[to])return null;
+    const route=[to];while(route[route.length-1]!==from)route.push(prev[route[route.length-1]]);
+    return route.reverse();
+  };
+  Engine.prototype.railLineCost16=function(route){return sum(route.map(pid=>this.s.provinces[pid].rail>=5?0:this.s.provinces[pid].rail>0?RAIL_UPGRADE:RAIL_NEW));};
+  Engine.prototype.queueRailLine16=function(id,from,to){
+    const c=this.nation(id),S=this.s.provinces;
+    assert(this.prov[from]&&this.prov[to]&&from!==to,'Choisissez deux provinces différentes.');
+    assert(S[from].ctrl===id&&S[to].ctrl===id,'Une ligne relie deux provinces que vous contrôlez.');
+    assert(c.build.length<16,'File de construction pleine.');
+    const route=this.railRoute16(id,from,to);
+    assert(route&&route.length<=RAIL_ROUTE_MAX,'Aucun tracé terrestre de moins de '+RAIL_ROUTE_MAX+' provinces sur votre territoire.');
+    const cost=this.railLineCost16(route);assert(cost>0,'Cette ligne est déjà au niveau maximal.');
+    c.build.push({id:this.s.uid++,pid:from,kind:'railLine',pids:route,progress:0,cost});
+    return route;
+  };
+  Engine.command16('railLine',function(p,id,c){return this.queueRailLine16(id,p.from,p.to).length;});
+  // A finished line raises the railway level of every province on the route
+  // and links them; any other project adds one level of its building.
+  Engine.prototype.completeBuild16=function(id,b){
+    const S=this.s.provinces;
+    if(b.kind==='railLine'){
+      for(const pid of b.pids)if(S[pid].ctrl===id)S[pid].rail=Math.min(5,S[pid].rail+1);
+      const adj=this.railGraph16();this.s.railLinks16??=[];
+      for(let i=1;i<b.pids.length;i++){const x=b.pids[i-1],y=b.pids[i];if(!adj[x].includes(y))this.s.railLinks16.push([Math.min(x,y),Math.max(x,y)]);}
+      if(id===this.s.player)this.log('Voie ferrée achevée : '+this.prov[b.pids[0]].name+' – '+this.prov[b.pids[b.pids.length-1]].name+' ('+b.pids.length+' provinces).','success');
+      return;
+    }
+    S[b.pid][b.kind]++;
+    if(id===this.s.player)this.log(this.catalog.buildings[b.kind].name+' achevé(e) : '+this.prov[b.pid].name+'.','success');
+  };
+  // A retreating army wrecks the railways it leaves to the enemy: captured
+  // lines carry supply poorly until repaired (province damage fades daily).
+  const RAIL_WRECK=.4,capture19=Engine.prototype.capture;
+  Engine.prototype.capture=function(pid,attackers){
+    const st=this.s.provinces[pid],was=st.ctrl,result=capture19.call(this,pid,attackers);
+    if(st.ctrl!==was&&st.rail>0&&this.war(st.ctrl,was))st.damage=Math.max(st.damage,RAIL_WRECK);
+    return result;
+  };
+  // Truck wear at war (off the railways) and losses under enemy air control.
+  Engine.onDay16(function(){
+    const wear=Object.create(null),S=this.s.provinces,air=this.s.airControl16||{},atWar=new Map();
+    for(const u of this.s.units){
+      let w0=atWar.get(u.owner);if(w0===undefined){w0=this.enemies(u.owner).length>0;atWar.set(u.owner,w0);}
+      if(!w0)continue;
+      let w=S[u.pid].rail>0?0:.015;
+      const control=air[this.prov[u.pid].zone]?.[u.owner];
+      if(control!==undefined&&control<.3)w+=.05;
+      if(w)wear[u.owner]=(wear[u.owner]||0)+w;
+    }
+    for(const [id,w] of Object.entries(wear)){const c=this.nation(id);c.stock.trucks=Math.max(0,c.stock.trucks-w);}
+  });
+  const capitulate19=Engine.prototype.capitulate16;
+  Engine.prototype.capitulate16=function(id){
+    const occupier=this.mainOccupier16(id),c=this.nation(id),before={trains:c.stock.trains||0,trucks:c.stock.trucks||0};
+    const result=capitulate19.call(this,id);
+    const o=this.nation(occupier);
+    if(o?.alive&&occupier&&occupier!==id){
+      for(const k of ['trains','trucks']){const taken=Math.floor(Math.min(before[k],c.stock[k]??before[k])*.5);o.stock[k]=(o.stock[k]||0)+taken;c.stock[k]=Math.max(0,(c.stock[k]||0)-taken);}
+    }
+    return result;
+  };
+  // AI: a front province far from the railways gets a line from the nearest
+  // railway station of the country.
+  Engine.prototype.aiRailways16=function(id){
+    const c=this.nation(id),S=this.s.provinces;
+    if(c.build.length>=3||c.build.some(b=>b.kind==='railLine')||c.stats.freeCiv<4)return;
+    const front=this.ownedToday16(id).filter(p=>S[p.id].ctrl===id&&S[p.id].rail===0&&S[p.id].supply<.45&&p.neighbors.some(n=>this.war(id,S[n].ctrl))).sort((a,b)=>S[a.id].supply-S[b.id].supply||a.id-b.id)[0];
+    if(!front)return;
+    // Breadth-first search for the nearest province on the network.
+    const seen=new Set([front.id]),queue=[front.id];let station=null;
+    for(let h=0;h<queue.length&&h<400&&station===null;h++)for(const n of this.prov[queue[h]].neighbors){
+      if(seen.has(n)||S[n].ctrl!==id)continue;seen.add(n);
+      if(S[n].rail>0){station=n;break;}queue.push(n);
+    }
+    if(station===null)return;
+    try{this.queueRailLine16(id,station,front.id);}catch{}
+  };
+  const aiConstruction19=Engine.prototype.aiConstruction16;
+  Engine.prototype.aiConstruction16=function(id){
+    if(this.enemies(id).length&&this.s.day%3===0)this.aiRailways16(id);
+    return aiConstruction19.call(this,id);
+  };
+  // AI production: locomotives for the network, trucks for the divisions.
+  const aiProduction19=Engine.prototype.aiProduction16;
+  Engine.prototype.aiProduction16=function(id){
+    aiProduction19.call(this,id);
+    const c=this.nation(id),l=c.logistics16,mil=c.stats.mil;if(!l||!mil)return;
+    const shift=(key,count)=>{
+      count=Math.min(count,Math.floor(mil*.25));if(count<=0||!this.catalog.equipment[key])return;
+      // Factories move from the largest other lines.
+      let left=count;
+      for(const [k] of Object.entries(c.allocation).filter(([k,n])=>k!==key&&n>0&&!this.catalog.equipment[k]?.naval).sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0]))){
+        const take=Math.min(left,Math.floor(c.allocation[k]/2));c.allocation[k]-=take;c.allocation[key]=(c.allocation[key]||0)+take;left-=take;if(!left)break;
+      }
+    };
+    const eff=k=>Math.max(.1,c.efficiency[k]||.45),days=150;
+    const trains=l.trainNeed-(c.stock.trains||0);
+    if(trains>0)shift('trains',Math.ceil(trains*this.catalog.equipment.trains.cost/(5*eff('trains')*days)));
+    const trucks=l.truckNeed-(c.stock.trucks||0);
+    if(trucks>0)shift('trucks',Math.ceil(trucks*this.catalog.equipment.trucks.cost/(5*eff('trucks')*days)));
+  };
+  Engine.invariant16(function(state){
+    const links=state.railLinks16||[];
+    assert(Array.isArray(links)&&links.length<=5000,'Voies ferrées invalides.');
+    for(const l of links)assert(Array.isArray(l)&&l.length===2&&this.prov[l[0]]&&this.prov[l[1]]&&this.prov[l[0]].neighbors.includes(l[1]),'Voie ferrée invalide.');
+    for(const c of Object.values(state.countries))for(const b of c.build)if(b.kind==='railLine')
+      assert(Array.isArray(b.pids)&&b.pids.length>=2&&b.pids.length<=RAIL_ROUTE_MAX&&b.pids.every(pid=>this.prov[pid]),'Chantier ferroviaire invalide.');
   });
 
   // ---------------------------------------------------------------------------

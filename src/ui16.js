@@ -65,7 +65,9 @@ renderInspector=function(){
     ${metric('Météo',esc(w?.name||'Clair'))}
     ${metric('Terrain',esc(CATALOG.terrain[p.terrain]?.name||p.terrain))}
     ${deposits?`<small>Gisements : ${deposits}</small>`:''}
-    ${S?`<small style="display:block">Bâtiments : DCA ${S.provinces[pid].aa||0} / fort côtier ${S.provinces[pid].coastalFort||0} / raffinerie ${S.provinces[pid].refinery||0}</small>`:''}</div>`;
+    ${S?`<small style="display:block">Bâtiments : DCA ${S.provinces[pid].aa||0} / fort côtier ${S.provinces[pid].coastalFort||0} / raffinerie ${S.provinces[pid].refinery||0}</small>`:''}
+    ${metric('Voie ferrée / dépôt',(S?S.provinces[pid].rail:p.rail||0)+' / '+(S?S.provinces[pid].hub:p.hub||0))}
+    ${S&&owner===S.player?btn('Voie ferrée depuis ici','railFrom16',{pid},'small ghost'):''}</div>`;
   const history=$('inspector').querySelector('.inspector-history');
   if(history)history.insertAdjacentHTML('beforebegin',html);else $('inspector').insertAdjacentHTML('beforeend',html);
 };
@@ -130,7 +132,8 @@ INDUSTRY16.construction=function(c){
       const p=WORLD.provinces[bp],full=b.shared&&used+queued>=cap,needsCoast=(b.coast||['dock','port'].includes(k))&&!p?.coast,locked=b.tech&&!c.tech.includes(b.tech);
       return btn(`${esc(b.name)} <small>${b.cost}${b.shared?' / emplacement':''}${locked?' / '+esc(technologies().find(t=>t.id===b.tech)?.name||b.tech):''}</small>`,'build',{pid:bp,kind:k},'small',full||needsCoast||locked);
     }).join('')}</div>
-    <div class="sectionlabel">File de construction / ${c.build.length}</div><div class="stack">${c.build.map(b=>`<div class="card"><div class="row between"><strong style="font-size:12px">${esc(CATALOG.buildings[b.kind].name)}</strong><div class="row">${btn('↑','prioritizeBuild',{id:b.id},'small ghost')}${btn('×','cancelBuild',{id:b.id},'small ghost')}</div></div><small>${esc(pname(b.pid))} / ${Math.round(b.progress)} / ${b.cost} points</small><div style="margin-top:8px">${bar(b.progress/b.cost*100)}</div></div>`).join('')||'<div class="empty">La file de construction est vide. Les usines civiles n’ont aucun chantier à exécuter.</div>'}</div>
+    <div style="margin-bottom:12px">${btn('Tracer une voie ferrée '+icon('arrow'),'railTool16',{},'small wide')}</div>
+    <div class="sectionlabel">File de construction / ${c.build.length}</div><div class="stack">${c.build.map(b=>`<div class="card"><div class="row between"><strong style="font-size:12px">${esc(buildName16(b))}</strong><div class="row">${btn('↑','prioritizeBuild',{id:b.id},'small ghost')}${btn('×','cancelBuild',{id:b.id},'small ghost')}</div></div><small>${esc(buildPlace16(b))} / ${Math.round(b.progress)} / ${b.cost} points</small><div style="margin-top:8px">${bar(b.progress/b.cost*100)}</div></div>`).join('')||'<div class="empty">La file de construction est vide. Les usines civiles n’ont aucun chantier à exécuter.</div>'}</div>
     <p class="note" style="margin-top:14px">Usines, chantiers navals et raffineries partagent les emplacements de l’État, fixés par sa catégorie. Jusqu’à trois chantiers parallèles selon l’industrie disponible.</p>`;
 };
 INDUSTRY16.resources=function(c){
@@ -788,11 +791,73 @@ showBattle=function(pid){
   const grid=$('modal').querySelector('.grid2');if(grid)grid.insertAdjacentHTML('afterend',battleTactics16(b));
 };
 
+/* ---- Logistics: railways, locomotives and trucks ---- */
+const buildName16=b=>b.kind==='railLine'?'Voie ferrée / '+b.pids.length+' provinces':CATALOG.buildings[b.kind]?.name||b.kind;
+const buildPlace16=b=>b.kind==='railLine'?pname(b.pids[0])+' → '+pname(b.pids[b.pids.length-1]):pname(b.pid);
+function railLinks16(){return S?.railLinks16?.length?[...(WORLD.railLinks||[]),...S.railLinks16]:(WORLD.railLinks||[]);}
+function railLevel16(id){return S?S.provinces[id]?.rail||0:WORLD.provinces[id]?.rail||0;}
+// Railway lines: always in the supply view, from close zoom in the other land views.
+DRAW16.push((ctx,zoom)=>{
+  if(!WORLD.railLinks||!(mapMode==='supply'||zoom>=2.6&&['political','states','terrain','resources'].includes(mapMode)))return;
+  const v=zoom>=1.5?viewBox16():null,inside=p=>!v||p.x>=v.l-20&&p.x<=v.r+20&&p.y>=v.t-20&&p.y<=v.b+20;
+  const byLevel=[[],[],[],[],[],[]];
+  for(const [a,b] of railLinks16()){
+    const l=Math.min(railLevel16(a),railLevel16(b));if(!l)continue;
+    const pa=centers[a],pb=centers[b];if(!pa||!pb||!inside(pa)&&!inside(pb))continue;
+    byLevel[l].push(pa,pb);
+  }
+  ctx.save();ctx.lineCap='round';
+  for(let l=1;l<=5;l++){
+    const list=byLevel[l];if(!list.length)continue;
+    ctx.strokeStyle=mapMode==='supply'?'#1b1712e0':'#2a2219b8';ctx.lineWidth=(.5+l*.32)/zoom;
+    ctx.beginPath();for(let i=0;i<list.length;i+=2){ctx.moveTo(list[i].x,list[i].y);ctx.lineTo(list[i+1].x,list[i+1].y);}ctx.stroke();
+  }
+  // Supply hubs.
+  if(mapMode==='supply'||zoom>=3.5){
+    ctx.fillStyle='#efe2b6';ctx.strokeStyle='#1b1712';ctx.lineWidth=.8/zoom;
+    WORLD.provinces.forEach((p,i)=>{const h=S?S.provinces[i].hub:p.hub;if(!h)return;const c=centers[i];if(!inside(c))return;const r=(1.6+h)/zoom;ctx.fillRect(c.x-r,c.y-r,r*2,r*2);ctx.strokeRect(c.x-r,c.y-r,r*2,r*2);});
+  }
+  ctx.restore();
+});
+function beginRailTool16(){
+  closeModal();operationTool={kind:'rail',points:[]};document.body.classList.remove('panel-open');
+  const tool=$('operation-toolbar');tool.hidden=false;
+  tool.innerHTML=`<span>VOIE FERRÉE / Cliquez la province de départ, puis celle d’arrivée (votre territoire)</span>${btn('Annuler','cancelOperation',{},'small')}`;
+  if(mapMode!=='supply'){mapMode='supply';renderMapModes();}dirty=true;
+}
+window.addEventListener('pointerup',ev=>{
+  if(!operationTool||operationTool.kind!=='rail'||ev.target!==canvas||!drag||drag.moved||ev.button!==0)return;
+  const r=canvas.getBoundingClientRect(),id=pointAt(ev.clientX-r.left,ev.clientY-r.top);
+  ev.stopImmediatePropagation();drag=null;if(id===null)return;
+  if(control(id)!==S.player){toast('Tracez la voie ferrée sur votre territoire.',true);return;}
+  if(!operationTool.points.length){operationTool.points.push(id);toast('Départ : '+pname(id)+'. Cliquez la province d’arrivée.');dirty=true;return;}
+  const from=operationTool.points[0];endOperationTool();
+  cmd('railLine',{from,to:id}).then(n=>{toast('Voie ferrée en chantier : '+pname(from)+' → '+pname(id)+' ('+n+' provinces).');renderPanel(true);}).catch(()=>{});
+},true);
+INDUSTRY_TABS16.logistics='Logistique';
+INDUSTRY16.logistics=function(c){
+  const l=c.logistics16||{rail:0,trainNeed:1,truckNeed:1,trains:1,trucks:1};
+  const own=S.provinces.filter(q=>q.ctrl===S.player),lines=own.filter(q=>q.rail>0).length,hubs=own.filter(q=>q.hub>0).length;
+  return `<div class="grid2"><div class="card stat">${percent(l.trains)}<small>LOCOMOTIVES / ${num(c.stock.trains||0)} SUR ${num(l.trainNeed)}</small></div><div class="card stat">${percent(l.trucks)}<small>CAMIONS / ${num(c.stock.trucks)} SUR ${num(l.truckNeed)}</small></div></div>
+    <div style="margin:10px 0">${bar(l.trains*100,'#c5a46e')}<div style="height:6px"></div>${bar(l.trucks*100,'#a7b58f')}</div>
+    <div class="card">${metric('Provinces desservies par le rail',num(lines))}${metric('Niveaux de voie (total)',num(l.rail))}${metric('Dépôts logistiques',num(hubs))}${metric('Ravitaillement moyen',percent(c.stats.supply))}</div>
+    <div style="margin:12px 0">${btn('Tracer une voie ferrée '+icon('arrow'),'railTool16',{},'primary small wide')}</div>
+    <p class="note">Le ravitaillement part de la capitale et des ports, emprunte les voies ferrées puis les routes. Une voie coûte une fraction d’une route, d’autant moins que son niveau est élevé ; il faut ${TRAINS_PER_RAIL16} locomotive par niveau de voie contrôlé, sinon le rail ralentit. Hors du rail, les camions (${TRUCKS_PER_DIVISION16} par division) accélèrent l’acheminement ; ils s’usent à la guerre et brûlent sous la domination aérienne ennemie. Les voies prises à l’ennemi sont sabotées par l’armée qui recule et doivent être réparées ; en territoire occupé, le rail ne tourne qu’à moitié de sa capacité. Une nouvelle ligne coûte 135 points par province sans voie et 90 par province à moderniser.</p>`;
+};
+const TRAINS_PER_RAIL16='0,6',TRUCKS_PER_DIVISION16=10;
+ACTIONS16.push(async(action,p)=>{
+  switch(action){
+    case 'railTool16':beginRailTool16();return true;
+    case 'railFrom16':beginRailTool16();operationTool.points.push(p.pid);toast('Départ : '+pname(p.pid)+'. Cliquez la province d’arrivée.');return true;
+  }
+  return false;
+});
+
 /* ---- Manual ---- */
 showHelp=function(){
   pauseGame();
   const card=(title,text)=>`<div class="card"><h3>${title}</h3><p class="note" style="margin-top:10px">${text}</p></div>`;
-  modal(`${modalHead('Manuel de campagne','FRONTIÈRES 1.9 / PRISE EN MAIN')}<div class="grid2">
+  modal(`${modalHead('Manuel de campagne','FRONTIÈRES 1.10 / PRISE EN MAIN')}<div class="grid2">
     ${card('1. Préparer l’État','Choisissez une priorité nationale et affectez vos équipes de recherche. Les usines, chantiers et raffineries partagent les emplacements de chaque État. Six ressources stratégiques alimentent les lignes de production ; la loi commerciale fixe la part exportée.')}
     ${card('2. Lois, conseillers, décisions','L’économie, la conscription et le commerce se règlent par des lois. Nommez des conseillers et des chefs d’état-major, prenez des décisions ponctuelles et surveillez vos esprits nationaux. Les voies politiques de l’arbre peuvent changer le régime.')}
     ${card('3. Former les forces','Composez vos divisions à partir de bataillons et de compagnies de soutien. Concevez chars, avions et navires, puis modernisez vos stocks. Le recrutement consomme matériel et effectifs.')}
@@ -800,7 +865,8 @@ showHelp=function(){
     ${card('5. Ciel et mers','Les escadres reçoivent des missions selon leur type : supériorité, interception, appui, bombardement, frappes navales, parachutages. Les flottes patrouillent, frappent, escortent, mouillent des mines et disputent le contrôle des mers, indispensable aux invasions navales.')}
     ${card('6. Guerre et paix','Justifiez un but de guerre, puis déclarez la guerre. Un pays capitule quand il a perdu l’essentiel de ses points de victoire et de son territoire ; certains esprits repoussent ce seuil. Un gouvernement allié peut poursuivre la lutte en exil. La conférence de paix répartit les États selon la contribution de chacun.')}
     ${card('7. Généraux et maréchaux','Chaque armée reçoit un général, chaque groupe d’armées un maréchal. Ils gagnent de l’expérience au combat, montent de niveau et apprennent des traits de terrain ou d’armes. Chaque jour de bataille, les commandants choisissent une tactique que l’adversaire peut contrer. Ouvrez l’état-major depuis Armées.')}
+    ${card('8. Logistique','Le ravitaillement emprunte les voies ferrées, bien moins coûteuses que les routes, puis les routes. Produisez assez de locomotives pour votre réseau et de camions pour vos divisions, et tracez de nouvelles lignes vers vos fronts (Industrie → Logistique). La vue Ravitaillement montre les voies et les dépôts.')}
   </div><div class="card" style="margin-top:18px"><h3>Raccourcis</h3><p class="note" style="margin-top:10px"><span class="hotkey">Espace</span> Pause / <span class="hotkey">1–5</span> Vitesse / <span class="hotkey">A</span> Armées / <span class="hotkey">I</span> Industrie / <span class="hotkey">R</span> Recherche / <span class="hotkey">D</span> Diplomatie / <span class="hotkey">P</span> Priorités / <span class="hotkey">F</span> Recentrer / <span class="hotkey">Échap</span> Fermer.</p></div>
-  <p class="note" style="margin-top:18px">Limites de cette version : simulation journalière avec combats horaires, carte d’environ 11 600 provinces terrestres (régions Natural Earth 1:10m), 226 régions maritimes et 158 régions aériennes, IA heuristique, contenu original moins abondant que celui des grands jeux commerciaux. Pas de multijoueur ni de compatibilité avec les mods d’autres jeux.</p>`,'help','wide');
+  <p class="note" style="margin-top:18px">Limites de cette version : simulation journalière avec combats horaires, carte d’environ 11 600 provinces terrestres (régions Natural Earth 1:10m), 226 régions maritimes et 158 régions aériennes, réseau ferré schématique, IA heuristique, contenu original moins abondant que celui des grands jeux commerciaux. Pas de multijoueur ni de compatibilité avec les mods d’autres jeux.</p>`,'help','wide');
 };
 renderRail();

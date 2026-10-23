@@ -261,7 +261,7 @@ function createEngineClass() {
         mod:validated,tension:8,countries:{},provinces:[],units:[],armies:[],wings:[],fleets:[],wars:[],battles:[],navalReports:[],airReports:[],
         pending:null,eventQueue:[],seenEvents:[],log:[],outcome:null,fronts:{},revision:0,combatLedger:[],pocketSummary:{},
         geoKeys:this.prov.map(p=>p.geoKey),geoOrderFingerprint:this.world.geoOrderFingerprint};
-      this.s.provinces=this.prov.map(p=>({ctrl:p.owner,civ:0,mil:0,dock:0,infra:2,rail:1,hub:p.capital?2:0,fort:0,port:p.port,airbase:p.airbase,radar:0,damage:0,supply:0,resistance:0,compliance:p.owner==='FRA'||p.owner==='GBR'?70:90}));
+      this.s.provinces=this.prov.map(p=>({ctrl:p.owner,civ:0,mil:0,dock:0,infra:2,rail:p.rail??1,hub:p.hub??(p.capital?2:0),fort:0,port:p.port,airbase:p.airbase,radar:0,damage:0,supply:0,resistance:0,compliance:p.owner==='FRA'||p.owner==='GBR'?70:90}));
       for(const d of this.world.countries)this.s.countries[d.id]=this.createNation(d);
       for(const d of this.world.countries) {
         const id=d.id,c=this.nation(id),lands=this.owned(id),metro=lands.filter(p=>distance(p,{x:d.lon,y:d.lat})<1600),sites=metro.length?metro:lands;
@@ -269,7 +269,7 @@ function createEngineClass() {
         for(let i=0;i<d.mil;i++)this.s.provinces[sites[(i*7)%sites.length].id].mil++;
         const ports=sites.filter(p=>p.port);const homePorts=ports.length?ports:lands.filter(p=>p.port);
         if(homePorts.length)for(let i=0;i<Math.max(1,Math.round(d.fleet/9));i++)this.s.provinces[homePorts[i%homePorts.length].id].dock++;
-        const capital=this.s.provinces[d.capital];capital.infra=4;capital.rail=3;
+        const capital=this.s.provinces[d.capital];capital.infra=4;if(this.prov[d.capital].rail==null)capital.rail=3;
         const frontier=sites.filter(p=>p.neighbors.some(n=>this.prov[n].owner!==id));const positions=frontier.length?frontier:sites;
         const armies=[];
         for(let i=0;i<Math.max(1,Math.ceil(d.divisions/12));i++)armies.push(this.addArmy(id));
@@ -1216,7 +1216,7 @@ function createEngineClass() {
         assert(c.training.every(t=>Number.isInteger(t.pid)&&this.prov[t.pid]&&finite(t.progress)&&finite(t.days,1)&&t.template&&['inf','art','tank','motor'].every(k=>Number.isInteger(t.template[k])&&t.template[k]>=0&&t.template[k]<=15)),'Entrainement invalide.');
         assert(c.tech.every(k=>this.tech(k))&&c.research.every(r=>this.tech(r.id)&&finite(r.progress)),'Recherche inconnue.');
         assert(!c.focus||this.focus(id,c.focus.id)&&finite(c.focus.progress),'Priorit\u00e9 inconnue.');
-        for(const b of c.build)assert(this.prov[b.pid]&&this.catalog.buildings[b.kind]&&finite(b.progress)&&finite(b.cost,1),'Chantier invalide.');
+        for(const b of c.build)assert(this.prov[b.pid]&&(this.catalog.buildings[b.kind]||b.kind==='railLine')&&finite(b.progress)&&finite(b.cost,1),'Chantier invalide.');
       }
       for(const w of state.wings)assert(ids.has(w.owner)&&this.prov[w.base]&&(['fighters','bombers'].includes(w.kind)||this.catalog.equipment[w.kind]?.domain==='air')&&finite(w.size)&&this.world.zones.some(z=>z.id===w.zone),'Escadre invalide.');
       for(const f of state.fleets)assert(ids.has(f.owner)&&this.prov[f.base]&&finite(f.ships?.destroyers)&&finite(f.ships?.submarines)&&this.world.seas.some(z=>z.id===f.zone),'Flotte invalide.');
