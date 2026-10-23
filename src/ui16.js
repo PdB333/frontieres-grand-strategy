@@ -286,7 +286,7 @@ document.addEventListener('change',ev=>{
 const unitById16=id=>S?.units.find(u=>u.id===id);
 function battleSide16(ids,reserve,title,country,power,losses){
   const row=id=>{const u=unitById16(id);if(!u)return '';return `<div class="unitrow"><div class="unit-symbol">${u.template.tank?'▱':'×'}</div><div class="grow"><div class="row between"><strong>${esc(u.name)}</strong><span class="mono" style="font-size:10px">${Math.round(u.org)} / ${Math.round(u.strength*100)} %</span></div><small>${esc(u.template.name||'')}</small>${bar(u.strength*100,'#a7b58f')}<div style="height:3px"></div>${bar(u.org,'#88a7b7')}</div></div>`;};
-  return `<div class="card"><div class="eyebrow">${title}</div><h3 style="margin:9px 0">${esc(countryName(country))}</h3>${metric('Divisions en ligne',ids.length)}${metric('En réserve',(reserve||[]).length)}${metric('Puissance effective',num(power))}${metric('Pertes cumulées',num(losses||0))}
+  return `<div class="card"><div class="eyebrow">${title}</div><h3 style="margin:9px 0">${flagSVG16(country,24,16)} ${esc(countryName(country))}</h3>${metric('Divisions en ligne',ids.length)}${metric('En réserve',(reserve||[]).length)}${metric('Puissance effective',num(power))}${metric('Pertes cumulées',num(losses||0))}
     <div class="stack" style="margin-top:9px">${ids.map(row).join('')}</div>${(reserve||[]).length?`<div class="label" style="margin-top:9px">Réserves</div><div class="stack">${reserve.map(row).join('')}</div>`:''}</div>`;
 }
 showBattle=function(pid){
@@ -957,11 +957,159 @@ ACTIONS16.push(async(action,p)=>{
   return false;
 });
 
+/* ---- Flags: simplified designs drawn from catalogue descriptions ---- */
+// Shapes in a 30 x 20 frame: rect, poly, circle, star.
+function flagShapes16(id){
+  const spec=CATALOG.flags16?.[id]||(()=>{const c=code(id)?.color||'#8a8a7a';return {t:'h',c:[c,'#2a2a26']};})();
+  const out=[],c=spec.c||['#888'],rect=(x,y,w,h,f)=>out.push({k:'r',x,y,w,h,f}),poly=(p,f)=>out.push({k:'p',p,f}),circle=(x,y,r,f)=>out.push({k:'c',x,y,r,f}),star=(x,y,r,f)=>out.push({k:'s',x,y,r,f});
+  const stripes=(colors,weights,vertical)=>{const w=weights||colors.map(()=>1),t=w.reduce((a,b)=>a+b,0);let o=0;colors.forEach((col,i)=>{const s=w[i]/t;if(vertical)rect(o*30,0,s*30+.05,20,col);else rect(0,o*20,30,s*20+.05,col);o+=s;});};
+  const union=(x,y,w,h,blue,white,red)=>{
+    rect(x,y,w,h,blue);const d=Math.min(w,h)*.2;
+    poly([[x,y],[x+d,y],[x+w,y+h-d],[x+w,y+h],[x+w-d,y+h],[x,y+d]],white);poly([[x+w,y],[x+w,y+d],[x+d,y+h],[x,y+h],[x,y+h-d],[x+w-d,y]],white);
+    const e=d*.45;poly([[x,y],[x+e,y],[x+w,y+h-e],[x+w,y+h],[x+w-e,y+h],[x,y+e]],red);poly([[x+w,y],[x+w,y+e],[x+e,y+h],[x,y+h],[x,y+h-e],[x+w-e,y]],red);
+    rect(x+w/2-h*.17,y,h*.34,h,white);rect(x,y+h/2-h*.17,w,h*.34,white);rect(x+w/2-h*.1,y,h*.2,h,red);rect(x,y+h/2-h*.1,w,h*.2,red);
+  };
+  switch(spec.t){
+    case 'v':stripes(c,spec.w,true);break;
+    case 'cross':rect(0,0,30,20,c[0]);if(c[2]){rect(8,0,6,20,c[2]);rect(0,7,30,6,c[2]);}rect(9,0,4,20,c[1]);rect(0,8,30,4,c[1]);break;
+    case 'disc':rect(0,0,30,20,c[0]);circle(15,10,6,c[1]);break;
+    case 'union':union(0,0,30,20,c[0],c[1],c[2]);break;
+    case 'ensign':rect(0,0,30,20,c[0]);union(0,0,15,10,'#22407a','#f2efe6','#c8312e');if(spec.star)star(22,13,3,spec.star);break;
+    case 'swiss':rect(0,0,30,20,c[0]);rect(13,4,4,12,c[1]);rect(9,8,12,4,c[1]);break;
+    case 'wedge':stripes(c.slice(0,-1),null,false);poly([[0,0],[13,10],[0,20]],c[c.length-1]);break;
+    case 'crescent':rect(0,0,30,20,c[0]);circle(12,10,5,c[1]);circle(13.4,10,4,c[0]);star(18,10,2.2,c[1]);break;
+    case 'diag':if(c.length>2){poly([[0,0],[24,0],[0,16]],c[0]);poly([[24,0],[30,0],[30,4],[6,20],[0,20],[0,16]],c[1]);poly([[30,4],[30,20],[6,20]],c[2]);}else{poly([[0,0],[30,0],[0,20]],c[0]);poly([[30,0],[30,20],[0,20]],c[1]);}break;
+    case 'rhomb':rect(0,0,30,20,c[0]);poly([[3,10],[15,2.5],[27,10],[15,17.5]],c[1]);circle(15,10,4.2,c[2]);break;
+    case 'quarters':rect(0,0,15,10,c[0]);rect(15,0,15,10,c[1]);rect(0,10,15,10,c[2]);rect(15,10,15,10,c[3]);break;
+    case 'plain':rect(0,0,30,20,c[0]);break;
+    default:stripes(c,spec.w,false);
+  }
+  if(spec.canton){rect(0,0,12.5,spec.t==='h'&&c.length>3?10.8:10,spec.canton);if(spec.star&&spec.t!=='ensign')star(6.2,5.2,2.8,spec.star);}
+  else if(spec.star&&spec.t==='plain'){if(spec.at==='canton')star(6,5.5,3,spec.star);else if(spec.at==='bar')rect(6,14,18,1.6,spec.star);else star(15,10,4.5,spec.star);}
+  return out;
+}
+function starPoints16(x,y,r){const p=[];for(let i=0;i<10;i++){const a=-Math.PI/2+i*Math.PI/5,q=i%2?r*.42:r;p.push([x+Math.cos(a)*q,y+Math.sin(a)*q]);}return p;}
+const FLAG_SVG16=new Map();
+function flagSVG16(id,w=27,h=18,cls='flag16'){
+  let body=FLAG_SVG16.get(id);
+  if(!body){
+    body=flagShapes16(id).map(s=>s.k==='r'?`<rect x="${s.x}" y="${s.y}" width="${s.w}" height="${s.h}" fill="${s.f}"/>`:s.k==='c'?`<circle cx="${s.x}" cy="${s.y}" r="${s.r}" fill="${s.f}"/>`:`<polygon points="${(s.k==='s'?starPoints16(s.x,s.y,s.r):s.p).map(p=>p.map(v=>Math.round(v*100)/100).join(',')).join(' ')}" fill="${s.f}"/>`).join('');
+    FLAG_SVG16.set(id,body);
+  }
+  return `<svg class="${cls}" width="${w}" height="${h}" viewBox="0 0 30 20" preserveAspectRatio="none" aria-hidden="true">${body}</svg>`;
+}
+const FLAG_IMG16=new Map();
+// Canvas drawing for map counters, cached as a small bitmap per country.
+function drawFlag16(ctx,id,x,y,w,h){
+  let img=FLAG_IMG16.get(id);
+  if(!img){
+    img=document.createElement('canvas');img.width=30;img.height=20;const g=img.getContext('2d');
+    for(const s of flagShapes16(id)){g.fillStyle=s.f;if(s.k==='r')g.fillRect(s.x,s.y,s.w,s.h);else{g.beginPath();if(s.k==='c')g.arc(s.x,s.y,s.r,0,Math.PI*2);else(s.k==='s'?starPoints16(s.x,s.y,s.r):s.p).forEach(([px,py],i)=>i?g.lineTo(px,py):g.moveTo(px,py));g.closePath();g.fill();}}
+    FLAG_IMG16.set(id,img);
+  }
+  ctx.drawImage(img,x,y,w,h);
+}
+// Flags beside the country name in the banner, profiles and reports.
+const renderTop18=renderTop;
+renderTop=function(...args){
+  const r=renderTop18.apply(this,args);
+  const banner=$('nation-banner'),id=S?.player||selectedCountry;
+  if(banner&&id&&!banner.querySelector('.flag16'))banner.querySelector('.grow')?.insertAdjacentHTML('afterbegin',flagSVG16(id,27,18,'flag16 banner-flag'));
+  return r;
+};
+
+// Portraits carry the flag of their country in a corner.
+const portrait18=portrait;
+portrait=function(id,size='',override=null){
+  const html=portrait18(id,size,override),fid=override?.id||id;
+  if(size==='tiny'||!fid)return html;
+  return html.replace(/<\/div>$/,`<span class="portrait-flag">${flagSVG16(fid,24,16)}</span></div>`);
+};
+
+/* ---- Relief: mountain ranges and deserts as hachures, with their names ---- */
+let RELIEF16=null;
+function relief16(){
+  if(RELIEF16&&RELIEF16.world===WORLD)return RELIEF16;
+  const items=(WORLD.relief||[]).map(r=>{const path=new Path2D();for(const ring of r.polygons){ring.forEach(([x,y],i)=>{const p=project(x,y);if(i)path.lineTo(p.x,p.y);else path.moveTo(p.x,p.y);});path.closePath();}
+    let minx=Infinity,miny=Infinity,maxx=-Infinity,maxy=-Infinity;for(const ring of r.polygons)for(const [x,y] of ring){const p=project(x,y);minx=Math.min(minx,p.x);maxx=Math.max(maxx,p.x);miny=Math.min(miny,p.y);maxy=Math.max(maxy,p.y);}
+    return {...r,path,bbox:{minx,miny,maxx,maxy},label:project(r.x,r.y)};});
+  const tile=(draw)=>{const c=document.createElement('canvas');c.width=c.height=14;const g=c.getContext('2d');draw(g);return c;};
+  const mountains=tile(g=>{g.lineWidth=1.3;g.strokeStyle='#2e2216';g.globalAlpha=.8;g.beginPath();g.moveTo(1.5,11);g.lineTo(5.5,4);g.lineTo(9.5,11);g.stroke();g.strokeStyle='#f4ead0';g.globalAlpha=.45;g.beginPath();g.moveTo(5.5,4.5);g.lineTo(2.8,9.5);g.stroke();});
+  const desert=tile(g=>{g.fillStyle='#6b5634';g.globalAlpha=.45;for(const [x,y] of [[2,3],[9,5],[5,10],[12,12]])g.fillRect(x,y,1.2,1.2);});
+  RELIEF16={world:WORLD,items,tiles:{range:mountains,plateau:mountains,desert}};return RELIEF16;
+}
+DRAW16.push((ctx,zoom)=>{
+  if(!WORLD.relief||!['political','terrain','states','supply','resources','history'].includes(mapMode))return;
+  const R=relief16(),v=zoom>=1.5?viewBox16():null,scale=new DOMMatrix().scale(1/zoom);
+  ctx.save();
+  const patterns={};for(const [k,t] of Object.entries(R.tiles)){const p=ctx.createPattern(t,'repeat');p.setTransform?.(scale);patterns[k]=p;}
+  for(const r of R.items){
+    if(r.kind==='desert'&&mapMode!=='terrain')continue;
+    if(v&&!inView16(r.bbox,v))continue;
+    ctx.globalAlpha=r.kind==='plateau'?.5:mapMode==='terrain'?.9:.6;ctx.fillStyle=patterns[r.kind];ctx.fill(r.path);
+  }
+  ctx.globalAlpha=1;
+  // Names of the ranges: the largest first, smaller ones when zooming in.
+  if(zoom>=1.1){
+    ctx.font=`italic 600 ${10.5/zoom}px Georgia,serif`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle='#3a2b1cd0';ctx.strokeStyle='#e9dfc480';ctx.lineWidth=2.4/zoom;
+    for(const r of R.items){
+      if(r.rank>(zoom<2?2:zoom<4?4:7)||v&&!inView16(r.bbox,v)||r.kind==='desert'&&mapMode!=='terrain')continue;
+      const text=r.name.toUpperCase().split('').join(String.fromCharCode(8202));ctx.strokeText(text,r.label.x,r.label.y);ctx.fillText(text,r.label.x,r.label.y);
+    }
+  }
+  ctx.restore();
+});
+
+/* ---- Sound: short cues synthesised with Web Audio (no audio files) ---- */
+let AUDIO16=null;
+function sfx16(kind){
+  if(releaseSettings.sound===false)return;
+  try{
+    AUDIO16??=new (window.AudioContext||window.webkitAudioContext)();
+    const a=AUDIO16,t=a.currentTime,master=a.createGain();master.gain.value=(releaseSettings.volume??.5)*.35;master.connect(a.destination);
+    const tone=(type,f0,f1,start,dur,vol)=>{const o=a.createOscillator(),g=a.createGain();o.type=type;o.frequency.setValueAtTime(f0,t+start);if(f1)o.frequency.exponentialRampToValueAtTime(f1,t+start+dur);g.gain.setValueAtTime(0,t+start);g.gain.linearRampToValueAtTime(vol,t+start+.01);g.gain.exponentialRampToValueAtTime(.0001,t+start+dur);o.connect(g);g.connect(master);o.start(t+start);o.stop(t+start+dur+.02);};
+    const noise=(start,dur,vol,freq)=>{const n=a.sampleRate*dur,b=a.createBuffer(1,n,a.sampleRate),d=b.getChannelData(0);for(let i=0;i<n;i++)d[i]=(Math.random()*2-1)*(1-i/n);const s=a.createBufferSource(),f=a.createBiquadFilter(),g=a.createGain();f.type='lowpass';f.frequency.value=freq;g.gain.value=vol;s.buffer=b;s.connect(f);f.connect(g);g.connect(master);s.start(t+start);};
+    if(kind==='click')tone('triangle',900,700,0,.045,.18);
+    else if(kind==='success'){tone('sine',660,null,0,.18,.4);tone('sine',990,null,.12,.3,.35);}
+    else if(kind==='alert'){tone('triangle',520,null,0,.14,.35);tone('triangle',520,null,.2,.14,.35);}
+    else if(kind==='war'){tone('sine',110,55,0,.9,.9);noise(0,.6,.6,400);tone('sine',82,41,.35,.9,.6);}
+    else if(kind==='battle'){noise(0,.35,.5,700);noise(.18,.3,.35,500);}
+    else if(kind==='event'){tone('sine',440,null,0,.25,.3);tone('sine',554,null,.08,.3,.25);tone('sine',659,null,.16,.4,.25);}
+  }catch{}
+}
+// Cues follow the player's journal, events and buttons.
+let lastLog16=null,lastFights16=0,lastBattleCue16=0;
+const onState18=onState;
+onState=function(perf){
+  const head=S?.log?.[0],key=head?head.day+'|'+head.text:null,fresh=lastLog16!==null&&key!==lastLog16;
+  onState18(perf);
+  if(fresh&&head){const kind=head.type==='war'?'war':head.type==='success'?'success':head.type==='event'?'alert':null;if(kind)sfx16(kind);}
+  lastLog16=key;
+  // Distant gunfire when new battles involve the player.
+  const fights=S?.battles?.filter(b=>b.a===S.player||b.b===S.player).length||0,now=performance.now();
+  if(fights>lastFights16&&now-lastBattleCue16>4000){sfx16('battle');lastBattleCue16=now;}
+  lastFights16=fights;
+};
+const showEvent18=showEvent;
+showEvent=function(){showEvent18();sfx16('event');};
+document.addEventListener('click',ev=>{if(ev.target.closest?.('button[data-a]'))sfx16('click');},true);
+// Preferences: sound on/off and volume.
+const showSettings18=showSettings;
+showSettings=function(){
+  showSettings18();
+  $('modal').querySelector('.settings-list')?.insertAdjacentHTML('beforeend',`<label class="settings-choice"><span><strong>Sons</strong><small>Signaux sonores de l’interface, des batailles et des événements.</small></span><input id="setting-sound" type="checkbox" ${releaseSettings.sound!==false?'checked':''}></label>
+    <label class="settings-choice"><span><strong>Volume</strong><small>Intensité des signaux sonores.</small></span><input id="setting-volume" type="range" min="0" max="1" step=".05" value="${releaseSettings.volume??.5}"></label>`);
+};
+ACTIONS16.push(async(action)=>{
+  if(action==='applySettings'){releaseSettings.sound=!!$('setting-sound')?.checked;releaseSettings.volume=Number($('setting-volume')?.value??.5);}
+  return false;
+});
+
 /* ---- Manual ---- */
 showHelp=function(){
   pauseGame();
   const card=(title,text)=>`<div class="card"><h3>${title}</h3><p class="note" style="margin-top:10px">${text}</p></div>`;
-  modal(`${modalHead('Manuel de campagne','FRONTIÈRES 1.12 / PRISE EN MAIN')}<div class="grid2">
+  modal(`${modalHead('Manuel de campagne','FRONTIÈRES 1.13 / PRISE EN MAIN')}<div class="grid2">
     ${card('1. Préparer l’État','Choisissez une priorité nationale et affectez vos équipes de recherche. Les usines, chantiers et raffineries partagent les emplacements de chaque État. Six ressources stratégiques alimentent les lignes de production ; la loi commerciale fixe la part exportée.')}
     ${card('2. Lois, conseillers, décisions','L’économie, la conscription et le commerce se règlent par des lois. Nommez des conseillers et des chefs d’état-major, prenez des décisions ponctuelles et surveillez vos esprits nationaux. Les voies politiques de l’arbre peuvent changer le régime.')}
     ${card('3. Former les forces','Composez vos divisions à partir de bataillons et de compagnies de soutien. Concevez chars, avions et navires, puis modernisez vos stocks. Le recrutement consomme matériel et effectifs.')}
@@ -972,6 +1120,7 @@ showHelp=function(){
     ${card('8. Logistique','Le ravitaillement emprunte les voies ferrées, bien moins coûteuses que les routes, puis les routes. Produisez assez de locomotives pour votre réseau et de camions pour vos divisions, et tracez de nouvelles lignes vers vos fronts (Industrie → Logistique). La vue Ravitaillement montre les voies et les dépôts.')}
     ${card('9. Renseignement et occupation','Fondez une agence (Renseignement), recrutez des agents et tissez des réseaux : ils ouvrent sabotages, vols de plans, capture du chiffre et gouvernements de collaboration. Les territoires occupés exigent des garnisons ; la loi d’occupation arbitre entre exploitation et résistance.')}
     ${card('10. Armes spéciales','Les canons sur rail forment des batteries qui circulent sur vos voies et appuient les batailles proches. Les missiles balistiques partent de bases de lancement vers l’industrie ennemie. Un réacteur et la recherche atomique produisent des bombes, larguées par vos bombardiers stratégiques (Guerre → Armes spéciales).')}
+    ${card('11. Présentation','Les Préférences règlent les sons (signaux synthétisés pour l’interface, les batailles et les événements), leur volume et la langue : l’interface existe en français et en anglais ; les contenus historiques restent en français. La vue Terrain montre les déserts, les massifs sont dessinés en hachures sur toutes les vues terrestres.')}
   </div><div class="card" style="margin-top:18px"><h3>Raccourcis</h3><p class="note" style="margin-top:10px"><span class="hotkey">Espace</span> Pause / <span class="hotkey">1–5</span> Vitesse / <span class="hotkey">A</span> Armées / <span class="hotkey">I</span> Industrie / <span class="hotkey">R</span> Recherche / <span class="hotkey">D</span> Diplomatie / <span class="hotkey">P</span> Priorités / <span class="hotkey">F</span> Recentrer / <span class="hotkey">Échap</span> Fermer.</p></div>
   <p class="note" style="margin-top:18px">Limites de cette version : simulation journalière avec combats horaires, carte d’environ 11 600 provinces terrestres (régions Natural Earth 1:10m), 226 régions maritimes et 158 régions aériennes, réseau ferré schématique, IA heuristique, contenu original moins abondant que celui des grands jeux commerciaux. Pas de multijoueur ni de compatibilité avec les mods d’autres jeux.</p>`,'help','wide');
 };

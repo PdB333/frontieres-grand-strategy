@@ -58,3 +58,4 @@
 
 /* 1.3: scrolling policy rail and grouped fiscal decisions. */
 #rail{overflow-y:auto;scrollbar-width:thin}#rail button{flex-shrink:0} .policy-options{display:grid;grid-template-columns:1fr;gap:6px}.policy-options button{justify-content:flex-start;white-space:normal;text-align:left}.policy-options .active{border-color:var(--gold);background:#35423a}.card .stat{font-variant-numeric:tabular-nums}#panel .grid2 .stat{font-size:22px}#panel .grid2 .stat small{font-size:8px;line-height:1.4}
+.flag16{display:inline-block;vertical-align:-3px;border:1px solid #0008;box-shadow:0 0 0 1px #ffffff1a;flex-shrink:0}.banner-flag{margin-right:8px}.portrait .portrait-flag{position:absolute;top:3px;right:3px;z-index:2;line-height:0}.portrait .portrait-flag .flag16{vertical-align:top}

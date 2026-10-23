@@ -2,7 +2,7 @@
 
 ## Géographie
 
-Made with Natural Earth. Les provinces de la version 1.7 sont découpées dans les régions administratives de premier niveau Natural Earth 1:10m (ne_10m_admin_1_states_provinces) ; les noms de villes proviennent de ne_10m_populated_places ; les noms des régions maritimes de ne_10m_geography_marine_polys. La carte de référence 1936 conservée dans tools/data/legacy/ provient du jeu Natural Earth 1:110m. Natural Earth déclare ses données cartographiques dans le domaine public. Source : https://www.naturalearthdata.com/about/terms-of-use/ . Les cellules et ajustements géopolitiques de jeu ne transforment pas ce fond moderne en carte historique précise.
+Made with Natural Earth. Les provinces de la version 1.7 sont découpées dans les régions administratives de premier niveau Natural Earth 1:10m (ne_10m_admin_1_states_provinces) ; les noms de villes proviennent de ne_10m_populated_places ; les noms des régions maritimes de ne_10m_geography_marine_polys. Le relief (massifs, hauts plateaux, déserts et leurs noms français) provient de ne_50m_geography_regions_polys ; le réseau ferré est une reconstruction schématique calculée sur ces provinces, pas une donnée tierce. Les drapeaux sont dessinés par le jeu à partir de descriptions simplifiées des couleurs nationales, sans fichier image ; les sons sont synthétisés, sans fichier audio. La carte de référence 1936 conservée dans tools/data/legacy/ provient du jeu Natural Earth 1:110m. Natural Earth déclare ses données cartographiques dans le domaine public. Source : https://www.naturalearthdata.com/about/terms-of-use/ . Les cellules et ajustements géopolitiques de jeu ne transforment pas ce fond moderne en carte historique précise.
 
 ## Images
 

@@ -5,7 +5,7 @@
 function installSystems16(Engine,H){
   'use strict';
   const {clone,clamp,sum,assert,finite,distance,hash}=H;
-  const RELEASE='1.12';
+  const RELEASE='1.13';
 
   // ---------------------------------------------------------------------------
   // Shared helpers
