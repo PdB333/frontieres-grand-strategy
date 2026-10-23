@@ -5,7 +5,7 @@
 function installSystems16(Engine,H){
   'use strict';
   const {clone,clamp,sum,assert,finite,distance,hash}=H;
-  const RELEASE='1.8';
+  const RELEASE='1.9';
 
   // ---------------------------------------------------------------------------
   // Shared helpers
@@ -421,7 +421,7 @@ function installSystems16(Engine,H){
     for(const u of s.units){
       const q=s.provinces[u.pid],g=this.general(armyById.get(u.army));
       // A province feeds more divisions with railways, roads and hubs.
-      u.supply=clamp(q.supply*(1+supplyBonus(u.owner)+(u.template.logistics?.12:0)+(g?g.logistics*.025:0))/Math.max(1,loads[u.pid]/(4+q.infra*2+q.hub*3+q.rail)),0,1);
+      u.supply=clamp(q.supply*(1+supplyBonus(u.owner)+(u.template.logistics?.12:0)+(g?this.commanderSupply16(g,u.pid):0))/Math.max(1,loads[u.pid]/(4+q.infra*2+q.hub*3+q.rail)),0,1);
       totals[u.owner]=(totals[u.owner]||0)+u.supply;counts[u.owner]=(counts[u.owner]||0)+1;
     }
     for(const id of active)this.nation(id).stats.supply=(totals[id]||0)/(counts[id]||1);
@@ -905,7 +905,7 @@ function installSystems16(Engine,H){
   Engine.prototype.combatProfile16=function(u,pid,offense,ctx){
     const c=this.nation(u.owner),st=this.unitStats16(u),army=ctx.armies.get(u.army),g=this.general(army);
     const terrainKey=this.prov[pid].terrain,terr=st.terrain?.[terrainKey]||{},tactic=army?.tactic||'balanced';
-    let m=(1+(offense?c.bonus.attack:c.bonus.defense)+(g?(offense?g.attack:g.defense)*.035:0))*(.2+.8*u.supply);
+    let m=(1+(offense?c.bonus.attack:c.bonus.defense)+(g?(offense?g.attack:g.defense)*.035*this.commandSpan16(army):0))*(.2+.8*u.supply);
     m*=1+Math.min(.2,u.xp*.05)+this.groupModifier(army,offense);
     if(u.owner!==this.s.player)m*=this.s.difficulty==='veteran'?1.12:this.s.difficulty==='relaxed'?.88:1;
     if(st.armor&&c.stock.fuel<10)m*=.5;
@@ -1124,7 +1124,7 @@ function installSystems16(Engine,H){
       if(plan?.execute&&a.order!=='attack')a.order='attack';
       const general=this.general(a);
       if(a.order==='attack'&&engagedArmies.has(a.id))a.planning=clamp(a.planning-.015,0,1);
-      else a.planning=clamp(a.planning+.02+(general?general.planning*.001:0)+this.groupModifier(a,true)*.05,0,1);
+      else a.planning=clamp(a.planning+.02+(general?this.commanderPlanning16(general):0)+this.groupModifier(a,true)*.05,0,1);
       let objective=a.objective!==null&&a.objective!==undefined?this.prov[a.objective]:null;
       if(plan?.offensive?.length&&a.order==='attack'){const next=plan.offensive.find(pid=>!this.allies(a.owner,s.provinces[pid].ctrl))??plan.offensive.at(-1);objective=this.prov[next];}
       let fronts=border(a.owner,a.target);
@@ -2981,7 +2981,7 @@ function installSystems16(Engine,H){
       // The whole line is held; the plan keeps a sample for display.
       const step=Math.max(1,Math.ceil(fallback.length/30));
       a.plan16={offensive:attack?[weak,goal?.id].filter(x=>x!=null):[],fallback:fallback.filter((pid,i)=>i%step===0).slice(0,30),execute:attack,hold16:fallback.length>0,line16:fallback};
-      if(!a.general){const free=c.identity.commanders.find(g=>!this.s.armies.some(x=>x.owner===id&&x.general===g.id));if(free)a.general=free.id;}
+      if(!a.general)a.general=this.freeGeneral16(id)?.id||null;
       // Armoured group: on an attacking sector with enough mobile divisions,
       // they form their own army concentrated on the breakthrough point.
       const fast=attack&&weak!=null?f.units.filter(u=>this.mobile16(u)):[];
@@ -2992,7 +2992,7 @@ function installSystems16(Engine,H){
         g.plan16={offensive:[weak,goal?.id].filter(x=>x!=null),fallback:[],execute:true,hold16:false};
         g.planning=Math.max(g.planning||0,a.planning);
         for(const u of fast)u.army=g.id;
-        if(!g.general){const free=c.identity.commanders.find(x=>!this.s.armies.some(y=>y.owner===id&&y.general===x.id));if(free)g.general=free.id;}
+        if(!g.general)g.general=this.freeGeneral16(id)?.id||null;
       }
     }
     for(const a of armies)if(!used.has(a.id)){a.target=null;a.order='defend';a.plan16=null;a.frontSelection=[];a.mobile16=false;if(a.home16){a.home16=false;a.auto=true;}}
@@ -3278,6 +3278,411 @@ function installSystems16(Engine,H){
   };
   Engine.invariant16(function(state){
     for(const u of state.units)if(u.invasionPrep16!=null)assert(this.prov[u.invasionPrep16]&&this.prov[u.invasionPort16],'Préparation de débarquement invalide.');
+  });
+
+  // ---------------------------------------------------------------------------
+  // Commanders. Generals and marshals have a skill level, experience and
+  // traits: personality traits come with the officer, terrain and arms traits
+  // are learnt in battle. Each day of battle both sides choose a tactic; the
+  // commander with the initiative may change his to counter the other's.
+  // A marshal passes half of his traits to the armies of his group.
+  // ---------------------------------------------------------------------------
+  const COMMANDER_MAX=24,TRAIT_MAX=8,COMMANDER_COST=20,MARSHAL_COST=50,ROLES=['general','marshal'],COMMAND_STATS=['attack','defense','planning','logistics'];
+  const EFFECT_KEYS=['attack','defense','breakthrough','org','losses','winter','river','entrench','fortAttack'];
+  const TACTIC_KEYS=['attack','defense','breakthrough','losses','enemyAttack','enemyDefense','enemyBreakthrough'];
+  // Personality traits make a commander favour some tactics.
+  const TRAIT_TACTIC={temeraire:'assault',ruse:'infiltration',artilleur:'barrage',strategiste:'envelopment',blindes:'armored',prudent:'methodical',defensif:'hold',meneur:'counterattack',offensif:'counterattack',genie:'digin',foret:'ambush',jungle:'ambush'};
+  const catalogMaps=new WeakMap();
+  const commandCatalog=cat=>{
+    let m=catalogMaps.get(cat);
+    if(!m){m={traits:new Map((cat.commanderTraits||[]).map(t=>[t.id,t])),tactics:new Map((cat.combatTactics||[]).map(t=>[t.id,t]))};catalogMaps.set(cat,m);}
+    return m;
+  };
+  Engine.prototype.traits16=function(){return commandCatalog(this.catalog).traits;};
+  Engine.prototype.tactics16=function(){return commandCatalog(this.catalog).tactics;};
+  Engine.nextLevelXP16=g=>50*(g.skill+1);
+  const familyCache=new WeakMap();
+  const family16=st=>{
+    let f=familyCache.get(st);if(f)return f;
+    const n=st.battalions||1;
+    f={armor:st.tank/n>=.25,mobile:(st.motor+st.tank)/n>=.5,infantry:st.inf/n>=.6&&!st.motor&&!st.tank,artillery:st.art/n>=.2,
+      special:st.special.amphibious>=.3||st.special.paradrop>0||(st.terrain.mountains?.attack||0)>=.15};
+    familyCache.set(st,f);return f;
+  };
+  Engine.prototype.normCommander16=function(g,i){
+    if(!ROLES.includes(g.role))g.role=i===0?'marshal':'general';
+    for(const k of COMMAND_STATS)g[k]=clamp(Math.round(Number(g[k])||0),0,9);
+    if(!Number.isInteger(g.skill))g.skill=clamp(Math.round((g.attack+g.defense+g.planning+g.logistics)/4),1,9);
+    if(!Array.isArray(g.traits))g.traits=[];
+    if(!finite(g.xp,0,1e6))g.xp=0;
+    if(!g.learn||typeof g.learn!=='object')g.learn={};
+    return g;
+  };
+  Engine.prototype.makeCommander16=function(id,e,key){
+    const T=this.traits16();
+    return {id:id+'_'+key,name:e.name,role:e.role||'general',skill:e.skill||1,attack:e.attack,defense:e.defense,planning:e.planning,logistics:e.logistics,
+      traits:(e.traits||[]).filter(t=>T.has(t)),xp:0,learn:{},...(e.until?{until:e.until}:{})};
+  };
+  // A new officer: a surname from the country's language and a few points
+  // spread over the four statistics.
+  Engine.prototype.raiseCommander16=function(id,skill=1){
+    const c=this.nation(id),names=this.catalog.commanderNames,lang=names?.lang?.[id]||'generic',pool=names?.pools?.[lang]||names?.pools?.generic||['Martin'];
+    const used=new Set(c.identity.commanders.map(g=>g.name));
+    let name=null;
+    for(let i=0;i<pool.length&&!name;i++){const n=pool[Math.floor(this.random()*pool.length)];if(!used.has(n))name=n;}
+    if(!name)name=pool[0]+' '+(c.identity.commanders.length+1);
+    const g={id:id+'_r'+this.s.uid++,name,role:'general',skill,attack:1,defense:1,planning:1,logistics:1,traits:[],xp:0,learn:{}};
+    for(let i=0;i<skill+2;i++)g[COMMAND_STATS[Math.floor(this.random()*4)]]++;
+    const personal=[...this.traits16().values()].filter(t=>t.kind==='personality'&&t.id!=='vieille_garde');
+    if(personal.length&&this.random()<.5)g.traits.push(personal[Math.floor(this.random()*personal.length)].id);
+    return g;
+  };
+  Engine.prototype.rosterFor16=function(id){
+    const list=this.catalog.commanderRosters?.[id];if(!list)return null;
+    return list.map((e,i)=>[e,i]).filter(([e])=>!e.until||planDay(e.until)>this.s.day).map(([e,i])=>this.makeCommander16(id,e,'c'+i));
+  };
+  Engine.prototype.busyCommanders16=function(id){
+    const busy=new Set();
+    for(const a of this.s.armies)if(a.owner===id&&a.general)busy.add(a.general);
+    for(const g of this.s.groups||[])if(g.owner===id&&g.marshal)busy.add(g.marshal);
+    return busy;
+  };
+  // Best free officer for an army: generals first, then marshals without a group.
+  Engine.prototype.freeGeneral16=function(id,busy=this.busyCommanders16(id)){
+    let best=null,score=-1;
+    for(const g of this.nation(id).identity.commanders){
+      if(busy.has(g.id))continue;
+      const v=(g.role==='marshal'?0:100)+g.skill*4+g.attack+g.defense+g.planning;
+      if(v>score){best=g;score=v;}
+    }
+    return best;
+  };
+  Engine.prototype.staffArmies16=function(id){
+    const busy=this.busyCommanders16(id),size=new Map();
+    for(const u of this.s.units)if(u.owner===id)size.set(u.army,(size.get(u.army)||0)+1);
+    for(const a of this.s.armies.filter(a=>a.owner===id&&!a.general).sort((x,y)=>(size.get(y.id)||0)-(size.get(x.id)||0)||x.id-y.id)){
+      const g=this.freeGeneral16(id,busy);if(!g)break;a.general=g.id;busy.add(g.id);
+    }
+  };
+  // New game: the placeholder officers of the map (ID_g0, ID_g1...) give way
+  // to the historical roster; every army then receives a commander.
+  Engine.prototype.setupCommanders16=function(){
+    for(const [id,c] of Object.entries(this.s.countries)){
+      c.identity.commanders??=[];
+      const list=c.identity.commanders,pattern=new RegExp('^'+id+'_g\\d+$');
+      if(list.every(g=>pattern.test(g.id))){const roster=this.rosterFor16(id);if(roster?.length)c.identity.commanders=roster;}
+      c.identity.commanders.forEach((g,i)=>this.normCommander16(g,i));
+      const ids=new Set(c.identity.commanders.map(g=>g.id));
+      for(const a of this.s.armies)if(a.owner===id&&a.general&&!ids.has(a.general))a.general=null;
+      for(const a of this.s.armies)if(a.owner===id&&a.general&&c.identity.commanders.find(g=>g.id===a.general)?.role==='marshal')a.general=null;
+      if(c.alive&&!c.identity.commanders.length)c.identity.commanders.push(this.raiseCommander16(id,2));
+      if(c.alive)this.staffArmies16(id);
+    }
+  };
+  const init18=Engine.prototype.init16;
+  Engine.prototype.init16=function(fresh){
+    init18.call(this,fresh);
+    if(fresh)this.setupCommanders16();
+    else for(const c of Object.values(this.s.countries)){c.identity.commanders??=[];c.identity.commanders.forEach((g,i)=>this.normCommander16(g,i));}
+  };
+  Engine.prototype.removeCommander16=function(id,gid){
+    const c=this.nation(id);c.identity.commanders=c.identity.commanders.filter(g=>g.id!==gid);
+    for(const a of this.s.armies)if(a.owner===id&&a.general===gid)a.general=null;
+    for(const g of this.s.groups)if(g.owner===id&&g.marshal===gid)g.marshal=null;
+  };
+  Engine.prototype.marshalOf16=function(army){
+    if(army?.group==null)return null;
+    const grp=this.s.groups.find(g=>g.id===army.group&&g.owner===army.owner);
+    return grp?.marshal?this.nation(army.owner).identity.commanders.find(c=>c.id===grp.marshal)||null:null;
+  };
+  Engine.prototype.traitSum16=function(g,key,terrain=null){
+    let n=0;
+    for(const id of g.traits){const t=this.traits16().get(id);if(t?.effect[key]&&(!t.terrain||!terrain||t.terrain.includes(terrain)))n+=t.effect[key];}
+    return n;
+  };
+  // Supply from the commander: logistics skill and traits (some only in a terrain).
+  Engine.prototype.commanderSupply16=function(g,pid){return g.logistics*.025+this.traitSum16(g,'supply',this.prov[pid].terrain);};
+  Engine.prototype.commanderPlanning16=function(g){return g.planning*.002*(1+this.traitSum16(g,'planning'));};
+  // Combat effects of the traits of the army's general (full) and marshal (half).
+  Engine.prototype.addTraits16=function(e,g,share,terrain,fam){
+    const T=this.traits16();
+    for(const id of g.traits){
+      const t=T.get(id);if(!t)continue;
+      if(t.terrain&&!t.terrain.includes(terrain))continue;
+      if(t.units&&!t.units.some(k=>fam[k]))continue;
+      for(const k of EFFECT_KEYS)if(t.effect[k])e[k]+=t.effect[k]*share;
+    }
+  };
+  Engine.prototype.armyEffect16=function(army,pid,st){
+    const e={attack:0,defense:0,breakthrough:0,org:0,losses:0,winter:0,river:0,entrench:0,fortAttack:0};
+    if(!army)return e;
+    const terrain=this.prov[pid].terrain,fam=family16(st),g=this.general(army),m=this.marshalOf16(army);
+    if(g)this.addTraits16(e,g,this.commandSpan16(army),terrain,fam);
+    if(m)this.addTraits16(e,m,.5,terrain,fam);
+    return e;
+  };
+  // The commander of the army with most divisions in the battle leads it.
+  Engine.prototype.leadCommander16=function(pool,armies){
+    const count=new Map();for(const u of pool)if(u.army!=null)count.set(u.army,(count.get(u.army)||0)+1);
+    let best=null,n=0;for(const [id,k] of count)if(k>n||k===n&&id<best){best=id;n=k;}
+    const army=armies.get(best);return army?this.general(army)||this.marshalOf16(army):null;
+  };
+  Engine.prototype.chooseTactics16=function(pid,attackPool,defendPool,ga,gd){
+    const T=this.tactics16();if(!T.size)return null;
+    const share=f=>attackPool.filter(u=>f(this.unitStats16(u))).length/Math.max(1,attackPool.length);
+    const ok={artillery:share(s=>s.art>0)>=.3,armor:share(s=>s.tank>0)>=.25,approaches:new Set(attackPool.map(u=>u.landing16?'sea':u.pid)).size>=2,
+      entrenched:this.s.provinces[pid].fort>0||sum(defendPool.map(u=>u.entrench))/Math.max(1,defendPool.length)>=4};
+    const list=side=>[...T.values()].filter(t=>t.side===side&&(!t.need||ok[t.need]));
+    const pick=(options,g)=>{
+      const w=options.map(t=>1+(g&&g.traits.some(id=>TRAIT_TACTIC[id]===t.id)?2:0));
+      let r=this.random()*sum(w);for(let i=0;i<options.length;i++){r-=w[i];if(r<0)return options[i];}return options[options.length-1];
+    };
+    const la=list('a'),ld=list('d');if(!la.length||!ld.length)return null;
+    let a=pick(la,ga),d=pick(ld,gd);
+    const initiative=g=>(g?g.planning+g.skill*.5+this.traitSum16(g,'initiative'):0)+this.random()*4;
+    const lead=initiative(ga)>=initiative(gd)?'a':'d';
+    // The commander with the initiative adapts to the other's choice.
+    const adapt=(options,cur,other)=>{let best=cur,score=-9;for(const t of options){const s=(t.counters===other.id?1:0)-(other.counters===t.id?1:0)+(t===cur?.01:0);if(s>score){score=s;best=t;}}return best;};
+    if(lead==='a')a=adapt(la,a,d);else d=adapt(ld,d,a);
+    const countered=d.counters===a.id?'a':a.counters===d.id?'d':null;
+    const mods=(t,side)=>{const m=Object.fromEntries(TACTIC_KEYS.map(k=>[k,0]));if(countered===side)m[side==='a'?'attack':'defense']=-.1;else for(const k of TACTIC_KEYS)m[k]=t.effect[k]||0;return m;};
+    return {a:a.id,d:d.id,lead,countered,mods:{a:mods(a,'a'),d:mods(d,'d')}};
+  };
+  const NO_TACTIC={a:Object.fromEntries(TACTIC_KEYS.map(k=>[k,0])),d:Object.fromEntries(TACTIC_KEYS.map(k=>[k,0]))};
+  const combatProfile18=Engine.prototype.combatProfile16;
+  Engine.prototype.combatProfile16=function(u,pid,offense,ctx){
+    const p=combatProfile18.call(this,u,pid,offense,ctx),b=this.battle16;
+    if(!b)return p;
+    const e=this.armyEffect16(ctx.armies.get(u.army),pid,p.st),mods=b.tactics?.mods||NO_TACTIC;
+    let atk=1+e.attack;
+    if(offense){
+      let brk=(1+e.breakthrough+e.defense*.5)*(1+mods.a.breakthrough)*(1+mods.d.enemyBreakthrough);
+      if(e.winter&&ctx.weather.attack<1)atk*=Math.pow(1/ctx.weather.attack,Math.min(1,e.winter));
+      if(e.river){const r=this.riverAttackFactor(u,pid);if(r<1)atk*=(r+(1-r)*Math.min(1,e.river))/r;}
+      if(e.fortAttack&&this.s.provinces[pid].fort>0)atk*=1+e.fortAttack;
+      atk*=(1+mods.a.attack)*(1+mods.d.enemyAttack);
+      p.breakthrough*=brk*atk;
+    }else{
+      let def=(1+e.defense)*(1+mods.d.defense)*(1+mods.a.enemyDefense);
+      if(e.entrench)def*=1+u.entrench*.025*e.entrench;
+      p.defense*=def;atk*=1+mods.d.attack;
+    }
+    p.soft*=atk;p.hard*=atk;
+    if(e.org)p.orgMax*=1+e.org;
+    const losses=(1+e.losses)*(1+(offense?mods.a.losses:mods.d.losses));
+    if(losses!==1)b.loss.set(u.id,losses);
+    return p;
+  };
+  const loss18=Engine.prototype.loss;
+  Engine.prototype.loss=function(u,strength,org){
+    const f=this.battle16?.loss.get(u.id);
+    return loss18.call(this,u,f?strength*f:strength,org);
+  };
+  // Experience: each commander's battle days are gathered during the day and
+  // turned into experience, levels and learnt traits by the daily hook.
+  Engine.prototype.creditCommanders16=function(pool,armies,side,info){
+    const log=this.cmdDay16??=new Map(),byArmy=new Map();
+    for(const u of pool){if(u.army==null)continue;if(!byArmy.has(u.army))byArmy.set(u.army,[]);byArmy.get(u.army).push(u);}
+    for(const [aid,units] of byArmy){
+      const army=armies.get(aid);if(!army)continue;
+      const fam={};for(const u of units){const f=family16(this.unitStats16(u));for(const k in f)if(f[k])fam[k]=(fam[k]||0)+1;}
+      const families=Object.keys(fam).filter(k=>fam[k]>=units.length*.4);
+      for(const [g,share] of [[this.general(army),1],[this.marshalOf16(army),.5]]){
+        if(!g)continue;
+        const key=army.owner+'|'+g.id;
+        let r=log.get(key);
+        if(!r){r={owner:army.owner,id:g.id,share,attack:false,defend:false,won:false,terrain:new Set(),fam:new Set(),winter:false,river:false,fort:false};log.set(key,r);}
+        r.share=Math.max(r.share,share);r[side==='a'?'attack':'defend']=true;r.won||=info.won===side;r.terrain.add(info.terrain);
+        for(const f of families)r.fam.add(f);
+        r.winter||=info.winter;r.river||=side==='a'&&info.river;r.fort||=info.fort;
+      }
+    }
+  };
+  const resolveBattle18=Engine.prototype.resolveBattle16;
+  Engine.prototype.resolveBattle16=function(pid,attackPool,defendPool,old,armies,busy){
+    const ga=this.leadCommander16(attackPool,armies),gd=this.leadCommander16(defendPool,armies);
+    const tactics=this.chooseTactics16(pid,attackPool,defendPool,ga,gd),ctrl=this.s.provinces[pid].ctrl;
+    const fort=this.s.provinces[pid].fort>0||sum(defendPool.map(u=>u.entrench))/Math.max(1,defendPool.length)>=5;
+    const river=attackPool.some(u=>!u.landing16&&this.riverAttackFactor(u,pid)<1),weather=this.weather(pid);
+    this.battle16={tactics,loss:new Map()};
+    let b;
+    try{b=resolveBattle18.call(this,pid,attackPool,defendPool,old,armies,busy);}finally{this.battle16=null;}
+    const taken=this.s.provinces[pid].ctrl!==ctrl;
+    const info={terrain:this.prov[pid].terrain,won:b?null:taken?'a':'d',winter:['snow','blizzard','frost'].includes(weather.key),river,fort};
+    this.creditCommanders16(attackPool,armies,'a',info);this.creditCommanders16(defendPool,armies,'d',info);
+    if(b){b.tacticA=tactics?.a||null;b.tacticD=tactics?.d||null;b.tacticLead=tactics?.lead||null;b.countered=tactics?.countered||null;b.genA=ga?.id||null;b.genD=gd?.id||null;}
+    return b;
+  };
+  Engine.prototype.trainCommander16=function(r){
+    const c=this.nation(r.owner),g=c?.identity.commanders.find(x=>x.id===r.id);if(!g)return;
+    const mine=r.owner===this.s.player,T=this.traits16();
+    g.xp+=((r.attack?2:0)+(r.defend?1.5:0)+(r.won?1:0))*r.share;
+    while(g.skill<9&&g.xp>=Engine.nextLevelXP16(g)){
+      g.xp-=Engine.nextLevelXP16(g);g.skill++;
+      const w=[r.attack?3:1,r.defend?3:1,1,1],stat=(()=>{let x=this.random()*sum(w);for(let i=0;i<4;i++){x-=w[i];if(x<0)return COMMAND_STATS[i];}return 'planning';})();
+      if(g[stat]<9)g[stat]++;
+      if(g.skill>=5&&!g.traits.includes('veteran')&&T.has('veteran')&&g.traits.length<TRAIT_MAX)g.traits.push('veteran');
+      if(mine)this.log(g.name+' passe au niveau '+g.skill+' ('+({attack:'attaque',defense:'défense',planning:'planification',logistics:'logistique'}[stat])+' +1).','tip');
+    }
+    if(g.skill>=9)g.xp=Math.min(g.xp,Engine.nextLevelXP16(g));
+    if(g.traits.some(id=>T.get(id)?.effect.noLearning)||g.traits.length>=TRAIT_MAX)return;
+    for(const t of T.values()){
+      if(!t.learn||g.traits.includes(t.id))continue;
+      const match=t.terrain?t.terrain.some(x=>r.terrain.has(x)):t.units?t.units.some(x=>r.fam.has(x)):t.effect.winter?r.winter:t.effect.river?r.river:t.effect.entrench?r.fort:false;
+      if(!match)continue;
+      g.learn[t.id]=(g.learn[t.id]||0)+r.share;
+      if(g.learn[t.id]>=t.learn){
+        delete g.learn[t.id];g.traits.push(t.id);
+        if(mine)this.log(g.name+' acquiert le trait « '+t.name+' ».','tip');
+        if(g.traits.length>=TRAIT_MAX)break;
+      }
+    }
+  };
+  // AI staff work: recruitment at war, army groups by front with their marshal.
+  Engine.prototype.aiCommanders16=function(id){
+    const c=this.nation(id),at=this.enemies(id).length>0;
+    const armies=this.s.armies.filter(a=>a.owner===id);
+    if(at&&c.pp>=80&&c.identity.commanders.length<COMMANDER_MAX&&armies.some(a=>!a.general)&&!this.freeGeneral16(id)){
+      c.pp-=COMMANDER_COST;c.identity.commanders.push(this.raiseCommander16(id,1+Math.floor(this.random()*2)));
+    }
+    this.staffArmies16(id);
+    const busy=this.busyCommanders16(id),marshals=c.identity.commanders.filter(g=>g.role==='marshal'&&!busy.has(g.id)).sort((x,y)=>y.skill-x.skill||y.attack+y.defense-x.attack-x.defense);
+    const fronts=new Map();
+    for(const a of armies)if(a.target&&at)fronts.set(a.target,[...(fronts.get(a.target)||[]),a]);
+    const groups=this.s.groups.filter(g=>g.owner===id);
+    for(const [t,list] of [...fronts].sort((x,y)=>y[1].length-x[1].length)){
+      if(list.length<2)continue;
+      let grp=groups.find(g=>g.front16===t);
+      if(!grp){
+        if(!marshals.length&&c.pp>=MARSHAL_COST+60){
+          // A seasoned general free of command receives the marshal's baton.
+          const g=c.identity.commanders.filter(g=>g.role==='general'&&g.skill>=3&&!busy.has(g.id)).sort((x,y)=>y.skill-x.skill||x.id.localeCompare(y.id))[0];
+          if(g){g.role='marshal';c.pp-=MARSHAL_COST;marshals.push(g);}
+        }
+        if(!marshals.length||groups.length>=12)continue;
+        const letter=[...'ABCDEFGHIJKL'].find(l=>!groups.some(g=>g.name.startsWith('Groupe d’armées '+l+' ')));
+        grp={id:this.s.uid++,owner:id,name:'Groupe d’armées '+letter+' / '+(this.nation(t)?.identity.name||t),marshal:null,front16:t};
+        this.s.groups.push(grp);groups.push(grp);
+      }
+      if(!grp.marshal&&marshals.length)grp.marshal=marshals.shift().id;
+      for(const a of list)a.group=grp.id;
+    }
+    // Groups without armies on their front are dissolved.
+    for(const g of groups)if(g.front16!==undefined&&!(fronts.get(g.front16)?.length>=2)){
+      for(const a of this.s.armies)if(a.group===g.id)a.group=null;
+      this.s.groups=this.s.groups.filter(x=>x!==g);
+    }
+  };
+  Engine.onDay16(function(){
+    const log=this.cmdDay16;
+    if(log){this.cmdDay16=null;for(const r of log.values())this.trainCommander16(r);}
+    const day=this.s.day;
+    for(const id of this.active()){
+      const c=this.nation(id);
+      // Historical removals (the Soviet purges of 1937-1938).
+      if(this.s.historical)for(const g of c.identity.commanders)if(g.until&&planDay(g.until)<=day){
+        this.removeCommander16(id,g.id);
+        this.log((c.ideology==='communist'?'Purges : ':'')+g.name+' ('+c.identity.name+') est relevé de son commandement.','event');
+      }
+      // Countries created during the game (civil war, release) get officers.
+      if(!c.identity.commanders.length){
+        const roster=this.rosterFor16(id);
+        c.identity.commanders=roster?.length?roster:[this.raiseCommander16(id,2)];
+        c.identity.commanders.forEach((g,i)=>this.normCommander16(g,i));
+        this.staffArmies16(id);
+      }
+    }
+  });
+  // An army is built for 24 divisions: beyond that its general's bonuses thin out.
+  const ARMY_LIMIT=24;
+  Engine.prototype.armySizes16=function(){
+    if(this.armySizeDay16!==this.s.day||this.armySizeState16!==this.s){
+      const m=new Map();for(const u of this.s.units)if(u.army!=null)m.set(u.army,(m.get(u.army)||0)+1);
+      this.armySizeMap16=m;this.armySizeDay16=this.s.day;this.armySizeState16=this.s;
+    }
+    return this.armySizeMap16;
+  };
+  Engine.prototype.commandSpan16=function(army){const n=army?this.armySizes16().get(army.id)||0:0;return n>ARMY_LIMIT?ARMY_LIMIT/n:1;};
+  // The AI plans one army per front sector, then splits it into armies of at
+  // most 24 divisions along the line, each with its own general; they share
+  // the sector's orders and form an army group under a marshal. Before each
+  // planning pass the split armies are folded back into their parent and
+  // reused afterwards, so they keep their name, general and experience.
+  const aiFronts18=Engine.prototype.aiFronts16;
+  Engine.prototype.aiFronts16=function(id){
+    const corps=this.s.armies.filter(a=>a.owner===id&&a.parent16!=null),parent=new Map(corps.map(a=>[a.id,a.parent16]));
+    if(corps.length){
+      const alive=new Set(this.s.armies.filter(a=>a.owner===id&&a.parent16==null).map(a=>a.id));
+      for(const u of this.s.units)if(u.owner===id&&parent.has(u.army)){const p=parent.get(u.army);u.army=alive.has(p)?p:null;}
+      this.s.armies=this.s.armies.filter(a=>!parent.has(a.id));
+    }
+    aiFronts18.call(this,id);
+    this.splitArmies16(id,corps);
+    this.aiCommanders16(id);
+  };
+  Engine.prototype.splitArmies16=function(id,spare){
+    const c=this.nation(id),byArmy=new Map();
+    for(const u of this.s.units)if(u.owner===id&&u.army!=null){if(!byArmy.has(u.army))byArmy.set(u.army,[]);byArmy.get(u.army).push(u);}
+    const reused=new Set();
+    for(const a of this.s.armies.filter(a=>a.owner===id&&a.auto&&!a.home16&&a.parent16==null)){
+      const units=byArmy.get(a.id)||[];
+      if(units.length<=ARMY_LIMIT||units.some(u=>u.lent16))continue;
+      const k=Math.ceil(units.length/ARMY_LIMIT);
+      // Chunks follow the longer axis of the sector.
+      const xs=units.map(u=>this.prov[u.pid].x),ys=units.map(u=>this.prov[u.pid].y);
+      const alongX=Math.max(...xs)-Math.min(...xs)>=Math.max(...ys)-Math.min(...ys);
+      const sorted=[...units].sort((u,v)=>(alongX?this.prov[u.pid].x-this.prov[v.pid].x:this.prov[v.pid].y-this.prov[u.pid].y)||u.id-v.id);
+      for(let i=1;i<k;i++){
+        let corp=spare.find(x=>!reused.has(x.id)&&x.parent16===a.id)||spare.find(x=>!reused.has(x.id));
+        if(corp){reused.add(corp.id);this.s.armies.push(corp);}
+        else{corp=this.addArmy(id);reused.add(corp.id);}
+        corp.parent16=a.id;
+        if(a.mobile16&&!corp.name.startsWith('Groupe blindé'))corp.name=a.name+' ('+(i+1)+')';
+        else if(!a.mobile16&&corp.name.startsWith('Groupe blindé'))corp.name='Armée '+c.armySerial++;
+        Object.assign(corp,{target:a.target,order:a.order,stance:a.stance,tactic:a.tactic,auto:true,objective:a.objective,mobile16:!!a.mobile16,home16:false,
+          frontSelection:[...(a.frontSelection||[])],plan16:a.plan16?{...a.plan16,offensive:[...a.plan16.offensive],fallback:[...a.plan16.fallback]}:null,
+          planning:a.planning,offensive16:a.offensive16,pause16:a.pause16,reserveRatio:a.reserveRatio??.15});
+        if(corp.plan16?.line16)corp.plan16.line16=[...corp.plan16.line16];
+        for(const u of sorted.slice(Math.round(i*units.length/k),Math.round((i+1)*units.length/k)))u.army=corp.id;
+      }
+    }
+    // Officers of split armies that were not reused return to the pool.
+    this.staffArmies16(id);
+  };
+  Engine.command16('recruitCommander',function(p,id,c){
+    assert(c.identity.commanders.length<COMMANDER_MAX,'Maximum : '+COMMANDER_MAX+' officiers.');
+    pp(c,COMMANDER_COST);c.pp-=COMMANDER_COST;
+    const g=this.raiseCommander16(id,1);c.identity.commanders.push(g);
+    this.log(g.name+' rejoint l’état-major.','tip');return g.id;
+  });
+  Engine.command16('promoteCommander',function(p,id,c){
+    const g=c.identity.commanders.find(g=>g.id===p.id);assert(g,'Officier inconnu.');
+    assert(g.role==='general','Cet officier est déjà maréchal.');assert(g.skill>=3,'Niveau 3 requis pour le bâton de maréchal.');
+    pp(c,MARSHAL_COST);c.pp-=MARSHAL_COST;g.role='marshal';
+    this.log(g.name+' est élevé à la dignité de maréchal.','tip');
+  });
+  Engine.command16('dismissCommander',function(p,id,c){
+    assert(c.identity.commanders.some(g=>g.id===p.id),'Officier inconnu.');assert(c.identity.commanders.length>1,'Gardez au moins un officier.');
+    this.removeCommander16(id,p.id);
+  });
+  // Only a marshal commands an army group.
+  Engine.command16('marshal',function(p,id,c){
+    if(p.marshal)assert(c.identity.commanders.find(g=>g.id===p.marshal)?.role==='marshal','Seul un maréchal commande un groupe d’armées.');
+    return NOT_HANDLED;
+  });
+  Engine.invariant16(function(state){
+    const T=this.traits16();
+    for(const [id,c] of Object.entries(state.countries)){
+      const list=c.identity.commanders,ids=new Set();
+      assert(Array.isArray(list)&&list.length<=COMMANDER_MAX+12,'Officiers invalides.');
+      for(const g of list){
+        assert(typeof g.id==='string'&&!ids.has(g.id)&&typeof g.name==='string'&&ROLES.includes(g.role)&&Number.isInteger(g.skill)&&g.skill>=1&&g.skill<=9,'Officier invalide : '+id+'.');
+        ids.add(g.id);
+        for(const k of COMMAND_STATS)assert(Number.isInteger(g[k])&&g[k]>=0&&g[k]<=9,'Compétence d’officier invalide.');
+        assert(Array.isArray(g.traits)&&g.traits.length<=TRAIT_MAX+4&&g.traits.every(t=>T.has(t))&&finite(g.xp,0,1e6)&&g.learn&&typeof g.learn==='object','Traits d’officier invalides.');
+      }
+    }
+    for(const g of state.groups||[])if(g.marshal)assert(state.countries[g.owner]?.identity.commanders.some(x=>x.id===g.marshal),'Maréchal inconnu.');
   });
 
   // ---------------------------------------------------------------------------

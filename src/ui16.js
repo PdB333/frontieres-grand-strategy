@@ -715,17 +715,91 @@ showEvent=function(){
   modal(`<div class="row between"><div class="eyebrow">DÉPÊCHE / ${dateText(S.day)}</div>${tag('DÉCISION REQUISE','gold')}</div><div class="event-title">${esc(e.title)}</div><div class="event-paper"><p>${esc(e.text)}</p></div><div class="event-choices">${e.choices.map((choice,index)=>btn(`<span>${esc(choice.text)}<small style="display:block;margin-top:5px">${esc([effectText16(choice.effect||{}),...extrasText16(choice)].filter(Boolean).join(' / '))}</small></span>${icon('arrow')}`,'event',{index})).join('')}</div><p class="note" style="margin-top:18px">La campagne est suspendue jusqu’à votre décision.</p>`,'event','narrow');
 };
 
+/* ---- Commanders: generals, marshals, traits and battle tactics ---- */
+const ROLE16={general:'Général',marshal:'Maréchal'};
+const traitOf16=id=>(CATALOG.commanderTraits||[]).find(t=>t.id===id);
+const tacticOf16=id=>(CATALOG.combatTactics||[]).find(t=>t.id===id);
+const nextXP16=g=>50*(g.skill+1);
+function commanderLabel16(g){return `${g.name} / ${ROLE16[g.role]||'Général'} niv. ${g.skill||1}`;}
+const UNIT_FAMILY16={armor:'blindés',infantry:'infanterie',mobile:'unités rapides',special:'troupes spéciales',artillery:'artillerie'};
+function commanderEffectText16(e){
+  const labels={attack:'attaque',defense:'défense',breakthrough:'percée',planning:'vitesse de planification',supply:'ravitaillement',org:'organisation',losses:'pertes',winter:'de la pénalité hivernale annulés',river:'de la pénalité fluviale annulés',entrench:'retranchement',fortAttack:'contre les fortifications',enemyAttack:'attaque adverse',enemyDefense:'défense adverse',enemyBreakthrough:'percée adverse'};
+  return Object.entries(e||{}).map(([k,v])=>k==='initiative'?'+'+v+' initiative':k==='noLearning'?'n’apprend plus de traits':labels[k]?`${v>=0?'+':''}${Math.round(v*100)} % ${labels[k]}`:'').filter(Boolean).join(' / ');
+}
+function traitText16(t){
+  const where=[t.terrain?'en '+t.terrain.map(k=>CATALOG.terrain[k]?.name||k).join(', ').toLowerCase():'',t.units?'pour '+t.units.map(k=>UNIT_FAMILY16[k]||k).join(', '):''].filter(Boolean).join(' ');
+  return t.desc+' '+commanderEffectText16(t.effect)+(where?' ('+where+')':'')+(t.learn?'. S’apprend en '+t.learn+' jours de combat.':'.');
+}
+function traitChips16(g){
+  return (g.traits||[]).map(id=>{const t=traitOf16(id);return t?`<span class="tag ${t.kind==='personality'?'':'gold'}" title="${esc(traitText16(t))}">${esc(t.name)}</span>`:'';}).join(' ');
+}
+function commanderPost16(g){
+  const a=S.armies.find(a=>a.owner===S.player&&a.general===g.id),grp=S.groups.find(x=>x.owner===S.player&&x.marshal===g.id);
+  return a?'Commande : '+a.name:grp?'Commande : '+grp.name:'Disponible';
+}
+function commanderNote16(g){
+  if(!g)return '';
+  return `<div class="note">${esc(ROLE16[g.role]||'Général')} niveau ${g.skill} / attaque ${g.attack} / défense ${g.defense} / planification ${g.planning} / logistique ${g.logistics}</div><div class="row wrap" style="gap:4px;margin:4px 0 8px">${traitChips16(g)}</div>`;
+}
+function commanderCard16(g){
+  const c=nation(),learning=Object.entries(g.learn||{}).map(([id,v])=>[traitOf16(id),v]).filter(([t])=>t).sort((x,y)=>y[1]/y[0].learn-x[1]/x[0].learn).slice(0,2);
+  return `<div class="card stack"><div class="row between"><strong>${esc(g.name)}</strong>${tag((ROLE16[g.role]||'Général')+' / niv. '+g.skill,g.role==='marshal'?'gold':'')}</div>
+    <small>Attaque ${g.attack} / Défense ${g.defense} / Planification ${g.planning} / Logistique ${g.logistics}</small>
+    ${g.skill<9?bar(g.xp/nextXP16(g)*100,'#c5a46e')+`<small>${Math.floor(g.xp)} / ${nextXP16(g)} XP avant le niveau ${g.skill+1}</small>`:'<small>Niveau maximal</small>'}
+    <div class="row wrap" style="gap:4px">${traitChips16(g)||'<small>Aucun trait</small>'}</div>
+    ${learning.length?`<small>Apprend : ${learning.map(([t,v])=>esc(t.name)+' '+Math.floor(v)+'/'+t.learn).join(' / ')}</small>`:''}
+    <small class="gold">${esc(commanderPost16(g))}</small>
+    <div class="row wrap">${g.role==='general'?btn('Promouvoir maréchal / 50 PP','promoteCommander16',{id:g.id},'small',g.skill<3||c.pp<50):''}${btn('Renvoyer','dismissCommander16',{id:g.id},'small ghost',c.identity.commanders.length<=1)}</div></div>`;
+}
+function showCommanders16(){
+  if(!S)return;pauseGame();
+  const c=nation(),list=c.identity.commanders,marshals=list.filter(g=>g.role==='marshal'),generals=list.filter(g=>g.role!=='marshal');
+  modal(`${modalHead('État-major','OFFICIERS GÉNÉRAUX / '+list.length+' / 24')}
+    <div class="row between" style="margin-bottom:14px"><small>${num(c.pp)} PP disponibles</small>${btn('Recruter un général / 20 PP','recruitCommander16',{},'primary small',c.pp<20||list.length>=24)}</div>
+    <div class="sectionlabel">Maréchaux / ${marshals.length}</div><div class="grid2">${marshals.map(commanderCard16).join('')||'<p class="note">Aucun maréchal : promouvez un général de niveau 3 ou plus.</p>'}</div>
+    <div class="sectionlabel">Généraux / ${generals.length}</div><div class="grid2">${generals.map(commanderCard16).join('')}</div>
+    <p class="note" style="margin-top:16px">Un général commande une armée : ses compétences et ses traits s’appliquent à 24 divisions au plus, au-delà ils s’atténuent. Un maréchal commande un groupe d’armées et transmet la moitié de ses traits à chaque armée du groupe. Chaque jour de bataille rapporte de l’expérience ; les niveaux augmentent une compétence. Les traits de terrain et d’armes s’apprennent au feu, les traits de caractère sont donnés.</p>`,'commanders','wide');
+}
+ACTIONS16.push(async(action,p)=>{
+  switch(action){
+    case 'commanders16':showCommanders16();return true;
+    case 'recruitCommander16':await cmd('recruitCommander',{});showCommanders16();return true;
+    case 'promoteCommander16':await cmd('promoteCommander',{id:p.id});showCommanders16();return true;
+    case 'dismissCommander16':if(confirm('Renvoyer cet officier ?')){await cmd('dismissCommander',{id:p.id});showCommanders16();}return true;
+  }
+  return false;
+});
+function tacticLine16(id,countered,lead){
+  const t=tacticOf16(id);if(!t)return '<small>Aucune tactique</small>';
+  return `<div><strong>${esc(t.name)}</strong>${lead?' '+tag('INITIATIVE','gold'):''}${countered?' '+tag('CONTRÉE','bad'):''}<small style="display:block">${esc(t.desc)} ${countered?'Bonus perdu, pénalité de 10 %.':esc(commanderEffectText16(t.effect))}</small></div>`;
+}
+function battleTactics16(b){
+  if(!b.tacticA)return '';
+  const ga=b.genA&&nation(b.a)?.identity.commanders.find(g=>g.id===b.genA),gd=b.genD&&nation(b.b)?.identity.commanders.find(g=>g.id===b.genD);
+  return `<div class="card" style="margin-top:12px"><div class="eyebrow">TACTIQUES DU JOUR</div><div class="grid2" style="margin-top:9px">
+    <div class="stack"><small>${ga?esc(commanderLabel16(ga)):'Sans commandant'}</small>${tacticLine16(b.tacticA,b.countered==='a',b.tacticLead==='a')}</div>
+    <div class="stack"><small>${gd?esc(commanderLabel16(gd)):'Sans commandant'}</small>${tacticLine16(b.tacticD,b.countered==='d',b.tacticLead==='d')}</div></div>
+    <small style="display:block;margin-top:8px">Chaque jour, les deux commandants choisissent une tactique ; celui qui a l’initiative (planification, niveau, ruse) peut s’adapter à celle de l’adversaire.</small></div>`;
+}
+const showBattle18=showBattle;
+showBattle=function(pid){
+  showBattle18(pid);
+  const b=S?.battles.find(b=>b.pid===pid);if(!b||modalKind!=='battle')return;
+  const grid=$('modal').querySelector('.grid2');if(grid)grid.insertAdjacentHTML('afterend',battleTactics16(b));
+};
+
 /* ---- Manual ---- */
 showHelp=function(){
   pauseGame();
   const card=(title,text)=>`<div class="card"><h3>${title}</h3><p class="note" style="margin-top:10px">${text}</p></div>`;
-  modal(`${modalHead('Manuel de campagne','FRONTIÈRES 1.8 / PRISE EN MAIN')}<div class="grid2">
+  modal(`${modalHead('Manuel de campagne','FRONTIÈRES 1.9 / PRISE EN MAIN')}<div class="grid2">
     ${card('1. Préparer l’État','Choisissez une priorité nationale et affectez vos équipes de recherche. Les usines, chantiers et raffineries partagent les emplacements de chaque État. Six ressources stratégiques alimentent les lignes de production ; la loi commerciale fixe la part exportée.')}
     ${card('2. Lois, conseillers, décisions','L’économie, la conscription et le commerce se règlent par des lois. Nommez des conseillers et des chefs d’état-major, prenez des décisions ponctuelles et surveillez vos esprits nationaux. Les voies politiques de l’arbre peuvent changer le régime.')}
     ${card('3. Former les forces','Composez vos divisions à partir de bataillons et de compagnies de soutien. Concevez chars, avions et navires, puis modernisez vos stocks. Le recrutement consomme matériel et effectifs.')}
     ${card('4. Plans de bataille','Dans Armées, tracez une ligne de front, des flèches d’offensive et une ligne de repli. La planification s’accumule avant l’attaque. Les batailles durent plusieurs jours, heure par heure : largeur de combat, réserves, terrain, météo et ravitaillement décident de l’issue.')}
     ${card('5. Ciel et mers','Les escadres reçoivent des missions selon leur type : supériorité, interception, appui, bombardement, frappes navales, parachutages. Les flottes patrouillent, frappent, escortent, mouillent des mines et disputent le contrôle des mers, indispensable aux invasions navales.')}
     ${card('6. Guerre et paix','Justifiez un but de guerre, puis déclarez la guerre. Un pays capitule quand il a perdu l’essentiel de ses points de victoire et de son territoire ; certains esprits repoussent ce seuil. Un gouvernement allié peut poursuivre la lutte en exil. La conférence de paix répartit les États selon la contribution de chacun.')}
+    ${card('7. Généraux et maréchaux','Chaque armée reçoit un général, chaque groupe d’armées un maréchal. Ils gagnent de l’expérience au combat, montent de niveau et apprennent des traits de terrain ou d’armes. Chaque jour de bataille, les commandants choisissent une tactique que l’adversaire peut contrer. Ouvrez l’état-major depuis Armées.')}
   </div><div class="card" style="margin-top:18px"><h3>Raccourcis</h3><p class="note" style="margin-top:10px"><span class="hotkey">Espace</span> Pause / <span class="hotkey">1–5</span> Vitesse / <span class="hotkey">A</span> Armées / <span class="hotkey">I</span> Industrie / <span class="hotkey">R</span> Recherche / <span class="hotkey">D</span> Diplomatie / <span class="hotkey">P</span> Priorités / <span class="hotkey">F</span> Recentrer / <span class="hotkey">Échap</span> Fermer.</p></div>
   <p class="note" style="margin-top:18px">Limites de cette version : simulation journalière avec combats horaires, carte d’environ 11 600 provinces terrestres (régions Natural Earth 1:10m), 226 régions maritimes et 158 régions aériennes, IA heuristique, contenu original moins abondant que celui des grands jeux commerciaux. Pas de multijoueur ni de compatibilité avec les mods d’autres jeux.</p>`,'help','wide');
 };

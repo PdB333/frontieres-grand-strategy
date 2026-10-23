@@ -311,7 +311,7 @@ function createEngineClass() {
     }
     addArmy(id,name) {
       const c=this.nation(id),available=c.identity.commanders.filter(g=>!this.s.armies.some(a=>a.owner===id&&a.general===g.id));
-      const army={id:this.s.uid++,owner:id,name:name||('Arm\u00e9e '+c.armySerial++),general:available[0]?.id||null,target:null,order:'defend',auto:id!==this.s.player,planning:0,stance:'balanced',group:null,objective:null,frontSelection:[],reserveRatio:.15,tactic:'balanced',assessment:{status:'En attente'}};
+      const army={id:this.s.uid++,owner:id,name:name||('Arm\u00e9e '+c.armySerial++),general:(this.freeGeneral16?this.freeGeneral16(id)?.id:available[0]?.id)||null,target:null,order:'defend',auto:id!==this.s.player,planning:0,stance:'balanced',group:null,objective:null,frontSelection:[],reserveRatio:.15,tactic:'balanced',assessment:{status:'En attente'}};
       this.s.armies.push(army);return army;
     }
     spawn(id,pid,t,org=65) {
